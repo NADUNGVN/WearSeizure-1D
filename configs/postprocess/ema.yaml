@@ -1,0 +1,6 @@
+# Ablation step: EMA smoothing + single threshold, no hysteresis/run-length yet.
+name: ema
+method: ema
+ema_alpha: 0.125
+threshold: 0.5
+event_merge_gap_s: 0.0

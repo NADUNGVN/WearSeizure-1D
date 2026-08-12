@@ -1,0 +1,8 @@
+epochs: 30
+batch_size: 64
+lr: 0.001
+weight_decay: 0.0001
+optimizer: adamw
+seeds: [0, 1, 2]     # memo 5.3: three random seeds for training
+early_stopping_patience: 8
+class_balanced_sampling: true   # train partition only

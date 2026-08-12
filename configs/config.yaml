@@ -1,0 +1,19 @@
+defaults:
+  - profile: local_synthetic
+  - data: synthetic
+  - split: patient_specific_loso_edf
+  - model: wearseizure1d
+  - window: w4s_stride1s
+  - postprocess: hysteresis_runlength
+  - precision: fp32
+  - train: default
+  - eval: event_protocol
+  - _self_
+
+seed: 0
+
+hydra:
+  run:
+    dir: ${profile.artifacts_dir}/runs/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: false

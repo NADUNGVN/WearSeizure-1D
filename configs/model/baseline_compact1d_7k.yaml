@@ -1,0 +1,7 @@
+# Reproduction target (memo 7.1 #2): compact standard 1D-CNN, ASICON 2021-style,
+# ~7k parameters, used to separate model benefit from protocol benefit.
+name: baseline_compact1d_7k
+in_channels: 1
+input_len: 1024
+num_classes: 2
+param_target: 7000

@@ -1,0 +1,5 @@
+# Primary / personalized mode (memo 3.1): leave-one-seizure-EDF-out per subject.
+name: patient_specific_loso_edf
+strategy: patient_specific_loso_edf
+val_fraction: 0.2
+folds_path: ${profile.artifacts_dir}/splits/patient_specific_loso_edf.json

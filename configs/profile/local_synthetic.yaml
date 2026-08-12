@@ -1,0 +1,10 @@
+# Local dev machine: no GPU, no real CHB-MIT data. Everything under this
+# profile points at synthetic, gitignored, on-the-fly-generated data, and KPI
+# gates (Table 6 of the memo) are not enforced since synthetic numbers have no
+# clinical meaning -- this profile only proves the pipeline runs correctly.
+name: local_synthetic
+device: cpu
+data_root: ${hydra:runtime.cwd}/data/synthetic/generated
+artifacts_dir: ${hydra:runtime.cwd}/artifacts
+enforce_gates: false
+num_workers: 0

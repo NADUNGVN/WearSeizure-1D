@@ -1,0 +1,4 @@
+# Delay-optimized variant (memo 4.1): 4s window, 0.5s stride.
+name: w4s_stride0p5s
+window_s: 4.0
+stride_s: 0.5

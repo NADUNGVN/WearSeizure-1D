@@ -1,0 +1,13 @@
+# Real CHB-MIT data (server profile). Channel map is Appendix A of the
+# Research Decision Memo: only the 13 cases whose seizure onset was clinically
+# confirmed observable from one of these four wearable positions.
+name: chbmit
+fs_hz: 256
+annotation_source: public_chbmit
+channel_map:
+  Fp1-F3: [chb03, chb07, chb08, chb22, chb23]
+  P7-O1: [chb02, chb05, chb10, chb11, chb15]
+  P8-O2: [chb01, chb04, chb17]
+  Fp2-F4: []
+raw_dir: ${profile.data_root}
+manifest_path: ${profile.artifacts_dir}/manifest/chbmit_manifest.csv

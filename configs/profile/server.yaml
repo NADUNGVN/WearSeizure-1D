@@ -1,0 +1,10 @@
+# Training server profile: real CHB-MIT data + GPU. Paths come exclusively
+# from environment variables (see .env.example) -- never hardcode a server
+# path in a committed config. Requires CHBMIT_RAW_DIR and
+# WEARSEIZURE_ARTIFACTS_DIR to be set before running any script.
+name: server
+device: cuda
+data_root: ${oc.env:CHBMIT_RAW_DIR}
+artifacts_dir: ${oc.env:WEARSEIZURE_ARTIFACTS_DIR}
+enforce_gates: true
+num_workers: 4

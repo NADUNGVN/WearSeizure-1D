@@ -1,0 +1,65 @@
+# KPI gates, Table 6 of the Research Decision Memo. Loaded directly by
+# `eval/report.py` (not part of the Hydra defaults tree, since it is a fixed
+# reference table rather than something a run overrides) and only enforced
+# when `profile.enforce_gates` is true.
+personalized_event_sensitivity:
+  minimum: 0.970
+  target: 0.985
+  stretch: 0.990
+far_per_hour:
+  minimum: 0.30
+  target: 0.20
+  stretch: 0.10
+  direction: lower_is_better
+detection_delay_mean_s:
+  minimum: 5.0
+  target: 4.0
+  stretch: 3.0
+  direction: lower_is_better
+detection_delay_median_s:
+  target: 3.0
+  stretch: 2.0
+  direction: lower_is_better
+worst_patient_sensitivity:
+  minimum: 0.85
+  target: 0.90
+  stretch: 0.95
+worst_patient_far_per_hour:
+  minimum: 1.0
+  target: 1.0
+  stretch: 0.5
+  direction: lower_is_better
+zero_shot_loso_sensitivity:
+  minimum: 0.85
+  target: 0.90
+  stretch: 0.92
+zero_shot_loso_far_per_hour:
+  minimum: 0.75
+  target: 0.50
+  stretch: 0.30
+  direction: lower_is_better
+model_params:
+  minimum: 32000
+  target: 16000
+  stretch: 12000
+  direction: lower_is_better
+model_macs:
+  minimum: 2000000
+  target: 700000
+  stretch: 500000
+  direction: lower_is_better
+int8_loss_vs_fp32_pp:
+  minimum: 1.0
+  target: 0.5
+  direction: lower_is_better
+w4a8_loss_vs_fp32_pp:
+  stretch: 1.0
+  direction: lower_is_better
+continuous_test_exposure_hours:
+  minimum: 100
+  target: 150
+  stretch: 200
+correctness_mismatches:
+  minimum_windows: 1000
+  target_windows: 10000
+  direction: lower_is_better

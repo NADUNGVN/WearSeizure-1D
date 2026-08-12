@@ -1,0 +1,4 @@
+# Matches the original Frontiers 2024 protocol: 4s window, 1s stride.
+name: w4s_stride1s
+window_s: 4.0
+stride_s: 1.0

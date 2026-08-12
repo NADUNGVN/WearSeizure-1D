@@ -1,0 +1,5 @@
+name: int8_ptq
+mode: int8_ptq
+weight_bits: 8
+act_bits: 8
+accumulator_bits: 32

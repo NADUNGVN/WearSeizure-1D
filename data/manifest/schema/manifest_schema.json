@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WearSeizure-1D EEG record manifest entry",
+  "description": "One entry = one EDF recording. On disk, the manifest is a flat CSV (see wearseizure.data.manifest) where `seizure_events` is stored as a JSON-encoded string in a single column; this schema documents the logical (expanded) shape of that field.",
+  "type": "object",
+  "required": [
+    "subject_id",
+    "edf_id",
+    "edf_relpath",
+    "channel_name",
+    "channel_index_in_edf",
+    "fs_hz",
+    "n_samples",
+    "duration_sec",
+    "annotation_source",
+    "seizure_events",
+    "is_interictal_only",
+    "manifest_version"
+  ],
+  "properties": {
+    "subject_id": { "type": "string", "description": "e.g. chb01" },
+    "edf_id": { "type": "string", "description": "Unique key across the whole manifest; split unit." },
+    "edf_relpath": { "type": "string" },
+    "channel_name": {
+      "type": "string",
+      "enum": ["Fp1-F3", "P7-O1", "P8-O2", "Fp2-F4"],
+      "description": "Clinically confirmed single-channel position (Appendix A of the Research Decision Memo)."
+    },
+    "channel_index_in_edf": { "type": "integer", "minimum": 0 },
+    "fs_hz": { "type": "number", "const": 256 },
+    "n_samples": { "type": "integer", "minimum": 1 },
+    "duration_sec": { "type": "number", "minimum": 0 },
+    "annotation_source": {
+      "type": "string",
+      "enum": ["public_chbmit", "frontiers_reannotation", "synthetic"]
+    },
+    "seizure_events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["event_id", "onset_sec", "offset_sec"],
+        "properties": {
+          "event_id": { "type": "string" },
+          "onset_sec": { "type": "number", "minimum": 0 },
+          "offset_sec": { "type": "number", "minimum": 0 }
+        }
+      }
+    },
+    "is_interictal_only": { "type": "boolean" },
+    "raw_sha256": { "type": "string" },
+    "manifest_version": { "type": "integer", "const": 1 }
+  }
+}

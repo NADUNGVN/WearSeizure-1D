@@ -1,0 +1,8 @@
+name: synthetic
+fs_hz: 256
+annotation_source: synthetic
+n_subjects: 6
+edfs_per_subject: 4
+edf_duration_s: 600.0
+generated_dir: ${profile.data_root}
+manifest_path: ${profile.artifacts_dir}/manifest/synthetic_manifest.csv

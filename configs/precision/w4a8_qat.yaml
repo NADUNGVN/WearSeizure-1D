@@ -1,0 +1,8 @@
+# Stretch goal only (memo Table 1): kept if degradation vs FP32 stays <=1.0pp.
+name: w4a8_qat
+mode: w4a8_qat
+weight_bits: 4
+act_bits: 8
+accumulator_bits: 32
+max_loss_vs_fp32_pp:
+  stretch: 1.0

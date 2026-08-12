@@ -1,0 +1,4 @@
+name: int16
+mode: int16
+weight_bits: 16
+act_bits: 16

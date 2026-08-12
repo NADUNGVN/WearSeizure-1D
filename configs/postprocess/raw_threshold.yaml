@@ -1,0 +1,5 @@
+# Ablation baseline: single static threshold, no smoothing (memo 7.2).
+name: raw_threshold
+method: raw_threshold
+threshold: 0.5
+event_merge_gap_s: 0.0

@@ -1,0 +1,5 @@
+# Q1 zero-shot mode (memo 3.1): leave-one-subject-out, entire subject held out.
+name: zero_shot_loso_subject
+strategy: zero_shot_loso_subject
+val_fraction: 0.2
+folds_path: ${profile.artifacts_dir}/splits/zero_shot_loso_subject.json

@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+build/
+dist/
+
+# Env
+.env
+
+# Data (never commit raw clinical data or generated artifacts)
+data/raw/
+data/synthetic/generated/
+data/splits/*.json
+!data/splits/.gitkeep
+*.edf
+*.edf.gz
+
+# Artifacts / checkpoints / logs
+artifacts/
+outputs/
+multirun/
+*.pt
+*.pth
+*.ckpt
+results/
+wandb/
+mlruns/
+
+# Hydra
+.hydra/
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.hypothesis/

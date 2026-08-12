@@ -1,0 +1,8 @@
+# Reference only: the training server already has a shared environment with
+# the deep-learning stack installed. This file documents the versions
+# WearSeizure-1D was developed against so a dedicated conda env (once created)
+# can be checked for compatibility -- it is NOT assumed to be installed fresh.
+# Install the CUDA build matching the server's driver separately, e.g.
+#   conda install pytorch>=2.3 pytorch-cuda=12.1 -c pytorch -c nvidia
+# then install environment/requirements-common.txt and the package itself.
+torch>=2.3

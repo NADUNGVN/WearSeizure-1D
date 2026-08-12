@@ -1,0 +1,15 @@
+# Full postprocessor (memo 4.5 / 5.1 step 3): EMA + two-threshold hysteresis +
+# run-length + event merge. threshold_on/threshold_off are NEVER set here --
+# they are selected only on validation data by
+# `training.threshold_selection.fit_threshold_on_val` and frozen to
+# `frozen_params_dir` before any continuous test run. This file only defines
+# the method, the fixed (non-tuned) parameters, and the search grid.
+name: hysteresis_runlength
+method: hysteresis_runlength
+ema_alpha: 0.125
+run_length: 3
+event_merge_gap_s: 2.0
+threshold_search:
+  on_grid: [0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80]
+  off_grid: [0.30, 0.35, 0.40, 0.45, 0.50]
+frozen_params_dir: ${profile.artifacts_dir}/frozen_postprocess

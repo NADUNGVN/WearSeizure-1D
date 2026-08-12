@@ -1,0 +1,9 @@
+# Event matching + CI parameters (memo 5.2 / 5.3).
+name: event_protocol
+match_rule: any_overlap    # an alarm interval matches an event iff they overlap
+bootstrap_n: 10000
+ci_alpha: 0.05             # 95% CI
+min_continuous_test_hours:
+  minimum: 100
+  target: 150
+  stretch: 200

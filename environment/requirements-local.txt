@@ -1,0 +1,9 @@
+# Local (Windows, CPU-only) dev environment.
+#
+# IMPORTANT: install in two separate commands, NOT combined with -r on a
+# single pip invocation -- the PyTorch CPU index only hosts torch/torchvision/
+# torchaudio, so if it is set as the global --index-url for a command that
+# also installs scipy/numpy/etc., those installs fail with "no matching
+# distribution". See README Quickstart for the exact two-step command.
+--index-url https://download.pytorch.org/whl/cpu
+torch>=2.3

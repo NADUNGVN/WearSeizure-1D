@@ -1,0 +1,4 @@
+# Ablation variant (memo 7.2): shorter window, same stride.
+name: w2s_stride1s
+window_s: 2.0
+stride_s: 1.0

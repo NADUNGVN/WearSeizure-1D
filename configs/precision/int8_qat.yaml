@@ -1,0 +1,9 @@
+# Target precision (memo Table 1): INT8 weights/activations, INT32 accumulator.
+name: int8_qat
+mode: int8_qat
+weight_bits: 8
+act_bits: 8
+accumulator_bits: 32
+max_loss_vs_fp32_pp:
+  minimum: 1.0
+  target: 0.5
