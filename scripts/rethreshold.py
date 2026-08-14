@@ -50,7 +50,10 @@ def main(cfg: DictConfig) -> None:
             continue
 
         model = build_model(cfg)
-        model.load_state_dict(torch.load(checkpoint_path, map_location="cpu"))
+        # weights_only=True: our checkpoints are only ever a state_dict (plain
+        # tensors), so this is safe and avoids torch's FutureWarning about
+        # unpickling arbitrary objects.
+        model.load_state_dict(torch.load(checkpoint_path, map_location="cpu", weights_only=True))
 
         result = evaluate_fold(
             model=model,

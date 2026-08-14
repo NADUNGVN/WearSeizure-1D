@@ -48,7 +48,7 @@ def main(cfg: DictConfig) -> None:
         dilations=tuple(cfg.model.dilations),
         num_classes=cfg.model.num_classes,
     )
-    model.load_state_dict(torch.load(checkpoint_path, map_location="cpu"))
+    model.load_state_dict(torch.load(checkpoint_path, map_location="cpu", weights_only=True))
     model = prepare_qat(model, weight_bits=8, act_bits=8)
     model.eval()
 
