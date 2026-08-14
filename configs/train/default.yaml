@@ -5,13 +5,21 @@
 # docs/SERVER_INVENTORY.md "GPU utilization" for the full explanation and
 # what else affects it (DataLoader num_workers, which is set per-profile in
 # configs/profile/*.yaml and threaded through by scripts/train.py).
-epochs: 30
+# epochs/early_stopping_patience raised (30/8 -> 60/15) after the first
+# real-data G1a run: per-fold validation sets are tiny (often just 1-2 EDFs,
+# sometimes a single seizure event), so val_loss is noisy and early stopping
+# was firing around epoch 11-18 -- before the model had much chance to
+# improve past a val set that small. More patience gives it room; more
+# epochs gives it something to use that room for. Segment-level AUROC was
+# already 0.92-0.94 with the old settings, so this is about calibration/
+# confidence on hard examples, not fixing a fundamentally broken model.
+epochs: 60
 batch_size: 256
 lr: 0.001
 weight_decay: 0.0001
 optimizer: adamw
 seeds: [0, 1, 2]     # memo 5.3: three random seeds for training
-early_stopping_patience: 8
+early_stopping_patience: 15
 class_balanced_sampling: true   # train partition only
 max_folds: null      # set via CLI (train.max_folds=2) to smoke-test on a few folds before a full run
 force_retrain: false  # true re-trains folds that already have a metrics.json (default: resume/skip them)
