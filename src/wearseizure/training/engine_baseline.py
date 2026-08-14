@@ -104,6 +104,8 @@ def evaluate_fold(
     batch_size: int,
     device: str = "cpu",
     num_workers: int = 0,
+    far_weight: float = 0.1,
+    far_cap_per_hour: float | None = None,
 ) -> FoldResult:
     """Threshold-freeze on val + evaluate on test for an already-trained
     `model` -- no training happens here. Used by `run_fold` right after
@@ -126,6 +128,7 @@ def evaluate_fold(
         method=postprocess_method, ema_alpha=postprocess_ema_alpha, run_length=postprocess_run_length,
         event_merge_gap_s=postprocess_event_merge_gap_s, threshold_on_grid=threshold_on_grid,
         threshold_off_grid=threshold_off_grid, fold_id=fold.fold_id,
+        far_weight=far_weight, far_cap_per_hour=far_cap_per_hour,
     )
 
     test_scores, test_labels, test_end_sec, test_edf_ids = _score_partition(
@@ -190,6 +193,8 @@ def run_fold(
     class_balanced_sampling: bool = True,
     early_stopping_patience: int = 8,
     num_workers: int = 0,
+    far_weight: float = 0.1,
+    far_cap_per_hour: float | None = None,
 ) -> FoldResult:
     datasets, _band, _normalizer = build_fold_datasets(records, fold, window_s, stride_s)
     train_ds, val_ds = datasets["train"], datasets["val"]
@@ -212,4 +217,5 @@ def run_fold(
         postprocess_run_length=postprocess_run_length, postprocess_event_merge_gap_s=postprocess_event_merge_gap_s,
         threshold_on_grid=threshold_on_grid, threshold_off_grid=threshold_off_grid,
         batch_size=batch_size, device=device, num_workers=num_workers,
+        far_weight=far_weight, far_cap_per_hour=far_cap_per_hour,
     )

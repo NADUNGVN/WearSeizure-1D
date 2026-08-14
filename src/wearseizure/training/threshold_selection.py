@@ -60,11 +60,25 @@ def fit_threshold_on_val(
     threshold_off_grid: list[float],
     fold_id: str,
     far_weight: float = 0.1,
+    far_cap_per_hour: float | None = None,
 ) -> FrozenPostprocessParams:
-    """Grid-search (threshold_on, threshold_off) to maximize
-    `sensitivity - far_weight * far_per_hour` pooled across all val EDFs.
-    `far_weight` is a tunable heuristic, not a memo-specified constant --
-    adjust it once real data is available if the tradeoff needs shifting.
+    """Grid-search (threshold_on, threshold_off) over all val EDFs.
+
+    Two selection policies:
+
+    - `far_cap_per_hour` given (preferred -- matches memo Table 6's separate,
+      independent gates rather than blending them): among combos whose
+      validation FAR is <= the cap, pick the one with the highest
+      sensitivity (ties broken by lower FAR). If no combo satisfies the cap,
+      fall back to the single lowest-FAR combo. This is what
+      `configs/postprocess/hysteresis_runlength.yaml`'s `far_cap_per_hour`
+      sets by default.
+    - `far_cap_per_hour=None`: maximize the linear blend
+      `sensitivity - far_weight * far_per_hour`. Kept for cases with no
+      explicit FAR target to aim for; in practice this tends to either
+      under-shoot sensitivity (if it favors low FAR) or over-shoot FAR (if
+      widened thresholds are available) since it has no hard constraint --
+      the capped policy above is more predictable once a target is known.
 
     Only supports `method="hysteresis_runlength"` (the primary postprocessor,
     memo 4.5). The `raw_threshold`/`ema` ablation variants (memo 7.2) use a
@@ -75,9 +89,8 @@ def fit_threshold_on_val(
         raise NotImplementedError(
             f"fit_threshold_on_val only supports method='hysteresis_runlength', got {method!r}"
         )
-    best: tuple[PostprocessParams, float, float] | None = None
-    best_score = -np.inf
 
+    candidates: list[tuple[PostprocessParams, float, float]] = []
     for on in threshold_on_grid:
         for off in threshold_off_grid:
             if off >= on:
@@ -98,16 +111,19 @@ def fit_threshold_on_val(
 
             sensitivity = total_matched / total_events if total_events else 0.0
             far = total_false_alarms / total_exposure if total_exposure else 0.0
-            objective = sensitivity - far_weight * far
-            if objective > best_score:
-                best_score = objective
-                best = (params, sensitivity, far)
+            candidates.append((params, sensitivity, far))
 
-    if best is None:
+    if not candidates:
         raise RuntimeError(
             "threshold search produced no valid (on, off) combination "
             f"(grids: on={threshold_on_grid}, off={threshold_off_grid})"
         )
+
+    if far_cap_per_hour is not None:
+        passing = [c for c in candidates if c[2] <= far_cap_per_hour]
+        best = max(passing, key=lambda c: (c[1], -c[2])) if passing else min(candidates, key=lambda c: c[2])
+    else:
+        best = max(candidates, key=lambda c: c[1] - far_weight * c[2])
 
     params, sensitivity, far = best
     return FrozenPostprocessParams(

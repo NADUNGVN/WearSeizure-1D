@@ -89,6 +89,7 @@ def main(cfg: DictConfig) -> None:
             class_balanced_sampling=cfg.train.class_balanced_sampling,
             early_stopping_patience=cfg.train.early_stopping_patience,
             num_workers=cfg.profile.get("num_workers", 0),
+            far_cap_per_hour=cfg.postprocess.get("far_cap_per_hour"),
         )
 
         torch.save(result.model.state_dict(), run_dir / f"{fold.fold_id}.pt")

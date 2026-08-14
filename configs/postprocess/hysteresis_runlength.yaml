@@ -20,4 +20,11 @@ event_merge_gap_s: 2.0
 threshold_search:
   on_grid: [0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80]
   off_grid: [0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50]
+# Constrained selection (memo Table 6 treats sensitivity/FAR as separate
+# gates, not one blended score): among combos with validation FAR <= this
+# cap, pick the highest-sensitivity one; falls back to min-FAR if none
+# qualify. Set to the Gate G1a *minimum* FAR (0.30/h) rather than target
+# (0.20/h) so the search has room -- tighten to 0.20 once sensitivity is
+# closer to its own gate.
+far_cap_per_hour: 0.30
 frozen_params_dir: ${profile.artifacts_dir}/frozen_postprocess

@@ -67,6 +67,7 @@ def main(cfg: DictConfig) -> None:
             batch_size=cfg.train.batch_size,
             device=cfg.profile.device,
             num_workers=cfg.profile.get("num_workers", 0),
+            far_cap_per_hour=cfg.postprocess.get("far_cap_per_hour"),
         )
 
         metrics_path = run_dir / f"{fold.fold_id}.metrics.json"
