@@ -23,6 +23,16 @@ from wearseizure.utils.logging import get_logger
 from wearseizure.utils.paths import ensure_dir
 from wearseizure.utils.seeding import seed_everything
 
+# DataLoader(num_workers>0) on Linux defaults to PyTorch's "file_descriptor"
+# strategy for passing tensors between worker processes, which consumes an
+# open file descriptor per shared tensor. Across ~66 folds x several
+# DataLoaders each, cleanup of the previous fold's workers can lag behind
+# creation of the next fold's (DataLoader iterators hold reference cycles
+# that rely on a full GC pass, not just refcounting), eventually exceeding
+# the OS's open-file limit ("OSError: Too many open files"). "file_system"
+# uses temp files instead and doesn't have this failure mode.
+torch.multiprocessing.set_sharing_strategy("file_system")
+
 log = get_logger(__name__)
 
 MODEL_FACTORIES = {

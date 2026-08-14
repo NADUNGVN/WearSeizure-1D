@@ -34,14 +34,20 @@ class FoldResult:
     test_segment_metrics: SegmentMetrics
 
 
-def _dataloader_kwargs(device: str, num_workers: int) -> dict:
-    # pin_memory only helps (and is only supported) when copying host->CUDA;
-    # persistent_workers avoids re-spawning the worker pool every epoch, which
-    # otherwise dominates wall-clock time for a tiny model with fast batches.
+def _dataloader_kwargs(device: str, num_workers: int, persistent: bool = True) -> dict:
+    # pin_memory only helps (and is only supported) when copying host->CUDA.
+    # persistent_workers avoids re-spawning the worker pool every epoch for a
+    # loader that's iterated many times (train/val across epochs) -- but for
+    # a one-shot loader (scoring a partition exactly once per fold), workers
+    # spawned with persistent_workers=True stick around until the DataLoader
+    # object is garbage-collected, and creating a fresh loader per fold x66
+    # folds x2 partitions was outliving GC and exhausting the OS's open-file
+    # limit ("Too many open files"). Only ever request persistent=True for a
+    # loader that will actually be reused across multiple iterations.
     return {
         "num_workers": num_workers,
         "pin_memory": device.startswith("cuda"),
-        "persistent_workers": num_workers > 0,
+        "persistent_workers": persistent and num_workers > 0,
     }
 
 
@@ -52,7 +58,10 @@ def _score_partition(
     batch_size: int = 128,
     num_workers: int = 0,
 ):
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, **_dataloader_kwargs(device, num_workers))
+    loader = DataLoader(
+        dataset, batch_size=batch_size, shuffle=False,
+        **_dataloader_kwargs(device, num_workers, persistent=False),
+    )
     model.eval()
     scores, labels = [], []
     with torch.no_grad():
