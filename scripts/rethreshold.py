@@ -1,7 +1,12 @@
-"""Train across every fold of the configured split strategy, freezing
-postprocess thresholds on validation and evaluating on each fold's continuous
-test partition. Per-fold metrics are saved so `evaluate.py` can aggregate
-per-patient without retraining.
+"""Re-run threshold selection + evaluation for every fold using its already
+trained checkpoint (from scripts/train.py), without re-training.
+
+Use this after changing postprocess/threshold-search settings
+(configs/postprocess/*.yaml) to see the effect cheaply -- training is by far
+the expensive part of a full run; re-scoring + re-thresholding from a saved
+checkpoint is comparatively fast. Overwrites the same
+`<fold_id>.metrics.json` files scripts/train.py wrote, so scripts/evaluate.py
+picks up the new results with no other changes.
 """
 from __future__ import annotations
 
@@ -17,19 +22,9 @@ from wearseizure.data.loader import load_records_from_manifest
 from wearseizure.data.manifest import load_manifest
 from wearseizure.data.splits import load_folds
 from wearseizure.models.factory import build_model
-from wearseizure.training.engine_baseline import run_fold
+from wearseizure.training.engine_baseline import evaluate_fold
 from wearseizure.utils.logging import get_logger
-from wearseizure.utils.paths import ensure_dir
-from wearseizure.utils.seeding import seed_everything
 
-# DataLoader(num_workers>0) on Linux defaults to PyTorch's "file_descriptor"
-# strategy for passing tensors between worker processes, which consumes an
-# open file descriptor per shared tensor. Across ~66 folds x several
-# DataLoaders each, cleanup of the previous fold's workers can lag behind
-# creation of the next fold's (DataLoader iterators hold reference cycles
-# that rely on a full GC pass, not just refcounting), eventually exceeding
-# the OS's open-file limit ("OSError: Too many open files"). "file_system"
-# uses temp files instead and doesn't have this failure mode.
 torch.multiprocessing.set_sharing_strategy("file_system")
 
 log = get_logger(__name__)
@@ -37,39 +32,27 @@ log = get_logger(__name__)
 
 @hydra.main(version_base=None, config_path="../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
-    seed_everything(cfg.seed)
-
     manifest_df = load_manifest(str(Path(cfg.data.manifest_path)))
     data_dir = cfg.data.generated_dir if cfg.data.name == "synthetic" else None
     raw_dir = cfg.data.raw_dir if cfg.data.name != "synthetic" else None
     records = load_records_from_manifest(manifest_df, data_dir=data_dir, raw_dir=raw_dir)
 
     folds = load_folds(str(Path(cfg.split.folds_path)))
-    max_folds = cfg.train.get("max_folds")
-    if max_folds is not None:
-        log.warning(
-            f"train.max_folds={max_folds}: running a SMOKE TEST on the first {max_folds} of "
-            f"{len(folds)} folds, not a full run -- do not treat the resulting metrics as "
-            "representative of the whole cohort."
-        )
-        folds = folds[:max_folds]
-
-    run_dir = ensure_dir(Path(cfg.profile.artifacts_dir) / cfg.model.name / cfg.split.name)
+    run_dir = Path(cfg.profile.artifacts_dir) / cfg.model.name / cfg.split.name
     threshold_grid = cfg.postprocess.get("threshold_search", OmegaConf.create({}))
 
-    force_retrain = cfg.train.get("force_retrain", False)
-    n_trained = n_skipped = 0
-
+    n_done = n_missing = 0
     for fold in folds:
-        metrics_path = run_dir / f"{fold.fold_id}.metrics.json"
-        if metrics_path.exists() and not force_retrain:
-            log.info(f"fold {fold.fold_id}: {metrics_path} already exists, skipping (train.force_retrain=true to redo)")
-            n_skipped += 1
+        checkpoint_path = run_dir / f"{fold.fold_id}.pt"
+        if not checkpoint_path.exists():
+            log.warning(f"no checkpoint for {fold.fold_id} at {checkpoint_path}, skipping (run train.py first)")
+            n_missing += 1
             continue
 
-        log.info(f"training fold {fold.fold_id}")
         model = build_model(cfg)
-        result = run_fold(
+        model.load_state_dict(torch.load(checkpoint_path, map_location="cpu"))
+
+        result = evaluate_fold(
             model=model,
             records=records,
             fold=fold,
@@ -81,17 +64,12 @@ def main(cfg: DictConfig) -> None:
             postprocess_event_merge_gap_s=cfg.postprocess.get("event_merge_gap_s", 0.0),
             threshold_on_grid=list(threshold_grid.get("on_grid", [cfg.postprocess.get("threshold", 0.5)])),
             threshold_off_grid=list(threshold_grid.get("off_grid", [cfg.postprocess.get("threshold", 0.5) - 0.1])),
-            epochs=cfg.train.epochs,
-            lr=cfg.train.lr,
-            weight_decay=cfg.train.weight_decay,
             batch_size=cfg.train.batch_size,
             device=cfg.profile.device,
-            class_balanced_sampling=cfg.train.class_balanced_sampling,
-            early_stopping_patience=cfg.train.early_stopping_patience,
             num_workers=cfg.profile.get("num_workers", 0),
         )
 
-        torch.save(result.model.state_dict(), run_dir / f"{fold.fold_id}.pt")
+        metrics_path = run_dir / f"{fold.fold_id}.metrics.json"
         metrics_path.write_text(
             json.dumps(
                 {
@@ -110,10 +88,10 @@ def main(cfg: DictConfig) -> None:
             f"fold {fold.fold_id}: test sensitivity={result.test_event_metrics.sensitivity:.3f} "
             f"FAR/h={result.test_event_metrics.far_per_hour:.3f} -> {metrics_path}"
         )
-        n_trained += 1
+        n_done += 1
 
     log.info(
-        f"trained {n_trained} folds (skipped {n_skipped} already done) for "
+        f"re-thresholded {n_done} folds ({n_missing} missing checkpoints) for "
         f"model={cfg.model.name}, split={cfg.split.name} -> {run_dir}"
     )
 

@@ -9,7 +9,15 @@ method: hysteresis_runlength
 ema_alpha: 0.125
 run_length: 3
 event_merge_gap_s: 2.0
+# Widened downward (was on_grid floor 0.50) after the first real-data
+# baseline run: several folds -- especially patients with very few total
+# seizures (e.g. chb17, 3 events total => only 1 val seizure per fold) --
+# never crossed 0.50 on validation even with a high AUROC (0.88-0.92),
+# because a class-imbalanced 2-way softmax tends to output compressed,
+# under-calibrated probabilities for the minority class. Rank-based
+# separation (AUROC) being good doesn't mean the raw scores clear a fixed
+# absolute threshold; the search needs low options to find where they land.
 threshold_search:
-  on_grid: [0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80]
-  off_grid: [0.30, 0.35, 0.40, 0.45, 0.50]
+  on_grid: [0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80]
+  off_grid: [0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50]
 frozen_params_dir: ${profile.artifacts_dir}/frozen_postprocess

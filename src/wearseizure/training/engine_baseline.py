@@ -89,7 +89,7 @@ def _group_by_edf(end_sec, scores, edf_ids, records: dict[str, EEGRecord], allow
     return end_sec_by_edf, scores_by_edf, events_by_edf, exposure_by_edf
 
 
-def run_fold(
+def evaluate_fold(
     model: torch.nn.Module,
     records: dict[str, EEGRecord],
     fold: Fold,
@@ -101,30 +101,19 @@ def run_fold(
     postprocess_event_merge_gap_s: float,
     threshold_on_grid: list[float],
     threshold_off_grid: list[float],
-    epochs: int,
-    lr: float,
-    weight_decay: float,
     batch_size: int,
     device: str = "cpu",
-    class_balanced_sampling: bool = True,
-    early_stopping_patience: int = 8,
     num_workers: int = 0,
 ) -> FoldResult:
+    """Threshold-freeze on val + evaluate on test for an already-trained
+    `model` -- no training happens here. Used by `run_fold` right after
+    training, and directly by `scripts/rethreshold.py` to re-run
+    postprocessing against a saved checkpoint without re-training (e.g. after
+    widening the threshold search grid).
+    """
     datasets, _band, _normalizer = build_fold_datasets(records, fold, window_s, stride_s)
-    train_ds, val_ds, test_ds = datasets["train"], datasets["val"], datasets["test"]
-    dl_kwargs = _dataloader_kwargs(device, num_workers)
-
-    if class_balanced_sampling:
-        train_loader = DataLoader(train_ds, batch_size=batch_size, sampler=make_class_balanced_sampler(train_ds), **dl_kwargs)
-    else:
-        train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, **dl_kwargs)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, **dl_kwargs)
-
-    train_result = train_classifier(
-        model, train_loader, val_loader, epochs=epochs, lr=lr, weight_decay=weight_decay,
-        device=device, early_stopping_patience=early_stopping_patience,
-    )
-    model = train_result.model
+    val_ds, test_ds = datasets["val"], datasets["test"]
+    model.to(device)
 
     val_scores, _val_labels, val_end_sec, val_edf_ids = _score_partition(
         model, val_ds, device, batch_size=batch_size, num_workers=num_workers
@@ -178,4 +167,49 @@ def run_fold(
         frozen_postprocess=frozen,
         test_event_metrics=test_event_metrics,
         test_segment_metrics=test_segment_metrics,
+    )
+
+
+def run_fold(
+    model: torch.nn.Module,
+    records: dict[str, EEGRecord],
+    fold: Fold,
+    window_s: float,
+    stride_s: float,
+    postprocess_method: str,
+    postprocess_ema_alpha: float,
+    postprocess_run_length: int,
+    postprocess_event_merge_gap_s: float,
+    threshold_on_grid: list[float],
+    threshold_off_grid: list[float],
+    epochs: int,
+    lr: float,
+    weight_decay: float,
+    batch_size: int,
+    device: str = "cpu",
+    class_balanced_sampling: bool = True,
+    early_stopping_patience: int = 8,
+    num_workers: int = 0,
+) -> FoldResult:
+    datasets, _band, _normalizer = build_fold_datasets(records, fold, window_s, stride_s)
+    train_ds, val_ds = datasets["train"], datasets["val"]
+    dl_kwargs = _dataloader_kwargs(device, num_workers)
+
+    if class_balanced_sampling:
+        train_loader = DataLoader(train_ds, batch_size=batch_size, sampler=make_class_balanced_sampler(train_ds), **dl_kwargs)
+    else:
+        train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, **dl_kwargs)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, **dl_kwargs)
+
+    train_result = train_classifier(
+        model, train_loader, val_loader, epochs=epochs, lr=lr, weight_decay=weight_decay,
+        device=device, early_stopping_patience=early_stopping_patience,
+    )
+
+    return evaluate_fold(
+        model=train_result.model, records=records, fold=fold, window_s=window_s, stride_s=stride_s,
+        postprocess_method=postprocess_method, postprocess_ema_alpha=postprocess_ema_alpha,
+        postprocess_run_length=postprocess_run_length, postprocess_event_merge_gap_s=postprocess_event_merge_gap_s,
+        threshold_on_grid=threshold_on_grid, threshold_off_grid=threshold_off_grid,
+        batch_size=batch_size, device=device, num_workers=num_workers,
     )
