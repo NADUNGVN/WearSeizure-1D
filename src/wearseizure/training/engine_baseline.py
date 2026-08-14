@@ -34,13 +34,30 @@ class FoldResult:
     test_segment_metrics: SegmentMetrics
 
 
-def _score_partition(model: torch.nn.Module, dataset: WearSeizureWindowDataset, device: str, batch_size: int = 128):
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+def _dataloader_kwargs(device: str, num_workers: int) -> dict:
+    # pin_memory only helps (and is only supported) when copying host->CUDA;
+    # persistent_workers avoids re-spawning the worker pool every epoch, which
+    # otherwise dominates wall-clock time for a tiny model with fast batches.
+    return {
+        "num_workers": num_workers,
+        "pin_memory": device.startswith("cuda"),
+        "persistent_workers": num_workers > 0,
+    }
+
+
+def _score_partition(
+    model: torch.nn.Module,
+    dataset: WearSeizureWindowDataset,
+    device: str,
+    batch_size: int = 128,
+    num_workers: int = 0,
+):
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, **_dataloader_kwargs(device, num_workers))
     model.eval()
     scores, labels = [], []
     with torch.no_grad():
         for x, y in loader:
-            probs = torch.softmax(model(x.to(device)), dim=1)[:, 1]
+            probs = torch.softmax(model(x.to(device, non_blocking=True)), dim=1)[:, 1]
             scores.append(probs.cpu().numpy())
             labels.append(y.numpy())
     scores = np.concatenate(scores) if scores else np.array([])
@@ -82,15 +99,17 @@ def run_fold(
     device: str = "cpu",
     class_balanced_sampling: bool = True,
     early_stopping_patience: int = 8,
+    num_workers: int = 0,
 ) -> FoldResult:
     datasets, _band, _normalizer = build_fold_datasets(records, fold, window_s, stride_s)
     train_ds, val_ds, test_ds = datasets["train"], datasets["val"], datasets["test"]
+    dl_kwargs = _dataloader_kwargs(device, num_workers)
 
     if class_balanced_sampling:
-        train_loader = DataLoader(train_ds, batch_size=batch_size, sampler=make_class_balanced_sampler(train_ds))
+        train_loader = DataLoader(train_ds, batch_size=batch_size, sampler=make_class_balanced_sampler(train_ds), **dl_kwargs)
     else:
-        train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
+        train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, **dl_kwargs)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, **dl_kwargs)
 
     train_result = train_classifier(
         model, train_loader, val_loader, epochs=epochs, lr=lr, weight_decay=weight_decay,
@@ -98,7 +117,9 @@ def run_fold(
     )
     model = train_result.model
 
-    val_scores, _val_labels, val_end_sec, val_edf_ids = _score_partition(model, val_ds, device)
+    val_scores, _val_labels, val_end_sec, val_edf_ids = _score_partition(
+        model, val_ds, device, batch_size=batch_size, num_workers=num_workers
+    )
     end_sec_by_edf, scores_by_edf, events_by_edf, exposure_by_edf = _group_by_edf(
         val_end_sec, val_scores, val_edf_ids, records, fold.val_edf_ids
     )
@@ -109,7 +130,9 @@ def run_fold(
         threshold_off_grid=threshold_off_grid, fold_id=fold.fold_id,
     )
 
-    test_scores, test_labels, test_end_sec, test_edf_ids = _score_partition(model, test_ds, device)
+    test_scores, test_labels, test_end_sec, test_edf_ids = _score_partition(
+        model, test_ds, device, batch_size=batch_size, num_workers=num_workers
+    )
     test_end_sec_by_edf, test_scores_by_edf, test_events_by_edf, test_exposure_by_edf = _group_by_edf(
         test_end_sec, test_scores, test_edf_ids, records, fold.test_edf_ids
     )

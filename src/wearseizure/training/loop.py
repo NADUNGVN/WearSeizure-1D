@@ -46,7 +46,7 @@ def train_classifier(
         model.train()
         train_loss, n_train = 0.0, 0
         for x, y in train_loader:
-            x, y = x.to(device), y.to(device)
+            x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
             optimizer.zero_grad()
             loss = criterion(model(x), y)
             loss.backward()
@@ -79,7 +79,7 @@ def _eval_loss(model: nn.Module, loader: DataLoader, criterion: nn.Module, devic
     total_loss, n = 0.0, 0
     with torch.no_grad():
         for x, y in loader:
-            x, y = x.to(device), y.to(device)
+            x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
             loss = criterion(model(x), y)
             total_loss += loss.item() * x.size(0)
             n += x.size(0)

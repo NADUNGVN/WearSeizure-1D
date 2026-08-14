@@ -73,7 +73,16 @@ def main(cfg: DictConfig) -> None:
     run_dir = ensure_dir(Path(cfg.profile.artifacts_dir) / cfg.model.name / cfg.split.name)
     threshold_grid = cfg.postprocess.get("threshold_search", OmegaConf.create({}))
 
+    force_retrain = cfg.train.get("force_retrain", False)
+    n_trained = n_skipped = 0
+
     for fold in folds:
+        metrics_path = run_dir / f"{fold.fold_id}.metrics.json"
+        if metrics_path.exists() and not force_retrain:
+            log.info(f"fold {fold.fold_id}: {metrics_path} already exists, skipping (train.force_retrain=true to redo)")
+            n_skipped += 1
+            continue
+
         log.info(f"training fold {fold.fold_id}")
         model = model_factory(cfg)
         result = run_fold(
@@ -95,10 +104,10 @@ def main(cfg: DictConfig) -> None:
             device=cfg.profile.device,
             class_balanced_sampling=cfg.train.class_balanced_sampling,
             early_stopping_patience=cfg.train.early_stopping_patience,
+            num_workers=cfg.profile.get("num_workers", 0),
         )
 
         torch.save(result.model.state_dict(), run_dir / f"{fold.fold_id}.pt")
-        metrics_path = run_dir / f"{fold.fold_id}.metrics.json"
         metrics_path.write_text(
             json.dumps(
                 {
@@ -117,8 +126,12 @@ def main(cfg: DictConfig) -> None:
             f"fold {fold.fold_id}: test sensitivity={result.test_event_metrics.sensitivity:.3f} "
             f"FAR/h={result.test_event_metrics.far_per_hour:.3f} -> {metrics_path}"
         )
+        n_trained += 1
 
-    log.info(f"trained {len(folds)} folds for model={cfg.model.name}, split={cfg.split.name} -> {run_dir}")
+    log.info(
+        f"trained {n_trained} folds (skipped {n_skipped} already done) for "
+        f"model={cfg.model.name}, split={cfg.split.name} -> {run_dir}"
+    )
 
 
 if __name__ == "__main__":

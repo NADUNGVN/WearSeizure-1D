@@ -1,9 +1,17 @@
+# batch_size=256 (not 64): these models are tiny (7-14k params), so on a GPU
+# a small batch spends most of its wall-clock time on Python/kernel-launch
+# overhead rather than compute -- observed as low (~10%) GPU utilization on
+# SERVER-02. A bigger batch does more work per launch. See
+# docs/SERVER_INVENTORY.md "GPU utilization" for the full explanation and
+# what else affects it (DataLoader num_workers, which is set per-profile in
+# configs/profile/*.yaml and threaded through by scripts/train.py).
 epochs: 30
-batch_size: 64
+batch_size: 256
 lr: 0.001
 weight_decay: 0.0001
 optimizer: adamw
 seeds: [0, 1, 2]     # memo 5.3: three random seeds for training
 early_stopping_patience: 8
 class_balanced_sampling: true   # train partition only
-max_folds: null   # set via CLI (train.max_folds=2) to smoke-test on a few folds before a full run
+max_folds: null      # set via CLI (train.max_folds=2) to smoke-test on a few folds before a full run
+force_retrain: false  # true re-trains folds that already have a metrics.json (default: resume/skip them)

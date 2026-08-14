@@ -37,13 +37,46 @@ and its 48GB Quadro RTX 8000 has enormous headroom for a ~14k-parameter,
   is tiny and any reasonably modern PyTorch/CUDA wheel will run fine. Confirm
   the exact driver with `nvidia-smi` before pinning a specific `pytorch-cuda`
   version (see `scripts/server_bootstrap.sh`).
-- Known clutter to clean up before use: three old, unsuccessful experiment
-  directories under `~/Manh` --
-  `1D-CNN-Accelerator-for-EEG_Detection`,
-  `1D-CNN-Accelerator-for-EEG_Detection-q1`,
-  `1D-CNN-Accelerator-for-EEG_Detection-main`.
-  See `scripts/server_bootstrap.sh` for the review-then-delete commands
-  (deletion is left as an explicit, manually-run step, never automated).
+- Three old, unsuccessful experiment directories that used to clutter
+  `~/Manh` (`1D-CNN-Accelerator-for-EEG_Detection`,
+  `-q1`, `-main`) have been removed (2026-08).
+  Conda env `chbmit-cnn` is the one in use; verified working with
+  PyTorch 2.5.1+cu121 against the Quadro RTX 8000.
+
+## GPU utilization
+
+First real-data baseline runs showed GPU utilization hovering around ~10%
+and low power draw -- for a ~7-14k-parameter 1D-CNN this is expected unless
+two things are tuned, both now wired up (previously `num_workers` was
+declared per-profile in `configs/profile/*.yaml` but never actually passed to
+any `DataLoader`, so it silently did nothing):
+
+1. **`DataLoader(num_workers=...)`**: with `num_workers=0`, each batch is
+   assembled synchronously on the main process, so the GPU sits idle while
+   the CPU slices windows out of the EEG signal and builds the tensor.
+   `configs/profile/server.yaml` sets `num_workers: 4`; `scripts/train.py`
+   now threads `cfg.profile.num_workers` through `training/engine_baseline.py`
+   into every `DataLoader`, with `pin_memory=True` + `non_blocking=True`
+   transfers and `persistent_workers=True` so workers aren't respawned every
+   epoch.
+2. **Batch size**: `configs/train/default.yaml` raised `batch_size` from 64 to
+   256. These models are small enough that even 256 samples take negligible
+   VRAM (all four servers have 24-48GB); a bigger batch means fewer
+   Python-level iterations and kernel launches per epoch, which is what
+   actually drives GPU utilization up for a model this size -- not more VRAM
+   usage.
+
+Even with both fixes, expect GPU utilization to stay moderate (not
+consistently >80%) for models this small -- that's inherent to the
+architecture, not a misconfiguration. If throughput still matters after
+this, the next lever is running multiple folds concurrently (e.g. two
+`train.py` processes, one per model, as already done) or increasing batch
+size further before reaching for anything more invasive.
+
+Resume behavior: `scripts/train.py` now skips any fold whose
+`<fold_id>.metrics.json` already exists (pass `train.force_retrain=true` to
+redo it), so restarting a run after a config change never re-trains
+already-completed folds.
 
 ## Other servers (for later scale-out)
 
