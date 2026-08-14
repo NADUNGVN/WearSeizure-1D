@@ -6,3 +6,4 @@ optimizer: adamw
 seeds: [0, 1, 2]     # memo 5.3: three random seeds for training
 early_stopping_patience: 8
 class_balanced_sampling: true   # train partition only
+max_folds: null   # set via CLI (train.max_folds=2) to smoke-test on a few folds before a full run

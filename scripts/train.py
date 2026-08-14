@@ -57,6 +57,14 @@ def main(cfg: DictConfig) -> None:
     records = load_records_from_manifest(manifest_df, data_dir=data_dir, raw_dir=raw_dir)
 
     folds = load_folds(str(Path(cfg.split.folds_path)))
+    max_folds = cfg.train.get("max_folds")
+    if max_folds is not None:
+        log.warning(
+            f"train.max_folds={max_folds}: running a SMOKE TEST on the first {max_folds} of "
+            f"{len(folds)} folds, not a full run -- do not treat the resulting metrics as "
+            "representative of the whole cohort."
+        )
+        folds = folds[:max_folds]
 
     model_factory = MODEL_FACTORIES.get(cfg.model.name)
     if model_factory is None:
