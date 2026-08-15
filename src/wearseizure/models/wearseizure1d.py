@@ -10,6 +10,11 @@ to hit the target happens during Gate G1b ablation (kernel/dilation
 on-off, standard vs depthwise-separable, etc. -- memo 7.2); this
 implementation only needs to respect the hard budget, which
 tests/unit/test_models_shapes_and_budget.py checks.
+
+`kernel_mode` ("multi_scale" | "k3_only" | "k5_only") and `dilations`
+together drive the memo 7.2 kernel/dilation ablation on B2-B4 without a
+second model class -- see configs/model/wearseizure1d_{k3only,k5only,
+nodilation}.yaml.
 """
 from __future__ import annotations
 
@@ -29,6 +34,7 @@ class WearSeizure1D(nn.Module):
         context_channels: int = 64,
         dilations: tuple[int, int, int] = (1, 2, 4),
         num_classes: int = 2,
+        kernel_mode: str = "multi_scale",
     ) -> None:
         super().__init__()
         self.input_len = input_len
@@ -41,9 +47,9 @@ class WearSeizure1D(nn.Module):
             nn.ReLU(inplace=True),
         )
         self.b1 = DepthwiseSeparableConv1d(stem_out_channels, s1, kernel_size=5, stride=2, dilation=1)
-        self.b2 = MultiScaleDilatedBlock(s1, s2, stride=2, dilation=d1)
-        self.b3 = MultiScaleDilatedBlock(s2, s3, stride=2, dilation=d2)
-        self.b4 = MultiScaleDilatedBlock(s3, s4, stride=2, dilation=d3)
+        self.b2 = MultiScaleDilatedBlock(s1, s2, stride=2, dilation=d1, kernel_mode=kernel_mode)
+        self.b3 = MultiScaleDilatedBlock(s2, s3, stride=2, dilation=d2, kernel_mode=kernel_mode)
+        self.b4 = MultiScaleDilatedBlock(s3, s4, stride=2, dilation=d3, kernel_mode=kernel_mode)
 
         self.context = nn.Sequential(
             DepthwiseSeparableConv1d(s4, context_channels, kernel_size=5, stride=1, dilation=8),

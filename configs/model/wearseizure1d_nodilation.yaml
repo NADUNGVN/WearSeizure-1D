@@ -1,0 +1,16 @@
+# Ablation variant C (memo 7.2 kernel ablation): keep the multi-scale k3||k5
+# design but force dilation=1 everywhere (no widened receptive field) --
+# tests whether the dilation progression (1/2/4) contributes anything beyond
+# what the multi-scale branching alone provides.
+name: wearseizure1d_nodilation
+in_channels: 1
+input_len: 1024
+stem_out_channels: 8
+stage_out_channels: [16, 24, 32, 48]
+context_channels: 64
+kernels: [3, 5]
+dilations: [1, 1, 1]
+kernel_mode: multi_scale
+num_classes: 2
+param_budget_max: 32000
+mac_budget_max: 2000000

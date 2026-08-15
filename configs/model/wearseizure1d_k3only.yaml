@@ -1,0 +1,15 @@
+# Ablation variant A (memo 7.2 kernel ablation): drop the multi-scale k5
+# branch entirely from B2-B4, keeping only the k3 depthwise branch. Dilation
+# is irrelevant here (k3 branch never uses it) but listed for clarity.
+name: wearseizure1d_k3only
+in_channels: 1
+input_len: 1024
+stem_out_channels: 8
+stage_out_channels: [16, 24, 32, 48]
+context_channels: 64
+kernels: [3]
+dilations: [1, 1, 1]
+kernel_mode: k3_only
+num_classes: 2
+param_budget_max: 32000
+mac_budget_max: 2000000
