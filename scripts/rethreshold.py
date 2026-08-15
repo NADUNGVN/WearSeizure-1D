@@ -38,7 +38,7 @@ def main(cfg: DictConfig) -> None:
     records = load_records_from_manifest(manifest_df, data_dir=data_dir, raw_dir=raw_dir)
 
     folds = load_folds(str(Path(cfg.split.folds_path)))
-    run_dir = Path(cfg.profile.artifacts_dir) / cfg.model.name / cfg.split.name
+    run_dir = Path(cfg.profile.artifacts_dir) / cfg.model.name / cfg.split.name / cfg.window.name
     threshold_grid = cfg.postprocess.get("threshold_search", OmegaConf.create({}))
 
     n_done = n_missing = 0

@@ -30,7 +30,7 @@ def main(cfg: DictConfig) -> None:
     if cfg.model.name != "wearseizure1d":
         raise ValueError("export_int8_reference.py is scoped to model=wearseizure1d")
 
-    run_dir = Path(cfg.profile.artifacts_dir) / cfg.model.name / cfg.split.name
+    run_dir = Path(cfg.profile.artifacts_dir) / cfg.model.name / cfg.split.name / cfg.window.name
     folds = load_folds(str(Path(cfg.split.folds_path)))
     if not folds:
         raise RuntimeError("no folds found -- run make_splits.py and train.py first")

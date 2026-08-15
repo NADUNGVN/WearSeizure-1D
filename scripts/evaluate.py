@@ -64,7 +64,7 @@ def _aggregate_per_patient(fold_dicts: list[dict], strategy: str) -> dict[str, E
 
 @hydra.main(version_base=None, config_path="../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
-    run_dir = Path(cfg.profile.artifacts_dir) / cfg.model.name / cfg.split.name
+    run_dir = Path(cfg.profile.artifacts_dir) / cfg.model.name / cfg.split.name / cfg.window.name
     fold_dicts = _load_fold_metrics(run_dir)
     per_patient = _aggregate_per_patient(fold_dicts, cfg.split.strategy)
 

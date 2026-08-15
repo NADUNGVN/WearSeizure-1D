@@ -54,7 +54,14 @@ def main(cfg: DictConfig) -> None:
         )
         folds = folds[:max_folds]
 
-    run_dir = ensure_dir(Path(cfg.profile.artifacts_dir) / cfg.model.name / cfg.split.name)
+    # window.name is part of the path (not just model/split) because window_s/
+    # stride_s changes what the training data itself looks like (memo 7.2
+    # ablates window/stride) -- without this, switching window configs would
+    # find the previous window's metrics.json already sitting there and
+    # silently skip training instead of producing a real, comparable result.
+    run_dir = ensure_dir(
+        Path(cfg.profile.artifacts_dir) / cfg.model.name / cfg.split.name / cfg.window.name
+    )
     threshold_grid = cfg.postprocess.get("threshold_search", OmegaConf.create({}))
 
     force_retrain = cfg.train.get("force_retrain", False)
