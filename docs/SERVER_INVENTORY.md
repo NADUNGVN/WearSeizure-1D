@@ -78,6 +78,37 @@ Resume behavior: `scripts/train.py` now skips any fold whose
 redo it), so restarting a run after a config change never re-trains
 already-completed folds.
 
+## "Too many open files" -- two independent causes, both fixed
+
+This has recurred twice with different root causes; both are now fixed in
+code, but the underlying risk (many `DataLoader(num_workers>0)` constructions
+over a 66-fold sweep) means it's worth understanding rather than just
+re-raising `ulimit -n` each time:
+
+1. **Tensor-sharing strategy** (first occurrence): torch's default
+   `file_descriptor` strategy for passing tensors between worker processes
+   consumes an fd per shared tensor; `DataLoader` iterators hold reference
+   cycles that only get cleaned up on a full GC pass, so cleanup lagged
+   creation across many folds. Fixed by
+   `torch.multiprocessing.set_sharing_strategy("file_system")` in
+   `scripts/train.py`.
+2. **Worker/semaphore count from one-shot scoring loaders** (second
+   occurrence, survived fix #1): every fold built up to 4 `DataLoader`s
+   (train, val, and two one-shot scoring loaders for val/test), each with
+   `num_workers=4` spawning 4 worker processes + OS-level locks/semaphores
+   (and, under `file_system` sharing, a temp directory). The one-shot scoring
+   loaders gained nothing from multiprocessing (a single pass, never
+   iterated across epochs) but still paid this cost every fold. Fixed in
+   `training/engine_baseline._score_partition`, which now always forces
+   `num_workers=0` regardless of what's configured -- only the train/val
+   loaders (genuinely iterated many times per fold) use worker processes.
+
+Belt-and-suspenders: also raise the shell's open-file limit before a long
+run, ideally in `~/.bashrc` so it doesn't need retyping every session:
+`ulimit -n 65536`. If this recurs a third time with a different signature,
+suspect the train/val loaders themselves (2 per fold, still using
+`num_workers>0` + `persistent_workers=True`) rather than the scoring path.
+
 ## Other servers (for later scale-out)
 
 - **SERVER-01**: same 48GB GPU class as SERVER-02, newer kernel (6.8) and

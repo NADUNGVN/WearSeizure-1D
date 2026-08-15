@@ -58,9 +58,17 @@ def _score_partition(
     batch_size: int = 128,
     num_workers: int = 0,
 ):
+    # Always num_workers=0 here regardless of what's passed: this loader is
+    # iterated exactly once (a single scoring pass, not repeated across
+    # epochs), so multiprocessing workers buy nothing but still spawn OS-level
+    # locks/semaphores (and, in file_system sharing mode, a temp directory)
+    # per DataLoader construction. Across ~66 folds x 2 scoring calls each,
+    # that accumulation alone exhausted the OS open-file limit even after
+    # switching to the file_system sharing strategy -- this is a second,
+    # independent source of the same "Too many open files" failure mode.
     loader = DataLoader(
         dataset, batch_size=batch_size, shuffle=False,
-        **_dataloader_kwargs(device, num_workers, persistent=False),
+        **_dataloader_kwargs(device, num_workers=0, persistent=False),
     )
     model.eval()
     scores, labels = [], []
