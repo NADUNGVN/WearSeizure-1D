@@ -1,0 +1,206 @@
+# PROPOSED gate table v2 -- NOT YET ACTIVE.
+#
+# This file sits beside `gates.yaml` and does not replace it. Nothing loads it
+# until someone points `eval/report.load_gates` at it deliberately. It exists so
+# the change can be reviewed (and discussed with the advisor) against evidence
+# before the project's success criteria are altered.
+#
+# Rationale for every change below is in `docs/RESEARCH_REALITY_CHECK.md`.
+# Evidence base: the 19 real-data CHB-MIT runs in `docs/EXPERIMENT_LOG_G1a.md`
+# (13 patients, 66 folds, 185.0h exposure) plus the published literature cited
+# in that document.
+#
+# The central problem with v1: its accuracy numbers were derived from Chung
+# et al., Front. Neurol. 15:1389731 (2024) -- the very baseline this project
+# reproduces -- and that paper uses 1-sample window stride, per-patient
+# threshold tuning on evaluation data, and ~91h of test exposure. Those are
+# exactly the four practices `docs/PROTOCOL.md` forbids. Hitting v1 therefore
+# means drawing with an inflated number, and two of the v1 gates cannot be hit
+# at all (see detection_delay_mean_s and worst_patient_sensitivity below).
+
+# ---------------------------------------------------------------------------
+# Group A -- reproduction checks. These confirm the protocol is wired up
+# correctly. They are NOT contributions and must never be cited as results.
+# ---------------------------------------------------------------------------
+reproduction:
+  # Re-run the ORIGINAL Chung 2024 protocol (1-sample stride, per-patient Th/L
+  # fitted on evaluation data) and confirm we land in their reported band. The
+  # delta between this and the leakage-safe branch is the paper's Figure 1.
+  chung2024_replication_sensitivity:
+    expected_low: 0.9823   # 99.62% - 1.39pp
+    expected_high: 1.0
+  leakage_tests_pass: true  # tests/unit/test_splits_no_leakage.py, test_splits_loso.py on real data
+
+# ---------------------------------------------------------------------------
+# Group B -- contribution gates. These must be cleared before writing.
+# ---------------------------------------------------------------------------
+
+# v1: 0.970 / 0.985 / 0.990.
+# Changed because 0.990 (the v1 *stretch*) is still BELOW the baseline's
+# reported 0.9962, so clearing v1 would not demonstrate any accuracy
+# advantage -- while the leakage-safe protocol structurally produces lower
+# numbers than the leaky one it is compared against (Ali et al. 2024 measured
+# 91.88% -> 64.24% for the same system when leakage is removed).
+# Best real-data value at a valid FAR so far: 0.8806 (run #12/#17).
+personalized_event_sensitivity:
+  minimum: 0.920
+  target: 0.940
+  stretch: 0.960
+
+# v1: 0.30 / 0.20 / 0.10.
+# TIGHTENED. FAR is the project's strongest axis by a wide margin: the best
+# real-data value is 0.0621/h (run #19), roughly 5x better than the v1
+# minimum required. Turning that surplus into a stated contribution costs
+# nothing, and still leaves ~2.4x headroom against the new minimum.
+far_per_hour:
+  minimum: 0.15
+  target: 0.10
+  stretch: 0.05
+  direction: lower_is_better
+
+# v1: 5.0 / 4.0 / 3.0 -- MATHEMATICALLY UNREACHABLE, which is why no run ever
+# cleared it. From postprocess/hysteresis.py:75 the alarm is timestamped at the
+# window's END, after `run_length` consecutive above-threshold windows, on a
+# score stream already smoothed by an EMA. The floor on any measurable delay is
+# therefore:
+#
+#     delay_floor = window_s + (run_length - 1) * stride_s + ((1 - alpha)/alpha) * stride_s
+#
+# With the shipped defaults (w4s_stride1s, run_length=3, ema_alpha=0.125) that
+# floor is 4 + 2 + 7 = 13.0s -- 2.6x the v1 minimum, before the model does
+# anything at all. Chung 2024 reports 3.3s, which is below their own 4s window
+# length, so they do not timestamp at window end and their onsets are
+# re-annotated: 3.3s and 19s are not the same quantity.
+#
+# The new gate separates the two things v1 conflated: how fast the measurement
+# setup CAN be (detection_delay_floor_s) and how fast the model actually is.
+detection_delay_mean_s:
+  minimum: 10.0
+  target: 8.0
+  stretch: 6.0
+  direction: lower_is_better
+
+detection_delay_median_s:
+  minimum: 8.0
+  target: 6.0
+  stretch: 4.0
+  direction: lower_is_better
+
+# NEW GATE. Constrains the measurement configuration rather than the model.
+# Requires `report.json` to carry the computed floor so no delay number can be
+# read without it.
+#
+# CORRECTED after run #20. The first draft of this gate set target 3.0s and
+# stretch 2.5s, both of which require a 2s window -- and run #20 then showed a
+# 2s window makes everything worse (delay 23.46 -> 26.18s, worst-patient FAR
+# 0.393 -> 1.726), so the 4s window is now fixed (see docs/RESEARCH_REALITY_CHECK.md
+# section 3.4 and 11.4). Under the causal `window_end` convention the window term
+# alone is window_s, so with a 4s window NO configuration can go below 4.0s.
+# The tiers below are the reachable ones for that fixed window:
+#   w4s_stride1s,   L=3, a=0.125 -> 13.0s  (current default: FAILS)
+#   w4s_stride1s,   L=1, a=0.5   ->  5.0s  (minimum)
+#   w4s_stride0p5s, L=1, a=0.5   ->  4.5s  (target)
+#   w4s + L=1 + no smoothing     ->  4.0s  (stretch = the hard arithmetic floor)
+# NOTE: needs code support -- see "Required code changes" at the bottom.
+detection_delay_floor_s:
+  minimum: 5.0
+  target: 4.5
+  stretch: 4.0
+  direction: lower_is_better
+
+# v1: 0.85 / 0.90 / 0.95 -- ARITHMETICALLY UNREACHABLE for the patients it
+# actually binds on. chb17 and chb02 have 3 seizure events each, so their
+# sensitivity can only ever be one of {0.000, 0.333, 0.667, 1.000}. A >=0.85
+# gate on such a patient is a demand for a perfect 3/3, not a sensitivity
+# threshold; missing a single seizure fails the whole project. This is also why
+# worst_patient_sensitivity sat at exactly 0.3333... across both the 30-epoch
+# and 60-epoch runs -- a fixed property of the data, not an undertrained model.
+#
+# The threshold value is unchanged; what changes is WHICH patients it applies
+# to. Patients below the event floor are reported with an exact binomial
+# (Clopper-Pearson) interval from eval/bootstrap.py instead of being gated.
+# NOTE: needs code support -- see "Required code changes" at the bottom.
+worst_patient_sensitivity:
+  minimum: 0.85
+  target: 0.90
+  stretch: 0.95
+  min_events_to_gate: 5
+
+worst_patient_far_per_hour:
+  minimum: 1.0
+  target: 0.5
+  stretch: 0.25
+  direction: lower_is_better
+
+# v1: 100 / 150 / 200. Raised to what is already achieved, because it is the
+# cheapest defensible margin over the baseline: Chung 2024 evaluated
+# 7.0 +/- 4.1 h per case (~91h total); this project evaluates 185.0h.
+continuous_test_exposure_hours:
+  minimum: 185
+  target: 300
+  stretch: 599.5   # the full 13-case corpus
+
+# Unchanged from v1 in value, but these have NEVER been measured -- the
+# 13,810 params / 644,000 MACs figure is a design target in the
+# models/wearseizure1d.py docstring, not a profiled count. Measuring them is
+# cheap and underwrites the project's strongest efficiency claim: roughly 30x
+# smaller than the nearest quantised 1D-CNN seizure detector
+# (arXiv:2607.16296, 0.44 MB INT8).
+model_params:
+  minimum: 32000
+  target: 16000
+  stretch: 12000
+  direction: lower_is_better
+model_macs:
+  minimum: 2000000
+  target: 700000
+  stretch: 500000
+  direction: lower_is_better
+
+int8_loss_vs_fp32_pp:
+  minimum: 1.0
+  target: 0.5
+  direction: lower_is_better
+w4a8_loss_vs_fp32_pp:
+  stretch: 1.0
+  direction: lower_is_better
+
+# Unchanged -- this is a real go/no-go and the core of the TBioCAS-scope
+# hardware contribution.
+correctness_mismatches:
+  minimum_windows: 1000
+  target_windows: 10000
+  direction: lower_is_better
+
+# ---------------------------------------------------------------------------
+# Group C -- descriptive, NOT gated.
+# ---------------------------------------------------------------------------
+# v1 gated zero-shot LOSO at >=0.85 sensitivity @ <=0.75 FAR/h. The best
+# honestly-evaluated cross-subject event-level result in the literature is
+# 75.34% sensitivity at 4.79 false detections/h -- and that is with all 18
+# channels, on the full corpus (Ali et al., R. Soc. Open Sci. 11:230601, 2024).
+# Demanding +10pp sensitivity and ~6x tighter FAR from a SINGLE channel is not
+# a stretch goal, it is out of reach. It has also never been run here.
+#
+# Run it once, report it as a characterisation of the personalised-vs-zero-shot
+# gap against Ali 2024's numbers, and do not gate on it.
+zero_shot_loso:
+  gated: false
+  report_against:
+    reference: "Ali et al. 2024, R. Soc. Open Sci. 11:230601"
+    reference_sensitivity: 0.7534
+    reference_far_per_hour: 4.79
+    reference_channels: 18
+
+# ---------------------------------------------------------------------------
+# Required code changes before this file can be loaded as-is
+# ---------------------------------------------------------------------------
+# 1. eval/report.flatten_for_gates -- emit `detection_delay_floor_s`, computed
+#    from window_s / stride_s / run_length / ema_alpha.
+# 2. eval/report.check_gates -- honour `min_events_to_gate` on
+#    worst_patient_sensitivity; fall back to a Clopper-Pearson interval for
+#    patients under the floor.
+# 3. eval/report.build_report -- carry per-patient `n_events` up to where the
+#    worst-patient gate is evaluated (already present in EventMetrics).
+# 4. The `reproduction:` and `zero_shot_loso:` blocks are metadata, not
+#    thresholds; `_gate_level` must not be run against them.
