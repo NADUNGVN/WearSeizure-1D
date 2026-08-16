@@ -2,6 +2,6 @@
 # ~7k parameters, used to separate model benefit from protocol benefit.
 name: baseline_compact1d_7k
 in_channels: 1
-input_len: 1024
+input_len: 1024  # NOT read directly -- models/factory.py derives it from window_s * data.fs_hz
 num_classes: 2
 param_target: 7000

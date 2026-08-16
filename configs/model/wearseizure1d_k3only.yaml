@@ -3,7 +3,7 @@
 # is irrelevant here (k3 branch never uses it) but listed for clarity.
 name: wearseizure1d_k3only
 in_channels: 1
-input_len: 1024
+input_len: 1024  # NOT read directly -- models/factory.py derives it from window_s * data.fs_hz
 stem_out_channels: 8
 stage_out_channels: [16, 24, 32, 48]
 context_channels: 64

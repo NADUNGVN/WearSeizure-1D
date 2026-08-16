@@ -15,7 +15,7 @@ from omegaconf import DictConfig
 from wearseizure.data.loader import load_records_from_manifest
 from wearseizure.data.manifest import load_manifest
 from wearseizure.data.splits import load_folds
-from wearseizure.models.wearseizure1d import WearSeizure1D
+from wearseizure.models.factory import build_model
 from wearseizure.quant.qat import QATConv1d, QATLinear, prepare_qat, set_calibrating
 from wearseizure.quant.scales import compute_symmetric_scale, compute_symmetric_scale_from_max
 from wearseizure.rtl_interface.golden_io_contract import WINDOW_SAMPLES
@@ -39,15 +39,7 @@ def main(cfg: DictConfig) -> None:
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"{checkpoint_path} not found -- run train.py first")
 
-    model = WearSeizure1D(
-        in_channels=cfg.model.in_channels,
-        input_len=cfg.model.input_len,
-        stem_out_channels=cfg.model.stem_out_channels,
-        stage_out_channels=tuple(cfg.model.stage_out_channels),
-        context_channels=cfg.model.context_channels,
-        dilations=tuple(cfg.model.dilations),
-        num_classes=cfg.model.num_classes,
-    )
+    model = build_model(cfg)
     model.load_state_dict(torch.load(checkpoint_path, map_location="cpu", weights_only=True))
     model = prepare_qat(model, weight_bits=8, act_bits=8)
     model.eval()

@@ -2,6 +2,6 @@
 # (kernels 1x3 and 1x5) over the public CHB-MIT annotation, same channel map.
 name: baseline_frontiers2d
 in_channels: 1
-input_len: 1024
+input_len: 1024  # NOT read directly -- models/factory.py derives it from window_s * data.fs_hz
 branch_kernels: [[1, 3], [1, 5]]
 num_classes: 2
