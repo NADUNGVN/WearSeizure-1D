@@ -176,3 +176,14 @@ def load_folds(path: str, expected_manifest_hash: str | None = None) -> list[Fol
                     f"{expected_manifest_hash}. Regenerate splits with make_splits.py."
                 )
     return folds
+
+
+def subject_from_fold_id(fold_id: str, strategy: str) -> str:
+    """Recover the patient/subject id a fold belongs to from its `fold_id`
+    (`"{subject}__{held_out_key}"` for patient-specific, `"loso__{subject}"`
+    for zero-shot) -- used to group folds by patient for aggregation
+    (scripts/evaluate.py) and for pooled threshold selection
+    (scripts/rethreshold_pooled.py).
+    """
+    prefix, _, rest = fold_id.partition("__")
+    return rest if strategy == "zero_shot_loso_subject" else prefix

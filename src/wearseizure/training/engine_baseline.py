@@ -51,7 +51,7 @@ def _dataloader_kwargs(device: str, num_workers: int, persistent: bool = True) -
     }
 
 
-def _score_partition(
+def score_partition(
     model: torch.nn.Module,
     dataset: WearSeizureWindowDataset,
     device: str,
@@ -84,7 +84,7 @@ def _score_partition(
     return scores, labels, end_sec, edf_ids
 
 
-def _group_by_edf(end_sec, scores, edf_ids, records: dict[str, EEGRecord], allowed_edf_ids):
+def group_by_edf(end_sec, scores, edf_ids, records: dict[str, EEGRecord], allowed_edf_ids):
     end_sec_by_edf, scores_by_edf, events_by_edf, exposure_by_edf = {}, {}, {}, {}
     for edf_id in allowed_edf_ids:
         mask = edf_ids == edf_id
@@ -125,10 +125,10 @@ def evaluate_fold(
     val_ds, test_ds = datasets["val"], datasets["test"]
     model.to(device)
 
-    val_scores, _val_labels, val_end_sec, val_edf_ids = _score_partition(
+    val_scores, _val_labels, val_end_sec, val_edf_ids = score_partition(
         model, val_ds, device, batch_size=batch_size, num_workers=num_workers
     )
-    end_sec_by_edf, scores_by_edf, events_by_edf, exposure_by_edf = _group_by_edf(
+    end_sec_by_edf, scores_by_edf, events_by_edf, exposure_by_edf = group_by_edf(
         val_end_sec, val_scores, val_edf_ids, records, fold.val_edf_ids
     )
     frozen = fit_threshold_on_val(
@@ -139,10 +139,10 @@ def evaluate_fold(
         far_weight=far_weight, far_cap_per_hour=far_cap_per_hour,
     )
 
-    test_scores, test_labels, test_end_sec, test_edf_ids = _score_partition(
+    test_scores, test_labels, test_end_sec, test_edf_ids = score_partition(
         model, test_ds, device, batch_size=batch_size, num_workers=num_workers
     )
-    test_end_sec_by_edf, test_scores_by_edf, test_events_by_edf, test_exposure_by_edf = _group_by_edf(
+    test_end_sec_by_edf, test_scores_by_edf, test_events_by_edf, test_exposure_by_edf = group_by_edf(
         test_end_sec, test_scores, test_edf_ids, records, fold.test_edf_ids
     )
 

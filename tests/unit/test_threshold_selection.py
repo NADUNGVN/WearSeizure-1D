@@ -8,6 +8,7 @@ from wearseizure.postprocess.hysteresis import PostprocessParams
 from wearseizure.postprocess.pipeline import run_postprocess
 from wearseizure.training.threshold_selection import (
     fit_threshold_on_val,
+    fit_threshold_on_val_pooled,
     load_frozen_params,
     save_frozen_params,
 )
@@ -106,6 +107,70 @@ def test_rejects_unsupported_method():
         fit_threshold_on_val(
             {}, {}, {}, {}, method="raw_threshold", ema_alpha=0.1, run_length=1, event_merge_gap_s=0.0,
             threshold_on_grid=[0.5], threshold_off_grid=[0.3], fold_id="f0",
+        )
+
+
+def test_pooled_matches_single_fold_when_given_only_one_fold():
+    scenario = _make_scenario()
+    on_grid, off_grid = [0.3, 0.5, 0.7], [0.1, 0.2]
+
+    single = fit_threshold_on_val(
+        *scenario, method="hysteresis_runlength", ema_alpha=1.0, run_length=1, event_merge_gap_s=0.0,
+        threshold_on_grid=on_grid, threshold_off_grid=off_grid, fold_id="f0", far_cap_per_hour=5.0,
+    )
+    pooled = fit_threshold_on_val_pooled(
+        val_folds=[scenario], method="hysteresis_runlength", ema_alpha=1.0, run_length=1, event_merge_gap_s=0.0,
+        threshold_on_grid=on_grid, threshold_off_grid=off_grid, group_id="patientX", far_cap_per_hour=5.0,
+    )
+    assert pooled.val_sensitivity == pytest.approx(single.val_sensitivity)
+    assert pooled.val_far_per_hour == pytest.approx(single.val_far_per_hour)
+    assert pooled.fold_id == "patientX"
+
+
+def test_pooling_rescues_a_fold_whose_own_validation_never_fires():
+    # Fold A: score never rises above the lowest grid threshold (the exact
+    # chb17-style failure mode found in the real-data run: val_sensitivity=0
+    # at every available threshold because there's only one val event and
+    # the model's confidence for it never clears 0.2).
+    end_sec = np.arange(1, 11, dtype=float)
+    fold_a = (
+        {"a1": end_sec}, {"a1": np.full(10, 0.1)}, {"a1": [("ea", 4.5, 6.5)]}, {"a1": 1.0},
+    )
+    # Fold B (different EDF, same patient, model confidently separates it).
+    scores_b = np.array([0.1, 0.1, 0.1, 0.9, 0.9, 0.9, 0.9, 0.1, 0.1, 0.1])
+    fold_b = (
+        {"b1": end_sec}, {"b1": scores_b}, {"b1": [("eb", 4.5, 6.5)]}, {"b1": 1.0},
+    )
+    on_grid, off_grid = [0.2, 0.5, 0.8], [0.1, 0.3]
+
+    alone_a = fit_threshold_on_val(
+        *fold_a, method="hysteresis_runlength", ema_alpha=1.0, run_length=1, event_merge_gap_s=0.0,
+        threshold_on_grid=on_grid, threshold_off_grid=off_grid, fold_id="a", far_cap_per_hour=5.0,
+    )
+    assert alone_a.val_sensitivity == 0.0, "fold A alone should never detect its one event at any grid threshold"
+
+    pooled = fit_threshold_on_val_pooled(
+        val_folds=[fold_a, fold_b], method="hysteresis_runlength", ema_alpha=1.0, run_length=1,
+        event_merge_gap_s=0.0, threshold_on_grid=on_grid, threshold_off_grid=off_grid,
+        group_id="patientX", far_cap_per_hour=5.0,
+    )
+    assert pooled.val_sensitivity == pytest.approx(0.5)  # 1 of 2 pooled events detected via fold B
+    assert pooled.val_far_per_hour == pytest.approx(0.0)
+
+
+def test_pooled_rejects_unsupported_method():
+    with pytest.raises(NotImplementedError):
+        fit_threshold_on_val_pooled(
+            [], method="raw_threshold", ema_alpha=0.1, run_length=1, event_merge_gap_s=0.0,
+            threshold_on_grid=[0.5], threshold_off_grid=[0.3], group_id="p0",
+        )
+
+
+def test_pooled_rejects_empty_fold_list():
+    with pytest.raises(ValueError):
+        fit_threshold_on_val_pooled(
+            [], method="hysteresis_runlength", ema_alpha=0.1, run_length=1, event_merge_gap_s=0.0,
+            threshold_on_grid=[0.5], threshold_off_grid=[0.3], group_id="p0",
         )
 
 

@@ -20,15 +20,11 @@ from pathlib import Path
 import hydra
 from omegaconf import DictConfig
 
+from wearseizure.data.splits import subject_from_fold_id
 from wearseizure.eval.report import load_gates
 from wearseizure.utils.logging import get_logger
 
 log = get_logger(__name__)
-
-
-def _subject_from_fold_id(fold_id: str, strategy: str) -> str:
-    prefix, _, rest = fold_id.partition("__")
-    return rest if strategy == "zero_shot_loso_subject" else prefix
 
 
 @hydra.main(version_base=None, config_path="../configs", config_name="config")
@@ -47,7 +43,7 @@ def main(cfg: DictConfig) -> None:
     all_aurocs: list[float] = []
     for p in fold_paths:
         d = json.loads(p.read_text(encoding="utf-8"))
-        subject = _subject_from_fold_id(d["fold_id"], cfg.split.strategy)
+        subject = subject_from_fold_id(d["fold_id"], cfg.split.strategy)
         by_patient.setdefault(subject, []).append(d)
         all_aurocs.append(d["test_segment_metrics"]["auroc"])
 

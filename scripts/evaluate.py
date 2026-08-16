@@ -11,6 +11,7 @@ from pathlib import Path
 import hydra
 from omegaconf import DictConfig
 
+from wearseizure.data.splits import subject_from_fold_id
 from wearseizure.eval.metrics_event import EventMetrics
 from wearseizure.eval.report import (
     build_report,
@@ -24,11 +25,6 @@ from wearseizure.utils.logging import get_logger
 log = get_logger(__name__)
 
 
-def _subject_from_fold_id(fold_id: str, strategy: str) -> str:
-    prefix, _, rest = fold_id.partition("__")
-    return rest if strategy == "zero_shot_loso_subject" else prefix
-
-
 def _load_fold_metrics(run_dir: Path) -> list[dict]:
     fold_metrics = sorted(run_dir.glob("*.metrics.json"))
     if not fold_metrics:
@@ -39,7 +35,7 @@ def _load_fold_metrics(run_dir: Path) -> list[dict]:
 def _aggregate_per_patient(fold_dicts: list[dict], strategy: str) -> dict[str, EventMetrics]:
     by_patient: dict[str, list[dict]] = {}
     for d in fold_dicts:
-        subject = _subject_from_fold_id(d["fold_id"], strategy)
+        subject = subject_from_fold_id(d["fold_id"], strategy)
         by_patient.setdefault(subject, []).append(d["test_event_metrics"])
 
     per_patient: dict[str, EventMetrics] = {}
