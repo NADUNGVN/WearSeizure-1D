@@ -24,6 +24,7 @@ from wearseizure.data.splits import load_folds
 from wearseizure.models.factory import build_model
 from wearseizure.training.engine_baseline import evaluate_fold
 from wearseizure.utils.logging import get_logger
+from wearseizure.utils.profile_guard import check_profile_data_pairing
 
 torch.multiprocessing.set_sharing_strategy("file_system")
 
@@ -32,6 +33,7 @@ log = get_logger(__name__)
 
 @hydra.main(version_base=None, config_path="../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
+    check_profile_data_pairing(cfg)
     manifest_df = load_manifest(str(Path(cfg.data.manifest_path)))
     data_dir = cfg.data.generated_dir if cfg.data.name == "synthetic" else None
     raw_dir = cfg.data.raw_dir if cfg.data.name != "synthetic" else None

@@ -20,6 +20,7 @@ from wearseizure.quant.qat import QATConv1d, QATLinear, prepare_qat, set_calibra
 from wearseizure.quant.scales import compute_symmetric_scale, compute_symmetric_scale_from_max
 from wearseizure.rtl_interface.golden_io_contract import WINDOW_SAMPLES
 from wearseizure.utils.logging import get_logger
+from wearseizure.utils.profile_guard import check_profile_data_pairing
 from wearseizure.utils.paths import ensure_dir
 
 log = get_logger(__name__)
@@ -27,6 +28,7 @@ log = get_logger(__name__)
 
 @hydra.main(version_base=None, config_path="../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
+    check_profile_data_pairing(cfg)
     if cfg.model.name != "wearseizure1d":
         raise ValueError("export_int8_reference.py is scoped to model=wearseizure1d")
 

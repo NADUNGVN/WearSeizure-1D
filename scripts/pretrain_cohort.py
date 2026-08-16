@@ -20,22 +20,24 @@ locking.
 
 Usage
 -----
+`data=chbmit` is NOT optional: configs/config.yaml defaults to `data: synthetic`
+and the `profile` group does not change it. See utils/profile_guard.py.
 Single process, whole machine to itself::
 
-    python scripts/pretrain_cohort.py profile=server profile.num_workers=14
+    python scripts/pretrain_cohort.py profile=server data=chbmit profile.num_workers=14
 
 Three concurrent shards (recommended when nothing else is on the box) -- note
 the *lower* per-process worker count, so the three processes together stay
 under the 14 physical cores::
 
     for i in 0 1 2; do
-      python scripts/pretrain_cohort.py profile=server \
+      python scripts/pretrain_cohort.py profile=server data=chbmit \
         +shard=$i +n_shards=3 profile.num_workers=4 &
     done; wait
 
 Then run training as normal; it will find every init already cached::
 
-    python scripts/train.py profile=server train.pretrain.enabled=true
+    python scripts/train.py profile=server data=chbmit train.pretrain.enabled=true
 """
 from __future__ import annotations
 
@@ -50,6 +52,7 @@ from wearseizure.data.manifest import load_manifest
 from wearseizure.models.factory import build_model
 from wearseizure.training.pretrain import get_or_train_cohort_init
 from wearseizure.utils.logging import get_logger
+from wearseizure.utils.profile_guard import check_profile_data_pairing
 from wearseizure.utils.paths import ensure_dir
 from wearseizure.utils.seeding import seed_everything
 
@@ -62,6 +65,7 @@ log = get_logger(__name__)
 
 @hydra.main(version_base=None, config_path="../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
+    check_profile_data_pairing(cfg)
     seed_everything(cfg.seed)
 
     manifest_df = load_manifest(str(Path(cfg.data.manifest_path)))

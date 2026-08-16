@@ -24,6 +24,7 @@ from wearseizure.data.manifest import (
     save_manifest,
 )
 from wearseizure.utils.logging import get_logger
+from wearseizure.utils.profile_guard import check_profile_data_pairing
 from wearseizure.utils.paths import ensure_dir
 
 log = get_logger(__name__)
@@ -58,6 +59,7 @@ def _build_chbmit_manifest(raw_dir: str, annotation_source: str):
 
 @hydra.main(version_base=None, config_path="../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
+    check_profile_data_pairing(cfg)
     manifest_path = Path(cfg.data.manifest_path)
 
     if cfg.data.name == "synthetic":

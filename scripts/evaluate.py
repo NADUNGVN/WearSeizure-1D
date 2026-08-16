@@ -22,6 +22,7 @@ from wearseizure.eval.report import (
     save_report,
 )
 from wearseizure.utils.logging import get_logger
+from wearseizure.utils.profile_guard import check_profile_data_pairing
 
 log = get_logger(__name__)
 
@@ -61,6 +62,7 @@ def _aggregate_per_patient(fold_dicts: list[dict], strategy: str) -> dict[str, E
 
 @hydra.main(version_base=None, config_path="../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
+    check_profile_data_pairing(cfg)
     run_dir = Path(cfg.profile.artifacts_dir) / cfg.model.name / cfg.split.name / cfg.window.name
     fold_dicts = _load_fold_metrics(run_dir)
     per_patient = _aggregate_per_patient(fold_dicts, cfg.split.strategy)

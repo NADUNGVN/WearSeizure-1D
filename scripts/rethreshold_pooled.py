@@ -36,12 +36,14 @@ from wearseizure.postprocess.pipeline import run_postprocess
 from wearseizure.training.engine_baseline import group_by_edf, score_partition
 from wearseizure.training.threshold_selection import fit_threshold_on_val_pooled
 from wearseizure.utils.logging import get_logger
+from wearseizure.utils.profile_guard import check_profile_data_pairing
 
 log = get_logger(__name__)
 
 
 @hydra.main(version_base=None, config_path="../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
+    check_profile_data_pairing(cfg)
     manifest_df = load_manifest(str(Path(cfg.data.manifest_path)))
     data_dir = cfg.data.generated_dir if cfg.data.name == "synthetic" else None
     raw_dir = cfg.data.raw_dir if cfg.data.name != "synthetic" else None

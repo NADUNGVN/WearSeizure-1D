@@ -20,6 +20,7 @@ from wearseizure.models.factory import build_model
 from wearseizure.training.engine_baseline import run_fold
 from wearseizure.training.pretrain import get_or_train_cohort_init
 from wearseizure.utils.logging import get_logger
+from wearseizure.utils.profile_guard import check_profile_data_pairing
 from wearseizure.utils.paths import ensure_dir
 from wearseizure.utils.seeding import seed_everything
 
@@ -38,6 +39,7 @@ log = get_logger(__name__)
 
 @hydra.main(version_base=None, config_path="../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
+    check_profile_data_pairing(cfg)
     seed_everything(cfg.seed)
 
     manifest_df = load_manifest(str(Path(cfg.data.manifest_path)))

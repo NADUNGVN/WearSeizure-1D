@@ -13,6 +13,7 @@ from wearseizure.data.splits import (
     save_folds,
 )
 from wearseizure.utils.logging import get_logger
+from wearseizure.utils.profile_guard import check_profile_data_pairing
 from wearseizure.utils.paths import ensure_dir
 
 log = get_logger(__name__)
@@ -25,6 +26,7 @@ STRATEGIES = {
 
 @hydra.main(version_base=None, config_path="../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
+    check_profile_data_pairing(cfg)
     manifest_path = Path(cfg.data.manifest_path)
     if not manifest_path.exists():
         raise FileNotFoundError(f"{manifest_path} not found - run make_manifest.py first")

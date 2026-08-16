@@ -81,7 +81,15 @@ Checklist:
    never a floating branch tip — because runs touch clinical data and feed a publication.
    `git fetch && git checkout <sha>` before every run.
 4. Run, in order: `make_manifest.py` → `make_splits.py` → `train.py` → `evaluate.py`,
-   all with `profile=server`.
+   all with **`profile=server data=chbmit`**. Both are required: the `profile` group
+   selects the device and paths, but `configs/config.yaml` defaults to
+   `data: synthetic` and no profile changes it — `profile=server` alone would point
+   the synthetic loader at the clinical recordings and look for a
+   `synthetic_manifest.csv` that isn't there. `scripts/server_bootstrap.sh` has always
+   passed both; this checklist previously said only `profile=server`, which is how the
+   mistake gets made. `utils/profile_guard.py` now refuses the combination outright.
+   To enable cohort pre-training (lever L1), add `train.pretrain.enabled=true` — see
+   `scripts/pretrain_cohort.py` to build the initialisations in parallel first.
 5. Pull result summaries back with `scripts/pull_results.sh` for local analysis in `notebooks/`.
 6. Do not commit checkpoints, raw `.edf` files, or generated splits — see `.gitignore`.
 
