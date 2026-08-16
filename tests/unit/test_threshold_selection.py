@@ -102,6 +102,71 @@ def test_blend_objective_used_when_far_cap_is_none():
     assert frozen.val_far_per_hour == pytest.approx(best_far)
 
 
+def test_min_delay_objective_trades_surplus_far_headroom_for_speed():
+    # One EDF, one seizure at 20-30s. Two threshold levels are available:
+    #  - on=0.8 only fires late in the event (slow, but very quiet)
+    #  - on=0.3 fires as soon as the event starts (fast, one extra false alarm)
+    # Both stay under a generous FAR cap, which is the real situation in
+    # EXPERIMENT_LOG_G1a.md: FAR has ~5x more headroom than the gate needs.
+    end_sec = np.arange(1, 41, dtype=float)
+    scores = np.full(40, 0.1)
+    scores[19:30] = 0.5   # the event window: clears 0.3 but not 0.8
+    scores[26:30] = 0.9   # only late in the event does it clear 0.8
+    scores[34:36] = 0.5   # an interictal blip that only the low threshold trips
+    scenario = ({"e1": end_sec}, {"e1": scores}, {"e1": [("e0", 20.0, 30.0)]}, {"e1": 1.0})
+    grids = dict(threshold_on_grid=[0.3, 0.8], threshold_off_grid=[0.2])
+    common = dict(
+        method="hysteresis_runlength", ema_alpha=1.0, run_length=1,
+        event_merge_gap_s=0.0, fold_id="f0", far_cap_per_hour=10.0, **grids,
+    )
+
+    fastest = fit_threshold_on_val(*scenario, objective="min_delay", **common)
+    quietest = fit_threshold_on_val(*scenario, objective="max_sensitivity", **common)
+
+    assert fastest.params.threshold_on == 0.3
+    assert fastest.val_delay_mean_s < quietest.val_delay_mean_s
+    assert fastest.val_far_per_hour >= quietest.val_far_per_hour, (
+        "the whole point is that speed is bought with FAR headroom"
+    )
+
+
+def test_min_delay_respects_the_sensitivity_floor():
+    end_sec = np.arange(1, 41, dtype=float)
+    scores = np.full(40, 0.1)
+    scores[19:30] = 0.5
+    scores[26:30] = 0.9
+    scores[34:36] = 0.5
+    scenario = ({"e1": end_sec}, {"e1": scores}, {"e1": [("e0", 20.0, 30.0)]}, {"e1": 1.0})
+    common = dict(
+        method="hysteresis_runlength", ema_alpha=1.0, run_length=1, event_merge_gap_s=0.0,
+        threshold_on_grid=[0.3, 0.8], threshold_off_grid=[0.2], fold_id="f0",
+        far_cap_per_hour=10.0, objective="min_delay",
+    )
+    # An unreachable floor must not silently win: it is dropped before the FAR
+    # cap is, so a candidate under the cap is still returned.
+    frozen = fit_threshold_on_val(*scenario, sensitivity_floor=2.0, **common)
+    assert frozen.val_far_per_hour <= 10.0
+
+
+def test_rejects_unknown_objective():
+    scenario = _make_scenario()
+    with pytest.raises(ValueError):
+        fit_threshold_on_val(
+            *scenario, method="hysteresis_runlength", ema_alpha=1.0, run_length=1,
+            event_merge_gap_s=0.0, threshold_on_grid=[0.3, 0.5], threshold_off_grid=[0.1],
+            fold_id="f0", objective="be_perfect",
+        )
+
+
+def test_default_objective_still_records_the_delay_it_paid():
+    scenario = _make_scenario()
+    frozen = fit_threshold_on_val(
+        *scenario, method="hysteresis_runlength", ema_alpha=1.0, run_length=1, event_merge_gap_s=0.0,
+        threshold_on_grid=[0.3, 0.5], threshold_off_grid=[0.1, 0.2], fold_id="f0", far_cap_per_hour=5.0,
+    )
+    assert frozen.val_delay_mean_s == frozen.val_delay_mean_s, "delay must be recorded, not NaN"
+
+
 def test_rejects_unsupported_method():
     with pytest.raises(NotImplementedError):
         fit_threshold_on_val(
