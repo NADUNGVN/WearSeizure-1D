@@ -116,6 +116,7 @@ def main(cfg: DictConfig) -> None:
             num_workers=cfg.profile.get("num_workers", 0),
             val_subject_fraction=pretrain_cfg.get("val_subject_fraction", 0.2),
             class_balanced_sampling=cfg.train.class_balanced_sampling,
+            compile_mode=cfg.train.get("compile_mode"),
             force=pretrain_cfg.get("force", False),
         )
 

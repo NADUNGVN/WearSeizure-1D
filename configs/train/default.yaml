@@ -63,3 +63,13 @@ pretrain:
 # model starts from a trained cohort model rather than random weights; a full
 # 1e-3 step would wash the pre-training out on a patient with 2-3 seizures.
 finetune_lr: 0.0001
+
+# torch.compile mode, or null to disable. See training/loop.train_classifier.
+# The binding constraint on this workload is CUDA kernel-launch overhead, not
+# arithmetic: a batch of 256 through a ~12k-parameter model is microseconds of
+# compute behind ~100 tiny kernels, which is why GPU-utilisation and
+# memory-bandwidth counters stay low however many DataLoader workers run.
+# `reduce-overhead` captures the step into CUDA graphs and replays it, which
+# targets exactly that. Off by default: verify against an uncompiled run before
+# adopting it for anything that feeds the paper.
+compile_mode: null

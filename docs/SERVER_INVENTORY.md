@@ -40,7 +40,7 @@ and its 48GB Quadro RTX 8000 has enormous headroom for a ~14k-parameter,
 - Three old, unsuccessful experiment directories that used to clutter
   `~/Manh` (`1D-CNN-Accelerator-for-EEG_Detection`,
   `-q1`, `-main`) have been removed (2026-08).
-  Conda env `chbmit-cnn` is the one in use; verified working with
+  Conda env `chbmit-cnn` is the one in use (and the one `scripts/server_bootstrap.sh` now names); verified working with
   PyTorch 2.5.1+cu121 against the Quadro RTX 8000.
 
 ## GPU utilization
@@ -77,6 +77,54 @@ Resume behavior: `scripts/train.py` now skips any fold whose
 `<fold_id>.metrics.json` already exists (pass `train.force_retrain=true` to
 redo it), so restarting a run after a config change never re-trains
 already-completed folds.
+
+## Where the time actually goes (measured, 2026-08)
+
+The earlier section says utilisation stays moderate "inherent to the
+architecture". That is right, but it was never quantified, and the natural
+reading -- that the DataLoader is starving the GPU -- turns out to be wrong.
+Measured on one fold, batch 256, `num_workers=0`:
+
+| Stage | per batch of 256 |
+|---|---|
+| `__getitem__` x 256 (Python only) | 1.68 ms |
+| Full loader (fetch + collate) | 2.54 ms |
+| Same windows, one vectorised gather | 0.72 ms |
+| GPU step (fwd+bwd) | ~1 ms, of which ~60 us is arithmetic |
+
+**With `num_workers=14` the loader was never the constraint**: 2.54 ms spread
+over 14 workers is ~0.18 ms per batch, against ~1 ms of GPU. The loader was
+already ~5x faster than needed.
+
+The binding constraint is **CUDA kernel-launch overhead**. A batch of 256
+through a ~12k-parameter model is a few hundred MFLOP -- tens of microseconds
+on a Quadro RTX 8000 -- issued as roughly a hundred tiny kernels. The device
+spends its time between kernels, not inside them, which is why *both* the
+GPU-utilisation and the memory-bandwidth counters read low (20-30%) however
+many workers are running. Adding workers cannot fix this, and neither can a
+faster disk.
+
+What does help, in order:
+
+1. **Concurrent processes** (`scripts/pretrain_cohort.py +shard=i +n_shards=n`).
+   Independent CUDA streams interleave their launch gaps. This is why sharding
+   is recommended, and it is the reason -- not data loading.
+2. **`train.compile_mode=reduce-overhead`**, which captures the step into CUDA
+   graphs and replays it. This attacks the launch overhead directly rather than
+   hiding it, so it should beat sharding; off by default until measured against
+   an uncompiled run. `training/loop.unwrap_compiled` keeps the `_orig_mod.`
+   prefix out of every checkpoint.
+3. **Larger batch**, which halves launches per epoch when doubled -- but it
+   changes optimisation semantics and needs the LR retuned, so it is not a free
+   throughput knob.
+
+Two data-path fixes went in anyway, because they are free and reduce memory
+traffic even though they were not the bottleneck: signals are stored **float32**
+instead of the float64 `scipy.signal.lfilter` returns (halves the resident
+cohort from ~4.4GB to ~2.2GB per process, and matters when shards each hold a
+copy), and `WearSeizureWindowDataset.__getitems__` fetches a whole batch in one
+call (2.54 ms -> 1.73 ms). Both are bit-identical to the previous behaviour --
+every window was already cast to float32 on its way into the model.
 
 ## "Too many open files" -- two independent causes, both fixed
 

@@ -114,6 +114,7 @@ def evaluate_fold(
     num_workers: int = 0,
     far_weight: float = 0.1,
     far_cap_per_hour: float | None = None,
+    compile_mode: str | None = None,
 ) -> FoldResult:
     """Threshold-freeze on val + evaluate on test for an already-trained
     `model` -- no training happens here. Used by `run_fold` right after
@@ -203,6 +204,7 @@ def run_fold(
     num_workers: int = 0,
     far_weight: float = 0.1,
     far_cap_per_hour: float | None = None,
+    compile_mode: str | None = None,
 ) -> FoldResult:
     datasets, _band, _normalizer = build_fold_datasets(records, fold, window_s, stride_s)
     train_ds, val_ds = datasets["train"], datasets["val"]
@@ -217,6 +219,7 @@ def run_fold(
     train_result = train_classifier(
         model, train_loader, val_loader, epochs=epochs, lr=lr, weight_decay=weight_decay,
         device=device, early_stopping_patience=early_stopping_patience,
+        compile_mode=compile_mode,
     )
 
     return evaluate_fold(

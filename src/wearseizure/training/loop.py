@@ -23,6 +23,19 @@ class TrainResult:
     history: list[dict] = field(default_factory=list)
 
 
+def unwrap_compiled(model: nn.Module) -> nn.Module:
+    """The original module behind a `torch.compile` wrapper, or the model itself.
+
+    `torch.compile` returns an `OptimizedModule` whose `state_dict()` keys are
+    prefixed with `_orig_mod.`. Every checkpoint this project writes -- fold
+    checkpoints, and the cohort pre-training cache that `training/pretrain.py`
+    loads back into a plain model -- would silently stop matching. Unwrapping
+    before anything touches `state_dict` keeps compilation invisible to the
+    rest of the codebase.
+    """
+    return getattr(model, "_orig_mod", model)
+
+
 def train_classifier(
     model: nn.Module,
     train_loader: DataLoader,
@@ -32,8 +45,28 @@ def train_classifier(
     weight_decay: float,
     device: str = "cpu",
     early_stopping_patience: int = 8,
+    compile_mode: str | None = None,
 ) -> TrainResult:
+    """`compile_mode` is passed straight to `torch.compile(mode=...)`.
+
+    Why it is worth having: this model is ~12k parameters, so a batch of 256 is
+    a few hundred MFLOP -- microseconds of arithmetic on a Quadro RTX 8000 --
+    while the forward/backward issues on the order of a hundred tiny CUDA
+    kernels. Wall-clock per step is therefore dominated by launch overhead, not
+    compute, which is exactly what makes GPU-utilisation and memory-bandwidth
+    counters read low no matter how many DataLoader workers are running.
+    `mode="reduce-overhead"` captures the step into CUDA graphs and replays it,
+    which is the direct fix for that specific bottleneck.
+
+    Left off by default: it changes nothing numerically in principle, but it is
+    a large behavioural change to take on trust in the middle of a run that
+    feeds a publication. Turn it on with `train.compile_mode=reduce-overhead`
+    and compare against an uncompiled run before adopting it.
+    """
     model.to(device)
+    if compile_mode:
+        log.info(f"torch.compile(mode={compile_mode!r}) enabled")
+        model = torch.compile(model, mode=compile_mode)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     criterion = nn.CrossEntropyLoss()
 
@@ -71,7 +104,8 @@ def train_classifier(
 
     if best_state is not None:
         model.load_state_dict(best_state)
-    return TrainResult(model=model, best_val_loss=best_val_loss, history=history)
+    # Always hand back the uncompiled module: callers save its state_dict.
+    return TrainResult(model=unwrap_compiled(model), best_val_loss=best_val_loss, history=history)
 
 
 def _eval_loss(model: nn.Module, loader: DataLoader, criterion: nn.Module, device: str) -> float:

@@ -69,8 +69,11 @@ step "Environment setup (run manually)"
 cat <<'EOF'
   nvidia-smi   # check the "CUDA Version" field (max supported by the driver)
 
-  conda create -n wearseizure python=3.11 -y
-  conda activate wearseizure
+  # chbmit-cnn is the environment actually in use on SERVER-02 (confirmed
+  # 2026-08); it already has PyTorch 2.5.1+cu121 working against the Quadro
+  # RTX 8000. Only create it if it does not exist -- `conda env list` first.
+  conda create -n chbmit-cnn python=3.11 -y   # skip if it already exists
+  conda activate chbmit-cnn
 
   # Pick a CUDA build <= what nvidia-smi reported. All four servers run
   # drivers from 580.x-595.x, which comfortably support CUDA 12.1+, so cu121

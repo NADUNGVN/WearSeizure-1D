@@ -146,6 +146,7 @@ def get_or_train_cohort_init(
     val_subject_fraction: float = 0.2,
     class_balanced_sampling: bool = True,
     prefetch_factor: int = 4,
+    compile_mode: str | None = None,
     force: bool = False,
 ) -> dict:
     """Return a cohort-pre-trained `state_dict` for `held_out_subject`,
@@ -193,6 +194,7 @@ def get_or_train_cohort_init(
     result = train_classifier(
         model, train_loader, val_loader, epochs=epochs, lr=lr, weight_decay=weight_decay,
         device=device, early_stopping_patience=early_stopping_patience,
+        compile_mode=compile_mode,
     )
 
     state = {k: v.detach().cpu() for k, v in result.model.state_dict().items()}
