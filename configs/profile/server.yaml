@@ -7,4 +7,29 @@ device: cuda
 data_root: ${oc.env:CHBMIT_RAW_DIR}
 artifacts_dir: ${oc.env:WEARSEIZURE_ARTIFACTS_DIR}
 enforce_gates: true
-num_workers: 4
+
+# i9-10940X: 14 physical cores / 28 logical CPUs, 1 socket, 1 NUMA node
+# (lscpu, confirmed 2026-08). Raised 4 -> 14 because cohort pre-training
+# (train.pretrain.enabled, lever L1) makes each epoch iterate the whole cohort
+# rather than one patient's EDFs -- ~2M windows instead of ~150k -- so batch
+# assembly, not the GPU, is the bottleneck for a model this small.
+#
+# 14 = one worker per PHYSICAL core. Do not raise to 28: the workers slice
+# arrays and build tensors, which is memory-bandwidth bound, and hyperthread
+# siblings contend for the same load/store units rather than adding throughput.
+#
+# IMPORTANT -- this value assumes ONE training process on the box. If you shard
+# pre-training across concurrent processes (scripts/pretrain_cohort.py, which
+# is the right way to use an otherwise-idle machine here), the processes share
+# these 14 cores, so override it per process:
+#   3 shards -> profile.num_workers=4      (3 x 4 = 12 <= 14)
+#   2 shards -> profile.num_workers=7
+# Oversubscribing is worse than useless: it adds context switching AND raises
+# the file-descriptor pressure that has already caused two "Too many open
+# files" failures (see docs/SERVER_INVENTORY.md).
+#
+# Set in the shell before any long run:
+#   ulimit -n 65536            # worker processes x DataLoaders x folds
+#   export OMP_NUM_THREADS=1   # else each worker opens its own OpenMP pool and
+#   export MKL_NUM_THREADS=1   # they fight over the same 14 cores
+num_workers: 14
