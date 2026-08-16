@@ -23,3 +23,43 @@ early_stopping_patience: 15
 class_balanced_sampling: true   # train partition only
 max_folds: null      # set via CLI (train.max_folds=2) to smoke-test on a few folds before a full run
 force_retrain: false  # true re-trains folds that already have a metrics.json (default: resume/skip them)
+
+# Lever L1 (docs/RESEARCH_REALITY_CHECK.md section 14): cohort pre-training.
+# Without it, every fold trains a ~12k-parameter CNN from random init on ONE
+# patient's EDFs -- for chb17 (3 seizures, one held out per fold) that is two
+# seizures of ictal data. With it, each fold starts from a model pre-trained on
+# every OTHER patient (leakage-safe: the target patient contributes nothing to
+# its own init) and only fine-tunes on that patient's data.
+#
+# Default OFF so every number in docs/EXPERIMENT_LOG_G1a.md stays reproducible.
+# Turn on with: train.pretrain.enabled=true
+#
+# The init depends only on WHICH patient is held out, not on which of their
+# EDFs is the test file, so 66 folds need 13 pre-trainings; they are cached
+# under ${profile.artifacts_dir}/pretrain/${model.name}/${window.name}/ and
+# reused (set train.pretrain.force=true to rebuild them).
+pretrain:
+  enabled: false
+  # NOT 60. The 60/15 setting above was raised specifically because a per-fold
+  # val set is "often just 1-2 EDFs, sometimes a single seizure event" -- that
+  # reasoning does not transfer here. A pre-training epoch covers ~12/13 of the
+  # corpus (~553h => ~2.0M windows at 4s/1s), so one epoch here sees far more
+  # gradient steps than one per-patient epoch, and the val set spans whole
+  # subjects rather than a single event. Start at 20 and raise only if
+  # best_val_loss in the sidecar JSON is still improving when it stops.
+  epochs: 20
+  lr: 0.001
+  early_stopping_patience: 5
+  # Left at the fine-tuning batch size on purpose. Raising it is NOT a free
+  # throughput knob: it changes optimisation semantics and would need the LR
+  # retuned, while buying little here (per-iteration time is kernel-launch
+  # bound, not compute bound). To use an idle machine, run
+  # scripts/pretrain_cohort.py in concurrent shards instead.
+  batch_size: 256
+  val_subject_fraction: 0.2   # subject-level val split inside the pre-training cohort
+  force: false
+
+# Fine-tuning LR, used ONLY when pretrain.enabled. Lower than `lr` because the
+# model starts from a trained cohort model rather than random weights; a full
+# 1e-3 step would wash the pre-training out on a patient with 2-3 seizures.
+finetune_lr: 0.0001

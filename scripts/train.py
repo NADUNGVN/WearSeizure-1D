@@ -15,9 +15,10 @@ from omegaconf import DictConfig, OmegaConf
 
 from wearseizure.data.loader import load_records_from_manifest
 from wearseizure.data.manifest import load_manifest
-from wearseizure.data.splits import load_folds
+from wearseizure.data.splits import load_folds, subject_from_fold_id
 from wearseizure.models.factory import build_model
 from wearseizure.training.engine_baseline import run_fold
+from wearseizure.training.pretrain import get_or_train_cohort_init
 from wearseizure.utils.logging import get_logger
 from wearseizure.utils.paths import ensure_dir
 from wearseizure.utils.seeding import seed_everything
@@ -65,6 +66,27 @@ def main(cfg: DictConfig) -> None:
     threshold_grid = cfg.postprocess.get("threshold_search", OmegaConf.create({}))
 
     force_retrain = cfg.train.get("force_retrain", False)
+
+    # Lever L1 (docs/RESEARCH_REALITY_CHECK.md section 14): initialise each
+    # fold from a model pre-trained on every OTHER patient, instead of from
+    # random weights on one patient's handful of EDFs. Opt-in, so every result
+    # recorded in docs/EXPERIMENT_LOG_G1a.md stays reproducible by default.
+    pretrain_cfg = cfg.train.get("pretrain", {})
+    use_pretrain = bool(pretrain_cfg.get("enabled", False))
+    if use_pretrain and cfg.split.strategy != "patient_specific_loso_edf":
+        log.warning(
+            f"train.pretrain.enabled=true has no effect for split.strategy="
+            f"{cfg.split.strategy!r}: that split already trains on other subjects. Ignoring."
+        )
+        use_pretrain = False
+    pretrain_dir = Path(cfg.profile.artifacts_dir) / "pretrain" / cfg.model.name / cfg.window.name
+    finetune_lr = cfg.train.get("finetune_lr", cfg.train.lr)
+    if use_pretrain:
+        log.info(
+            f"cohort pre-training ENABLED: per-subject inits cached under {pretrain_dir}; "
+            f"fine-tuning at lr={finetune_lr} (vs from-scratch lr={cfg.train.lr})"
+        )
+
     n_trained = n_skipped = 0
 
     for fold in folds:
@@ -76,6 +98,36 @@ def main(cfg: DictConfig) -> None:
 
         log.info(f"training fold {fold.fold_id}")
         model = build_model(cfg)
+        fold_lr = cfg.train.lr
+        pretrained_from = None
+        if use_pretrain:
+            subject_id = subject_from_fold_id(fold.fold_id, cfg.split.strategy)
+            init_state = get_or_train_cohort_init(
+                records=records,
+                manifest_df=manifest_df,
+                held_out_subject=subject_id,
+                model_factory=lambda: build_model(cfg),
+                cache_dir=pretrain_dir,
+                window_s=cfg.window.window_s,
+                stride_s=cfg.window.stride_s,
+                seed=cfg.seed,
+                epochs=pretrain_cfg.get("epochs", cfg.train.epochs),
+                lr=pretrain_cfg.get("lr", cfg.train.lr),
+                weight_decay=cfg.train.weight_decay,
+                batch_size=cfg.train.batch_size,
+                device=cfg.profile.device,
+                early_stopping_patience=pretrain_cfg.get(
+                    "early_stopping_patience", cfg.train.early_stopping_patience
+                ),
+                num_workers=cfg.profile.get("num_workers", 0),
+                val_subject_fraction=pretrain_cfg.get("val_subject_fraction", 0.2),
+                class_balanced_sampling=cfg.train.class_balanced_sampling,
+                force=pretrain_cfg.get("force", False),
+            )
+            model.load_state_dict(init_state)
+            fold_lr = finetune_lr
+            pretrained_from = subject_id
+
         result = run_fold(
             model=model,
             records=records,
@@ -89,7 +141,7 @@ def main(cfg: DictConfig) -> None:
             threshold_on_grid=list(threshold_grid.get("on_grid", [cfg.postprocess.get("threshold", 0.5)])),
             threshold_off_grid=list(threshold_grid.get("off_grid", [cfg.postprocess.get("threshold", 0.5) - 0.1])),
             epochs=cfg.train.epochs,
-            lr=cfg.train.lr,
+            lr=fold_lr,
             weight_decay=cfg.train.weight_decay,
             batch_size=cfg.train.batch_size,
             device=cfg.profile.device,
@@ -105,6 +157,11 @@ def main(cfg: DictConfig) -> None:
                 {
                     "fold_id": fold.fold_id,
                     "held_out_key": fold.held_out_key,
+                    # Provenance: a fold trained from a cohort init is not
+                    # comparable to one trained from scratch, so the metrics
+                    # file has to say which it was.
+                    "pretrained_from_cohort_excluding": pretrained_from,
+                    "lr": fold_lr,
                     "frozen_postprocess": result.frozen_postprocess.to_dict(),
                     "test_event_metrics": asdict(result.test_event_metrics),
                     "test_segment_metrics": asdict(result.test_segment_metrics),
