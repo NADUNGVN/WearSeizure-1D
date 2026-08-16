@@ -41,6 +41,7 @@ Then run training as normal; it will find every init already cached::
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import hydra
@@ -51,10 +52,15 @@ from wearseizure.data.loader import load_records_from_manifest
 from wearseizure.data.manifest import load_manifest
 from wearseizure.models.factory import build_model
 from wearseizure.training.pretrain import get_or_train_cohort_init
+from wearseizure.utils.env import bootstrap_env
 from wearseizure.utils.logging import get_logger
 from wearseizure.utils.profile_guard import check_profile_data_pairing
 from wearseizure.utils.paths import ensure_dir
 from wearseizure.utils.seeding import seed_everything
+
+# Must run at import time: configs/profile/server.yaml interpolates
+# ${oc.env:...} into hydra.run.dir, which Hydra resolves before main().
+bootstrap_env(sys.argv)
 
 # Same rationale as scripts/train.py: many DataLoader worker pools over many
 # subjects exhaust file descriptors under the default sharing strategy.

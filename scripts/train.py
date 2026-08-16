@@ -6,6 +6,7 @@ per-patient without retraining.
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import asdict
 from pathlib import Path
 
@@ -19,10 +20,15 @@ from wearseizure.data.splits import load_folds, subject_from_fold_id
 from wearseizure.models.factory import build_model
 from wearseizure.training.engine_baseline import run_fold
 from wearseizure.training.pretrain import get_or_train_cohort_init
+from wearseizure.utils.env import bootstrap_env
 from wearseizure.utils.logging import get_logger
 from wearseizure.utils.profile_guard import check_profile_data_pairing
 from wearseizure.utils.paths import ensure_dir
 from wearseizure.utils.seeding import seed_everything
+
+# Must run at import time: configs/profile/server.yaml interpolates
+# ${oc.env:...} into hydra.run.dir, which Hydra resolves before main().
+bootstrap_env(sys.argv)
 
 # DataLoader(num_workers>0) on Linux defaults to PyTorch's "file_descriptor"
 # strategy for passing tensors between worker processes, which consumes an

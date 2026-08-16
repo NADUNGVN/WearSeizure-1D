@@ -51,7 +51,11 @@ pytest tests/integration -v -m integration
 - `profile=server` — `device=cuda`, `data_root=${oc.env:CHBMIT_RAW_DIR}`, `enforce_gates=true`.
 
 No absolute Windows or server path is ever committed to a config file — override paths via `.env`
-(see `.env.example`) or the `WEARSEIZURE_ARTIFACTS_DIR` / `CHBMIT_RAW_DIR` environment variables.
+at the repo root (see `.env.example`) or the `WEARSEIZURE_ARTIFACTS_DIR` / `CHBMIT_RAW_DIR`
+environment variables. `.env` is read at import time by `utils/env.py`; an already-exported
+variable always wins, and `~` is expanded. If a `profile=server` run has neither, it now stops
+with a one-line message instead of a Hydra interpolation traceback — the failure happens while
+resolving `hydra.run.dir`, before any script code runs, so it cannot be caught any later.
 
 ## Training server
 
@@ -76,7 +80,8 @@ Checklist:
 
 1. Create a dedicated conda env on the server (`scripts/server_bootstrap.sh` has the exact
    commands) — the shared base env is not assumed to already have everything this project needs.
-2. Set `CHBMIT_RAW_DIR` and `WEARSEIZURE_ARTIFACTS_DIR` (see values above) in the server's `.env`.
+2. Set `CHBMIT_RAW_DIR` and `WEARSEIZURE_ARTIFACTS_DIR` (see values above) in the server's `.env`
+   at the repo root, or `export` them in the shell. A `.env` outside the repo root is not read.
 3. **Discipline**: the server only ever checks out a reviewed commit SHA from `main` —
    never a floating branch tip — because runs touch clinical data and feed a publication.
    `git fetch && git checkout <sha>` before every run.

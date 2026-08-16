@@ -18,6 +18,7 @@ so scripts/evaluate.py and scripts/failure_analysis.py work unchanged.
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import asdict
 from pathlib import Path
 
@@ -35,8 +36,13 @@ from wearseizure.models.factory import build_model
 from wearseizure.postprocess.pipeline import run_postprocess
 from wearseizure.training.engine_baseline import group_by_edf, score_partition
 from wearseizure.training.threshold_selection import fit_threshold_on_val_pooled
+from wearseizure.utils.env import bootstrap_env
 from wearseizure.utils.logging import get_logger
 from wearseizure.utils.profile_guard import check_profile_data_pairing
+
+# Must run at import time: configs/profile/server.yaml interpolates
+# ${oc.env:...} into hydra.run.dir, which Hydra resolves before main().
+bootstrap_env(sys.argv)
 
 log = get_logger(__name__)
 

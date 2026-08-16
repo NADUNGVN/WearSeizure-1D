@@ -1,6 +1,7 @@
 """Generate leakage-safe folds from the manifest (memo 5.1) and freeze them to disk."""
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import hydra
@@ -12,9 +13,14 @@ from wearseizure.data.splits import (
     make_zero_shot_loso_subject,
     save_folds,
 )
+from wearseizure.utils.env import bootstrap_env
 from wearseizure.utils.logging import get_logger
 from wearseizure.utils.profile_guard import check_profile_data_pairing
 from wearseizure.utils.paths import ensure_dir
+
+# Must run at import time: configs/profile/server.yaml interpolates
+# ${oc.env:...} into hydra.run.dir, which Hydra resolves before main().
+bootstrap_env(sys.argv)
 
 log = get_logger(__name__)
 

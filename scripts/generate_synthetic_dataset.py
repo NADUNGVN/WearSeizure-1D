@@ -7,6 +7,7 @@ where the data came from.
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import hydra
@@ -15,8 +16,13 @@ from omegaconf import DictConfig
 
 from wearseizure.data.manifest import save_manifest
 from wearseizure.data.synthetic import generate_synthetic_cohort
+from wearseizure.utils.env import bootstrap_env
 from wearseizure.utils.logging import get_logger
 from wearseizure.utils.paths import ensure_dir
+
+# Must run at import time: configs/profile/server.yaml interpolates
+# ${oc.env:...} into hydra.run.dir, which Hydra resolves before main().
+bootstrap_env(sys.argv)
 
 log = get_logger(__name__)
 

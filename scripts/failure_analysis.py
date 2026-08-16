@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import math
+import sys
 from pathlib import Path
 
 import hydra
@@ -22,7 +23,12 @@ from omegaconf import DictConfig
 
 from wearseizure.data.splits import subject_from_fold_id
 from wearseizure.eval.report import load_gates
+from wearseizure.utils.env import bootstrap_env
 from wearseizure.utils.logging import get_logger
+
+# Must run at import time: configs/profile/server.yaml interpolates
+# ${oc.env:...} into hydra.run.dir, which Hydra resolves before main().
+bootstrap_env(sys.argv)
 
 log = get_logger(__name__)
 

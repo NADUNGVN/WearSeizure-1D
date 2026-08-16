@@ -11,6 +11,7 @@ picks up the new results with no other changes.
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import asdict
 from pathlib import Path
 
@@ -23,8 +24,13 @@ from wearseizure.data.manifest import load_manifest
 from wearseizure.data.splits import load_folds
 from wearseizure.models.factory import build_model
 from wearseizure.training.engine_baseline import evaluate_fold
+from wearseizure.utils.env import bootstrap_env
 from wearseizure.utils.logging import get_logger
 from wearseizure.utils.profile_guard import check_profile_data_pairing
+
+# Must run at import time: configs/profile/server.yaml interpolates
+# ${oc.env:...} into hydra.run.dir, which Hydra resolves before main().
+bootstrap_env(sys.argv)
 
 torch.multiprocessing.set_sharing_strategy("file_system")
 

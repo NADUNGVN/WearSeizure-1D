@@ -5,6 +5,7 @@ RTL testbench will need to replay bit-exact (memo 5.4 golden chain). Requires
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import hydra
@@ -19,9 +20,14 @@ from wearseizure.models.factory import build_model
 from wearseizure.quant.qat import QATConv1d, QATLinear, prepare_qat, set_calibrating
 from wearseizure.quant.scales import compute_symmetric_scale, compute_symmetric_scale_from_max
 from wearseizure.rtl_interface.golden_io_contract import WINDOW_SAMPLES
+from wearseizure.utils.env import bootstrap_env
 from wearseizure.utils.logging import get_logger
 from wearseizure.utils.profile_guard import check_profile_data_pairing
 from wearseizure.utils.paths import ensure_dir
+
+# Must run at import time: configs/profile/server.yaml interpolates
+# ${oc.env:...} into hydra.run.dir, which Hydra resolves before main().
+bootstrap_env(sys.argv)
 
 log = get_logger(__name__)
 

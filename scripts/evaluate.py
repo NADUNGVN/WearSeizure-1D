@@ -6,6 +6,7 @@ with real data) -- on synthetic data they are reported but never fatal.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import hydra
@@ -21,8 +22,13 @@ from wearseizure.eval.report import (
     load_gates,
     save_report,
 )
+from wearseizure.utils.env import bootstrap_env
 from wearseizure.utils.logging import get_logger
 from wearseizure.utils.profile_guard import check_profile_data_pairing
+
+# Must run at import time: configs/profile/server.yaml interpolates
+# ${oc.env:...} into hydra.run.dir, which Hydra resolves before main().
+bootstrap_env(sys.argv)
 
 log = get_logger(__name__)
 
