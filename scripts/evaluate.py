@@ -12,6 +12,7 @@ import hydra
 from omegaconf import DictConfig
 
 from wearseizure.data.splits import subject_from_fold_id
+from wearseizure.eval.delay_budget import delay_budget
 from wearseizure.eval.metrics_event import EventMetrics
 from wearseizure.eval.report import (
     build_report,
@@ -64,7 +65,15 @@ def main(cfg: DictConfig) -> None:
     fold_dicts = _load_fold_metrics(run_dir)
     per_patient = _aggregate_per_patient(fold_dicts, cfg.split.strategy)
 
-    report = build_report(per_patient)
+    budget = delay_budget(
+        window_s=cfg.window.window_s,
+        stride_s=cfg.window.stride_s,
+        run_length=cfg.postprocess.get("run_length", 1),
+        ema_alpha=cfg.postprocess.get("ema_alpha", 0.0),
+        alarm_timestamp=cfg.postprocess.get("alarm_timestamp", "window_end"),
+    )
+
+    report = build_report(per_patient, budget=budget)
     report_path = run_dir / "report.json"
     save_report(report, str(report_path))
     log.info(f"report written to {report_path}")
@@ -73,6 +82,22 @@ def main(cfg: DictConfig) -> None:
         f"FAR/h={report['macro']['far_per_hour_macro']:.3f} "
         f"exposure={report['micro']['exposure_hours']:.1f}h"
     )
+    # Delay is meaningless without its floor: with the shipped defaults
+    # (w4s_stride1s, run_length=3, ema_alpha=0.125) the floor alone is 13.0s,
+    # against a v1 gate of 5.0s. See docs/RESEARCH_REALITY_CHECK.md section 3.
+    log.info(
+        f"delay mean={report['delay']['mean_s']:.2f}s "
+        f"= floor {budget.floor_s:.2f}s "
+        f"(window {budget.window_term_s:.2f} + run-length {budget.run_length_term_s:.2f} "
+        f"+ EMA {budget.ema_term_s:.2f}) "
+        f"+ model reaction {report['delay']['model_reaction_mean_s']:.2f}s"
+    )
+    if budget.floor_s > 0:
+        log.info(
+            f"delay under window_start convention (for comparison with published "
+            f"single-channel baselines): mean="
+            f"{report['delay']['window_start_convention']['mean_s']:.2f}s"
+        )
 
     gates_path = Path(__file__).resolve().parent.parent / "configs" / "eval" / "gates.yaml"
     gates = load_gates(str(gates_path))

@@ -70,6 +70,54 @@ def test_hysteresis_run_length_fires_on_sustained_rise():
     assert end == 6.0  # first sample dropping below threshold_off
 
 
+def test_alarm_timestamp_defaults_to_the_causal_window_end_convention():
+    # Reproduces every result in docs/EXPERIMENT_LOG_G1a.md: with window_s
+    # left at its 0.0 default the convention is a no-op, so existing frozen
+    # params and recorded metrics stay bit-identical.
+    end_sec = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+    scores = np.array([0.1, 0.9, 0.9, 0.1, 0.1])
+    default = PostprocessParams(method="raw_threshold", threshold=0.5)
+    assert default.alarm_timestamp == "window_end"
+    assert raw_threshold_alarms(end_sec, scores, default) == [(2.0, 4.0)]
+
+    explicit = PostprocessParams(method="raw_threshold", threshold=0.5, window_s=4.0)
+    assert raw_threshold_alarms(end_sec, scores, explicit) == [(2.0, 4.0)]
+
+
+def test_window_start_convention_shifts_alarms_earlier_and_clamps_at_zero():
+    end_sec = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+    scores = np.array([0.1, 0.9, 0.9, 0.1, 0.1])
+    params = PostprocessParams(
+        method="raw_threshold", threshold=0.5, window_s=4.0, alarm_timestamp="window_start"
+    )
+    # 2.0 - 4.0 would be negative; an alarm never starts before the recording.
+    assert raw_threshold_alarms(end_sec, scores, params) == [(0.0, 0.0)]
+
+    later = np.array([11.0, 12.0, 13.0, 14.0, 15.0])
+    assert raw_threshold_alarms(later, scores, params) == [(8.0, 10.0)]
+
+
+def test_hysteresis_honours_the_alarm_timestamp_convention():
+    end_sec = np.arange(10, 20, dtype=float)
+    scores = np.array([0.1, 0.6, 0.7, 0.8, 0.8, 0.2, 0.1, 0.1, 0.1, 0.1])
+    kwargs = dict(
+        method="hysteresis_runlength", threshold_on=0.5, threshold_off=0.3,
+        run_length=2, event_merge_gap_s=0.0,
+    )
+    causal = hysteresis_alarms(end_sec, scores, PostprocessParams(**kwargs))
+    centered = hysteresis_alarms(
+        end_sec, scores, PostprocessParams(**kwargs, window_s=4.0, alarm_timestamp="window_center")
+    )
+    assert causal == [(12.0, 15.0)]
+    assert centered == [(10.0, 13.0)]
+
+
+def test_rejects_unknown_alarm_timestamp():
+    params = PostprocessParams(method="raw_threshold", threshold=0.5, window_s=4.0, alarm_timestamp="soonish")
+    with pytest.raises(ValueError):
+        raw_threshold_alarms(np.array([1.0]), np.array([0.9]), params)
+
+
 def test_run_postprocess_dispatches_by_method():
     end_sec = np.arange(1, 6, dtype=float)
     scores = np.array([0.1, 0.9, 0.9, 0.1, 0.1])

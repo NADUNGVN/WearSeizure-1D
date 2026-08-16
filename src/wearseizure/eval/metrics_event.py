@@ -94,6 +94,15 @@ def worst_patient(per_patient: dict[str, EventMetrics]) -> dict:
     return {
         "sensitivity": sens_values.get(worst_sens_patient, float("nan")),
         "sensitivity_patient": worst_sens_patient,
+        # Seizure count of the patient the sensitivity gate lands on. With n
+        # events, that patient's sensitivity can only take the n+1 values
+        # k/n -- so on CHB-MIT's low-event cases (chb02 and chb17 have 3
+        # seizures each) a >=0.85 gate is reachable only at a perfect n/n. The
+        # count has to travel with the value for the gate to be interpretable;
+        # see `min_events_to_gate` in configs/eval/gates_v2_proposed.yaml.
+        "sensitivity_patient_n_events": (
+            per_patient[worst_sens_patient].n_events if worst_sens_patient is not None else 0
+        ),
         "far_per_hour": far_values.get(worst_far_patient, float("nan")),
         "far_per_hour_patient": worst_far_patient,
     }
