@@ -66,6 +66,58 @@ def _aggregate_per_patient(fold_dicts: list[dict], strategy: str) -> dict[str, E
     return per_patient
 
 
+def _budget_from_frozen_params(fold_dicts: list[dict], cfg) -> "object":
+    """Delay floor from the postprocess params the folds ACTUALLY used.
+
+    Taking these from `cfg.postprocess` instead is a trap: `rethreshold.py`
+    accepts `postprocess.run_length=1 postprocess.ema_alpha=0.5` overrides and
+    writes the result into the same `*.metrics.json` files, but `evaluate.py`
+    is then usually run without repeating those overrides. It would compute the
+    floor from the config defaults and silently report a floor -- and therefore
+    a "model reaction" -- for a configuration that never ran. That happened on
+    the first (run_length=1, ema_alpha=0.5) sweep: a 5.0s floor was reported as
+    13.0s, overstating model reaction by 8 seconds.
+
+    `run_length`, `ema_alpha` and `alarm_timestamp` come from the frozen params
+    because those produced the alarms. `window_s`/`stride_s` come from the
+    window config, which is what the windows were actually cut with.
+    """
+    frozen = [d["frozen_postprocess"]["params"] for d in fold_dicts if "frozen_postprocess" in d]
+    if not frozen:
+        log.warning("no frozen_postprocess in fold metrics -- falling back to cfg.postprocess for the delay floor")
+        params = {
+            "run_length": cfg.postprocess.get("run_length", 1),
+            "ema_alpha": cfg.postprocess.get("ema_alpha", 0.0),
+            "alarm_timestamp": cfg.postprocess.get("alarm_timestamp", "window_end"),
+        }
+    else:
+        distinct = {(p.get("run_length", 1), p.get("ema_alpha", 0.0), p.get("alarm_timestamp", "window_end"))
+                    for p in frozen}
+        if len(distinct) > 1:
+            raise RuntimeError(
+                "folds were thresholded under different postprocess settings, so a single delay "
+                f"floor is meaningless: {sorted(distinct)}. Re-run rethreshold.py over all folds."
+            )
+        params = frozen[0]
+
+    for key, cfg_value in (("run_length", cfg.postprocess.get("run_length", 1)),
+                           ("ema_alpha", cfg.postprocess.get("ema_alpha", 0.0))):
+        used = params.get(key)
+        if used is not None and used != cfg_value:
+            log.warning(
+                f"postprocess.{key}: folds were thresholded with {used}, current config says "
+                f"{cfg_value}. Using {used} (what actually ran) for the delay floor."
+            )
+
+    return delay_budget(
+        window_s=cfg.window.window_s,
+        stride_s=cfg.window.stride_s,
+        run_length=params.get("run_length", 1),
+        ema_alpha=params.get("ema_alpha", 0.0),
+        alarm_timestamp=params.get("alarm_timestamp", "window_end"),
+    )
+
+
 @hydra.main(version_base=None, config_path="../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
     check_profile_data_pairing(cfg)
@@ -73,13 +125,7 @@ def main(cfg: DictConfig) -> None:
     fold_dicts = _load_fold_metrics(run_dir)
     per_patient = _aggregate_per_patient(fold_dicts, cfg.split.strategy)
 
-    budget = delay_budget(
-        window_s=cfg.window.window_s,
-        stride_s=cfg.window.stride_s,
-        run_length=cfg.postprocess.get("run_length", 1),
-        ema_alpha=cfg.postprocess.get("ema_alpha", 0.0),
-        alarm_timestamp=cfg.postprocess.get("alarm_timestamp", "window_end"),
-    )
+    budget = _budget_from_frozen_params(fold_dicts, cfg)
 
     report = build_report(per_patient, budget=budget)
     report_path = run_dir / "report.json"
