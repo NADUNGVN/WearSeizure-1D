@@ -157,6 +157,9 @@ def main(cfg: DictConfig) -> None:
             early_stopping_patience=cfg.train.early_stopping_patience,
             num_workers=cfg.profile.get("num_workers", 0),
             far_cap_per_hour=cfg.postprocess.get("far_cap_per_hour"),
+            objective=cfg.postprocess.get("objective", "max_sensitivity"),
+            sensitivity_floor=cfg.postprocess.get("sensitivity_floor"),
+            postprocess_alarm_timestamp=cfg.postprocess.get("alarm_timestamp", "window_end"),
             compile_mode=cfg.train.get("compile_mode"),
         )
 

@@ -114,6 +114,9 @@ def evaluate_fold(
     num_workers: int = 0,
     far_weight: float = 0.1,
     far_cap_per_hour: float | None = None,
+    objective: str = "max_sensitivity",
+    sensitivity_floor: float | None = None,
+    postprocess_alarm_timestamp: str = "window_end",
     compile_mode: str | None = None,
 ) -> FoldResult:
     """Threshold-freeze on val + evaluate on test for an already-trained
@@ -138,6 +141,8 @@ def evaluate_fold(
         event_merge_gap_s=postprocess_event_merge_gap_s, threshold_on_grid=threshold_on_grid,
         threshold_off_grid=threshold_off_grid, fold_id=fold.fold_id,
         far_weight=far_weight, far_cap_per_hour=far_cap_per_hour,
+        objective=objective, sensitivity_floor=sensitivity_floor,
+        window_s=window_s, alarm_timestamp=postprocess_alarm_timestamp,
     )
 
     test_scores, test_labels, test_end_sec, test_edf_ids = score_partition(
@@ -204,6 +209,9 @@ def run_fold(
     num_workers: int = 0,
     far_weight: float = 0.1,
     far_cap_per_hour: float | None = None,
+    objective: str = "max_sensitivity",
+    sensitivity_floor: float | None = None,
+    postprocess_alarm_timestamp: str = "window_end",
     compile_mode: str | None = None,
 ) -> FoldResult:
     datasets, _band, _normalizer = build_fold_datasets(records, fold, window_s, stride_s)
@@ -229,4 +237,6 @@ def run_fold(
         threshold_on_grid=threshold_on_grid, threshold_off_grid=threshold_off_grid,
         batch_size=batch_size, device=device, num_workers=num_workers,
         far_weight=far_weight, far_cap_per_hour=far_cap_per_hour,
+        objective=objective, sensitivity_floor=sensitivity_floor,
+        postprocess_alarm_timestamp=postprocess_alarm_timestamp,
     )

@@ -28,3 +28,15 @@ threshold_search:
 # closer to its own gate.
 far_cap_per_hour: 0.30
 frozen_params_dir: ${profile.artifacts_dir}/frozen_postprocess
+
+# Threshold-selection objective (training/threshold_selection.OBJECTIVES):
+#   max_sensitivity -- highest sensitivity with val FAR <= far_cap_per_hour
+#   min_delay       -- fastest combination that stays under the FAR cap AND
+#                      keeps val sensitivity >= sensitivity_floor
+# `min_delay` exists because FAR has consistently had several times more
+# headroom than the gate needs while detection delay never cleared its own.
+objective: max_sensitivity
+sensitivity_floor: null
+# Alarm timestamp convention (postprocess/hysteresis.ALARM_TIMESTAMP_FRACTIONS).
+# window_end is the causal default and reproduces every recorded result.
+alarm_timestamp: window_end
