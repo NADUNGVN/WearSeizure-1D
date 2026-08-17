@@ -919,6 +919,45 @@ chứ không cộng thêm thông lượng. Khi chia shard thì phải hạ xuố
 vì các tiến trình dùng chung 14 lõi đó — và vì quá tải worker cũng chính là nguyên nhân của hai lần
 "Too many open files" đã gặp.
 
+### 14.2c Kết quả L1 — đã chạy trên dữ liệu thật
+
+| | Row #17 (không L1) | L1, lưới cũ (row 21) | **L1 + lưới rộng (row 22)** |
+|---|---:|---:|---:|
+| Sensitivity | 0.8806 | 0.8485 | **0.9218** |
+| FAR/h | 0.3119 | 0.1243 | **0.1878** |
+| Delay mean | 19.42 | 18.10 | **17.06** |
+| Delay median | 16.0 | 15.0 | **13.00** |
+| Phản ứng model | 6.42 | 5.10 | **4.06** |
+| Worst-pt FAR | 1.5533 | 0.3434 | **0.6182** |
+| Worst-pt sens | 0.5000 | 0.0000 | 0.3333 (chb17, 3 cơn) |
+
+**L1 hiệu quả, nhưng lần chạy đầu che mất điều đó.** Ở row 21, FAR rơi về 0.124 trong khi trần là
+0.30 — bỏ không 2.4 lần ngân sách rồi lấy sensitivity ra trả. Nguyên nhân là sàn của
+`threshold_search.on_grid` dừng ở 0.20: một model được tiền huấn luyện cho điểm số tách bạch hơn,
+và lưới không đủ thấp để tìm điểm vận hành nhạy hơn. Đây đúng là lỗi đã chặn dự án ở bước 2 của
+timeline, khi sàn còn là 0.50.
+
+Nới lưới xuống 0.02 và **chọn lại ngưỡng từ chính checkpoint đã lưu, không train lại một fold nào**
+cho ra row 22 — kết quả tốt nhất từ trước tới nay:
+
+1. **Vượt cả hai baseline tái lập.** So với `compact1d_7k` #7 (0.8974 @ FAR 0.2103), row 22 **trội
+   hơn ở cả hai trục** — sensitivity cao hơn 2.4 pp *và* FAR thấp hơn. So với `frontiers2d` #2
+   (0.8811 @ 0.1432), sensitivity cao hơn **4.1 pp**. Nghĩa là luận điểm A1 không còn cần dựa vào
+   "tương đương thống kê" nữa — nó đã thắng thẳng, ở chi phí tính toán thấp hơn 1.8× và 3.3×.
+2. **Đạt mức minimum của gate v2 cho sensitivity** (≥0.92): 0.9218.
+3. **Phản ứng model giảm 37%** (6.42 → 4.06 s). Đây là phần đã trừ sàn giao thức, nên nó là cải
+   thiện thật của model chứ không phải dịch điểm vận hành.
+4. **Delay median 13.00 s bằng đúng sàn giao thức.** Nghĩa là với một nửa số cơn, model đã phát
+   hiện ở thời điểm **sớm nhất mà cấu hình đo cho phép** — phần dư model ở trung vị bằng 0. Không
+   còn chỗ để cải thiện delay bằng cách sửa model; toàn bộ phần còn lại nằm ở sàn.
+
+Worst-patient rơi vào **chb17 với 3 cơn** (1/3 = 0.3333), tức thuộc diện được miễn trừ theo quy tắc
+`min_events_to_gate: 5` của gate v2 (§4).
+
+**Việc tiếp theo có giá trị cao nhất** không còn là sửa model mà là hạ sàn: đổi `run_length` 3→1 và
+`ema_alpha` 0.125→0.5 đưa sàn từ 13.0 xuống **5.0 s**. Nếu phần dư model giữ nguyên ở 4.06 s thì
+delay trung bình rơi về **~9.1 s** và trung vị về ~5 s — cũng chỉ cần `rethreshold`, không train lại.
+
 ### 14.3 Thứ tự đề xuất
 
 L1 trước tiên và một mình, để đo riêng tác dụng của nó — đây là thay đổi lớn nhất và cần biết nó
