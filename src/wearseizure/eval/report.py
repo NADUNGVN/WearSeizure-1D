@@ -98,12 +98,16 @@ def _delay_under_alternate_convention(delays_by_patient: dict[str, list[float]],
     }
 
 
-def build_report(per_patient: dict[str, EventMetrics], budget: DelayBudget | None = None) -> dict:
+def build_report(
+    per_patient: dict[str, EventMetrics],
+    budget: DelayBudget | None = None,
+    min_events_to_gate: int | None = None,
+) -> dict:
     delays_by_patient = {pid: m.delays_s for pid, m in per_patient.items()}
     macro = macro_mean(per_patient)
     micro = micro_pooled(per_patient)
     delays = delay_stats(per_patient)
-    worst = worst_patient(per_patient)
+    worst = worst_patient(per_patient, min_events=min_events_to_gate)
 
     sens_ci = clopper_pearson_ci(micro["n_matched"], micro["n_events"])
     far_ci = poisson_rate_ci(micro["n_false_alarms"], micro["exposure_hours"])
@@ -122,8 +126,26 @@ def build_report(per_patient: dict[str, EventMetrics], budget: DelayBudget | Non
             ),
         }
 
+    # Patients excluded from the worst-patient gate are reported with an exact
+    # binomial interval rather than being dropped silently: k/n on a 3-seizure
+    # case is a point estimate with an interval so wide it carries no
+    # information, and saying so is more honest than either gating on it or
+    # hiding it.
+    small_sample = {
+        pid: {
+            "n_events": per_patient[pid].n_events,
+            "n_matched": per_patient[pid].n_matched,
+            "sensitivity": per_patient[pid].sensitivity,
+            "sensitivity_ci_95": clopper_pearson_ci(
+                per_patient[pid].n_matched, per_patient[pid].n_events
+            ),
+        }
+        for pid in worst.get("patients_below_event_floor", [])
+    }
+
     return {
         "per_patient": {pid: asdict(m) for pid, m in per_patient.items()},
+        "small_sample_patients": small_sample,
         "macro": macro,
         "micro": micro,
         "delay": delays,
@@ -142,12 +164,26 @@ def flatten_for_gates(report: dict) -> dict[str, float]:
         "far_per_hour": report["macro"]["far_per_hour_macro"],
         "detection_delay_mean_s": report["delay"]["mean_s"],
         "detection_delay_median_s": report["delay"]["median_s"],
-        "worst_patient_sensitivity": report["worst_patient"]["sensitivity"],
+        # Gate on the worst patient the gate is ALLOWED to land on. With no
+        # `min_events_to_gate` in the gates file these are the cohort worst,
+        # byte-identical to the previous behaviour; with one, they are the
+        # worst among patients that have enough seizures for a sensitivity
+        # threshold to mean anything (see metrics_event.worst_patient).
+        "worst_patient_sensitivity": report["worst_patient"].get(
+            "sensitivity_gated", report["worst_patient"]["sensitivity"]
+        ),
         "worst_patient_far_per_hour": report["worst_patient"]["far_per_hour"],
         "continuous_test_exposure_hours": report["micro"]["exposure_hours"],
         # Not a gate on the model -- a gate on the measurement setup, so that a
         # delay number can never be judged without the floor it sits on.
-        "worst_patient_n_events": report["worst_patient"].get("sensitivity_patient_n_events", 0),
+        "worst_patient_n_events": report["worst_patient"].get(
+            "sensitivity_gated_patient_n_events",
+            report["worst_patient"].get("sensitivity_patient_n_events", 0),
+        ),
+        # The raw cohort worst, always reported, never gated on -- so a
+        # small-sample patient can never disappear from the report just
+        # because the gate is not allowed to score it.
+        "worst_patient_sensitivity_all": report["worst_patient"]["sensitivity"],
     }
     if "floor_s" in report["delay"]:
         flat["detection_delay_floor_s"] = report["delay"]["floor_s"]

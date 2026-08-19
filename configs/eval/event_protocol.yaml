@@ -7,3 +7,8 @@ min_continuous_test_hours:
   minimum: 100
   target: 150
   stretch: 200
+
+# Which gate table scripts/evaluate.py scores against, relative to the repo
+# root (or absolute). null keeps the historical default, configs/eval/gates.yaml.
+# Override with: eval.gates_path=configs/eval/gates_v2_proposed.yaml
+gates_path: null

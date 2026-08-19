@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 import hydra
+import numpy as np
 from omegaconf import DictConfig
 
 from wearseizure.data.splits import subject_from_fold_id
@@ -24,6 +25,7 @@ from wearseizure.eval.report import (
 )
 from wearseizure.utils.env import bootstrap_env
 from wearseizure.utils.logging import get_logger
+from wearseizure.utils.paths import fold_run_dir, seeds_from_cfg, warn_if_legacy_artifacts
 from wearseizure.utils.profile_guard import check_profile_data_pairing
 
 # Must run at import time: configs/profile/server.yaml interpolates
@@ -31,6 +33,8 @@ from wearseizure.utils.profile_guard import check_profile_data_pairing
 bootstrap_env(sys.argv)
 
 log = get_logger(__name__)
+
+_CONFIGS_DIR = Path(__file__).resolve().parent.parent / "configs"
 
 
 def _load_fold_metrics(run_dir: Path) -> list[dict]:
@@ -118,16 +122,34 @@ def _budget_from_frozen_params(fold_dicts: list[dict], cfg) -> "object":
     )
 
 
-@hydra.main(version_base=None, config_path="../configs", config_name="config")
-def main(cfg: DictConfig) -> None:
-    check_profile_data_pairing(cfg)
-    run_dir = Path(cfg.profile.artifacts_dir) / cfg.model.name / cfg.split.name / cfg.window.name
+def _resolve_gates_path(cfg) -> Path:
+    """Which gate table to score against.
+
+    Was hardcoded to `configs/eval/gates.yaml`. Made overridable so the
+    proposed v2 table (`configs/eval/gates_v2_proposed.yaml`) can be scored
+    without editing code -- the two tables disagree about what this project is
+    trying to prove, so which one a number was checked against has to be
+    visible in the run's overrides. Default is unchanged.
+    """
+    configured = cfg.eval.get("gates_path")
+    if configured:
+        path = Path(configured)
+        return path if path.is_absolute() else _CONFIGS_DIR.parent / path
+    return _CONFIGS_DIR / "eval" / "gates.yaml"
+
+
+def _evaluate_one_seed(cfg, seed: int, gates: dict, min_events_to_gate: int | None) -> tuple[dict, dict]:
+    """Build and score the report for one seed. Returns (report, gate_results)."""
+    run_dir = fold_run_dir(
+        cfg.profile.artifacts_dir, cfg.model.name, cfg.split.name, cfg.window.name, seed
+    )
+    warn_if_legacy_artifacts(run_dir, log)
     fold_dicts = _load_fold_metrics(run_dir)
     per_patient = _aggregate_per_patient(fold_dicts, cfg.split.strategy)
 
     budget = _budget_from_frozen_params(fold_dicts, cfg)
 
-    report = build_report(per_patient, budget=budget)
+    report = build_report(per_patient, budget=budget, min_events_to_gate=min_events_to_gate)
     report_path = run_dir / "report.json"
     save_report(report, str(report_path))
     log.info(f"report written to {report_path}")
@@ -153,11 +175,110 @@ def main(cfg: DictConfig) -> None:
             f"{report['delay']['window_start_convention']['mean_s']:.2f}s"
         )
 
-    gates_path = Path(__file__).resolve().parent.parent / "configs" / "eval" / "gates.yaml"
-    gates = load_gates(str(gates_path))
     gate_results = check_gates(flatten_for_gates(report), gates)
     for key, result in gate_results.items():
         log.info(f"gate {key}: value={result['value']:.4f} level={result['level']}")
+    worst = report["worst_patient"]
+    if worst.get("patients_below_event_floor"):
+        exempt = worst["patients_below_event_floor"]
+        if worst["sensitivity_gated_patient"] is None:
+            log.warning(
+                f"worst-patient sensitivity NOT gated: no patient has >= "
+                f"{worst['min_events_to_gate']} seizures (all of {exempt} are below the floor)"
+            )
+        else:
+            log.info(
+                f"worst-patient sensitivity gated on {worst['sensitivity_gated_patient']} "
+                f"({worst['sensitivity_gated_patient_n_events']} events); "
+                f"exempt (too few seizures): {exempt}"
+            )
+        log.info("small-sample patients are in report['small_sample_patients'] with exact binomial intervals")
+
+    return report, gate_results
+
+
+def _multiseed_summary(reports_by_seed: dict[int, dict]) -> dict:
+    """Mean and sample standard deviation of every gated metric across seeds.
+
+    This is the whole point of lever L7. The three best configurations to date
+    sit at 0.9218 / 0.9256 / 0.9359 macro sensitivity -- 1.4pp apart on 77
+    seizures, i.e. about one seizure -- so without a spread across seeds there
+    is no basis for preferring any of them, and no way to state the paper's
+    central claim (equivalence-or-better vs the reproduced baselines) as
+    anything but a point estimate.
+
+    `ddof=1`: these seeds are a sample of the seed distribution, not the whole
+    of it. With a single seed the std is undefined and reported as NaN rather
+    than 0, which would read as "perfectly reproducible".
+    """
+    keys = sorted({k for r in reports_by_seed.values() for k in flatten_for_gates(r)})
+    summary = {}
+    for key in keys:
+        values = [flatten_for_gates(r).get(key) for r in reports_by_seed.values()]
+        values = [float(v) for v in values if v is not None and not np.isnan(float(v))]
+        if not values:
+            continue
+        arr = np.asarray(values, dtype=float)
+        summary[key] = {
+            "mean": float(arr.mean()),
+            "std": float(arr.std(ddof=1)) if arr.size > 1 else float("nan"),
+            "min": float(arr.min()),
+            "max": float(arr.max()),
+            "n_seeds": int(arr.size),
+            "per_seed": {str(s): float(flatten_for_gates(r).get(key, float("nan")))
+                         for s, r in reports_by_seed.items()},
+        }
+    return summary
+
+
+@hydra.main(version_base=None, config_path="../configs", config_name="config")
+def main(cfg: DictConfig) -> None:
+    check_profile_data_pairing(cfg)
+
+    # Gates are loaded BEFORE any report is built: the worst-patient rule needs
+    # `min_events_to_gate` from the gates file to know which patients a
+    # sensitivity threshold is allowed to land on (see
+    # eval/metrics_event.worst_patient). v1 gates declare no floor, so this
+    # resolves to None and the report is byte-identical to before.
+    gates_path = _resolve_gates_path(cfg)
+    gates = load_gates(str(gates_path))
+    min_events_to_gate = (gates.get("worst_patient_sensitivity") or {}).get("min_events_to_gate")
+    log.info(
+        f"gates: {gates_path}"
+        + (f" (worst-patient floor: >={min_events_to_gate} events)" if min_events_to_gate else "")
+    )
+
+    seeds = seeds_from_cfg(cfg)
+    reports: dict[int, dict] = {}
+    gate_results_by_seed: dict[int, dict] = {}
+    for seed in seeds:
+        if len(seeds) > 1:
+            log.info(f"--- seed {seed} ---")
+        reports[seed], gate_results_by_seed[seed] = _evaluate_one_seed(
+            cfg, seed, gates, min_events_to_gate
+        )
+
+    if len(seeds) > 1:
+        summary = _multiseed_summary(reports)
+        summary_path = (
+            fold_run_dir(cfg.profile.artifacts_dir, cfg.model.name, cfg.split.name,
+                         cfg.window.name, seeds[0]).parent / "report_multiseed.json"
+        )
+        save_report({"seeds": seeds, "metrics": summary}, str(summary_path))
+        log.info(f"multi-seed summary written to {summary_path}")
+        for key, stats in summary.items():
+            log.info(
+                f"[{len(seeds)} seeds] {key}: {stats['mean']:.4f} +/- {stats['std']:.4f} "
+                f"(min {stats['min']:.4f}, max {stats['max']:.4f})"
+            )
+        # Gate the MEAN, not any individual seed: picking the best seed is the
+        # same selection-on-the-evaluation-set mistake docs/PROTOCOL.md forbids
+        # for thresholds.
+        gate_results = check_gates({k: v["mean"] for k, v in summary.items()}, gates)
+        for key, result in gate_results.items():
+            log.info(f"gate (mean of {len(seeds)} seeds) {key}: value={result['value']:.4f} level={result['level']}")
+    else:
+        gate_results = gate_results_by_seed[seeds[0]]
 
     if cfg.profile.enforce_gates:
         failing = {k: v for k, v in gate_results.items() if v["level"] == "below_minimum"}

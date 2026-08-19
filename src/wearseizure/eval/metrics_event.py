@@ -86,23 +86,53 @@ def delay_stats(per_patient: dict[str, EventMetrics]) -> dict:
     }
 
 
-def worst_patient(per_patient: dict[str, EventMetrics]) -> dict:
+def worst_patient(per_patient: dict[str, EventMetrics], min_events: int | None = None) -> dict:
+    """Worst-performing patient on each axis.
+
+    `min_events` implements the small-sample rule of
+    `configs/eval/gates_v2_proposed.yaml`. Without it, the worst-sensitivity
+    slot is permanently occupied by whichever patient has the fewest seizures:
+    with n events a patient's sensitivity can only take the values k/n, so on
+    CHB-MIT's 3-seizure cases (chb02, chb17) a >=0.85 gate silently means "must
+    not miss a single seizure" and the reported number says nothing about the
+    other twelve patients.
+
+    When `min_events` is given, the `*_gated` keys report the worst patient
+    among those with at least that many seizures -- the number the gate is
+    actually meant to constrain -- while the ungated keys keep reporting the
+    raw cohort worst so the small-sample patients are never hidden.
+    """
     sens_values = {pid: m.sensitivity for pid, m in per_patient.items() if not np.isnan(m.sensitivity)}
     far_values = {pid: m.far_per_hour for pid, m in per_patient.items() if not np.isnan(m.far_per_hour)}
     worst_sens_patient = min(sens_values, key=sens_values.get) if sens_values else None
     worst_far_patient = max(far_values, key=far_values.get) if far_values else None
+
+    if min_events is None:
+        eligible = dict(sens_values)
+        below_floor: list[str] = []
+    else:
+        eligible = {
+            pid: s for pid, s in sens_values.items() if per_patient[pid].n_events >= min_events
+        }
+        below_floor = sorted(pid for pid in sens_values if pid not in eligible)
+    gated_patient = min(eligible, key=eligible.get) if eligible else None
+
     return {
         "sensitivity": sens_values.get(worst_sens_patient, float("nan")),
         "sensitivity_patient": worst_sens_patient,
-        # Seizure count of the patient the sensitivity gate lands on. With n
-        # events, that patient's sensitivity can only take the n+1 values
-        # k/n -- so on CHB-MIT's low-event cases (chb02 and chb17 have 3
-        # seizures each) a >=0.85 gate is reachable only at a perfect n/n. The
+        # Seizure count of the patient the sensitivity gate lands on -- the
         # count has to travel with the value for the gate to be interpretable;
         # see `min_events_to_gate` in configs/eval/gates_v2_proposed.yaml.
         "sensitivity_patient_n_events": (
             per_patient[worst_sens_patient].n_events if worst_sens_patient is not None else 0
         ),
+        "min_events_to_gate": min_events,
+        "sensitivity_gated": eligible.get(gated_patient, float("nan")),
+        "sensitivity_gated_patient": gated_patient,
+        "sensitivity_gated_patient_n_events": (
+            per_patient[gated_patient].n_events if gated_patient is not None else 0
+        ),
+        "patients_below_event_floor": below_floor,
         "far_per_hour": far_values.get(worst_far_patient, float("nan")),
         "far_per_hour_patient": worst_far_patient,
     }
