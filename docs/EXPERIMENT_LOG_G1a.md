@@ -68,6 +68,22 @@ All rows: split = `patient_specific_loso_edf`, dataset exposure ≈ 185.0h (66 f
 
 | 23 | 08-17 12:36 | wearseizure1d — L1 + lưới rộng + **hậu xử lý nới: `run_length` 3→1, `ema_alpha` .125→.5** | w4s_stride1s | rethreshold only | **0.9256** ❌ | **0.7200 ❌ (vỡ trần 0.30)** | 14.36 / 11.00 ❌ | **0.6667** ❌ (tốt nhất từng đạt) | **2.2000 ❌** | 185.0 ✅(target) | Sàn thật **5.00 s** (không phải 13.00 s như log in ra — `evaluate.py` khi đó lấy sàn từ config thay vì từ tham số đã đóng băng; đã sửa). Phần dư model thật = 14.36 − 5.00 = **9.36 s**. Delay và worst-patient sensitivity đều tốt nhất, nhưng FAR đắt gấp 3.8× so với row 22 → **row 22 vẫn là cấu hình tốt nhất tổng thể** |
 
+| 24 | 08-17 13:10 | wearseizure1d — L1 + lưới rộng + **`run_length=2`, `ema_alpha=0.25`** | w4s_stride1s | rethreshold only | **0.9359** ❌ (**tốt nhất từng đạt**) | **0.2610 ✅(minimum)** | **16.17** / — ❌ | — | — | 185.0 ✅(target) | Sàn thật **8.00 s** (log in 13.00 s — server còn chạy code trước `dde3f74`). Phần dư model 8.17 s. **Cấu hình tham chiếu mới**: trội hơn row 22 ở *cả* sensitivity (+1.4 pp) *và* delay (−0.9 s), FAR vẫn dưới trần 0.30 |
+| 25 | 08-17 13:16 | wearseizure1d — L1 + lưới rộng + `run_length=1`, `ema_alpha=0.25` | w4s_stride1s | rethreshold only | 0.9114 ❌ | 0.2360 ✅(minimum) | 16.38 ❌ | — | — | 185.0 ✅(target) | Sàn thật 7.00 s, dư model 9.38 s. **Bị row 22 áp đảo** (thấp hơn cả sensitivity lẫn FAR) — quan hệ (L, α) không đơn điệu |
+| 26 | 08-17 13:21 | wearseizure1d — L1 + lưới rộng + `run_length=2`, `ema_alpha=0.5` | w4s_stride1s | rethreshold only | 0.8731 ❌ | 0.5030 ❌ | 15.74 ❌ | — | — | 185.0 ✅(target) | Sàn thật 6.00 s, dư model 9.74 s. Bị áp đảo |
+
+**Quét (run_length, ema_alpha) trên cùng checkpoint L1 — mặt Pareto:** chỉ row 22 và row 24 nằm
+trên biên; rows 23/25/26 đều bị áp đảo. Điểm quan trọng: hạ sàn từ 13.0 xuống 5.0 s **chỉ mua được
+2.7 s delay thật** (17.06 → 14.36), vì phần dư model tăng ngược từ 4.06 lên 9.36 s. EMA nặng đang
+làm việc thật — nó tích luỹ bằng chứng nên alarm nổ gần như ngay khi trả xong sàn; bỏ nó thì model
+phải tự tin trong một cửa sổ đơn lẻ, điều xảy ra muộn hơn trong cơn. **Phép phân rã sàn/phần dư là
+công cụ kế toán, không phải bất biến vật lý** — chỉ tổng delay mới so sánh được giữa các cấu hình.
+
+**Cảnh báo về ý nghĩa thống kê:** ba cấu hình tốt nhất cách nhau 0.9218 / 0.9256 / 0.9359, tức
+1.4 pp trên 77 cơn ≈ **đúng một cơn**. Chưa có thanh sai số nào (`train.seeds` vẫn là cấu hình
+chết), nên **không thể khẳng định row 24 > row 22**. Lever L7 giờ là điều kiện chặn cho mọi so sánh
+trong nhóm này.
+
 Row 11 and row 17/12 are duplicates of the same underlying run (kept separate because they were reported to me at different points for different reasons — row 11 as the fd-crash diagnosis, row 17 as part of the 4-way kernel ablation).
 
 ## 3. Per-patient failure notes (from `failure_analysis.py`, 08-15 23:41, w4s_stride1s, 60-epoch checkpoints)
