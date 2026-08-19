@@ -25,6 +25,7 @@ from wearseizure.data.splits import subject_from_fold_id
 from wearseizure.eval.report import load_gates
 from wearseizure.utils.env import bootstrap_env
 from wearseizure.utils.logging import get_logger
+from wearseizure.utils.paths import fold_run_dir
 
 # Must run at import time: configs/profile/server.yaml interpolates
 # ${oc.env:...} into hydra.run.dir, which Hydra resolves before main().
@@ -35,7 +36,10 @@ log = get_logger(__name__)
 
 @hydra.main(version_base=None, config_path="../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
-    run_dir = Path(cfg.profile.artifacts_dir) / cfg.model.name / cfg.split.name / cfg.window.name
+    seed = int(cfg.seed)
+    run_dir = fold_run_dir(
+        cfg.profile.artifacts_dir, cfg.model.name, cfg.split.name, cfg.window.name, seed
+    )
     fold_paths = sorted(run_dir.glob("*.metrics.json"))
     if not fold_paths:
         raise FileNotFoundError(f"no *.metrics.json in {run_dir} -- run train.py first")

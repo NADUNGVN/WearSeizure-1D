@@ -51,11 +51,11 @@ from omegaconf import DictConfig
 from wearseizure.data.loader import load_records_from_manifest
 from wearseizure.data.manifest import load_manifest
 from wearseizure.models.factory import build_model
-from wearseizure.training.pretrain import get_or_train_cohort_init
+from wearseizure.training.pretrain import get_or_train_cohort_init, load_pretrain_corpus
 from wearseizure.utils.env import bootstrap_env
 from wearseizure.utils.logging import get_logger
+from wearseizure.utils.paths import ensure_dir, pretrain_cache_dir
 from wearseizure.utils.profile_guard import check_profile_data_pairing
-from wearseizure.utils.paths import ensure_dir
 from wearseizure.utils.seeding import seed_everything
 
 # Must run at import time: configs/profile/server.yaml interpolates
@@ -87,8 +87,13 @@ def main(cfg: DictConfig) -> None:
     mine = subjects[shard::n_shards]
 
     pretrain_cfg = cfg.train.get("pretrain", {})
+    extra_manifest_df, extra_records = load_pretrain_corpus(cfg, log)
+    if extra_records:
+        records = {**records, **extra_records}
     cache_dir = ensure_dir(
-        Path(cfg.profile.artifacts_dir) / "pretrain" / cfg.model.name / cfg.window.name
+        pretrain_cache_dir(
+            cfg.profile.artifacts_dir, cfg.model.name, cfg.window.name, int(cfg.seed)
+        )
     )
     log.info(
         f"shard {shard}/{n_shards}: pre-training {len(mine)} of {len(subjects)} subjects "
@@ -118,6 +123,7 @@ def main(cfg: DictConfig) -> None:
             class_balanced_sampling=cfg.train.class_balanced_sampling,
             compile_mode=cfg.train.get("compile_mode"),
             force=pretrain_cfg.get("force", False),
+            extra_manifest_df=extra_manifest_df,
         )
 
     log.info(f"shard {shard}/{n_shards}: done, {len(mine)} initialisation(s) in {cache_dir}")

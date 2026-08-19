@@ -22,8 +22,8 @@ from wearseizure.quant.scales import compute_symmetric_scale, compute_symmetric_
 from wearseizure.rtl_interface.golden_io_contract import WINDOW_SAMPLES
 from wearseizure.utils.env import bootstrap_env
 from wearseizure.utils.logging import get_logger
+from wearseizure.utils.paths import ensure_dir, fold_run_dir
 from wearseizure.utils.profile_guard import check_profile_data_pairing
-from wearseizure.utils.paths import ensure_dir
 
 # Must run at import time: configs/profile/server.yaml interpolates
 # ${oc.env:...} into hydra.run.dir, which Hydra resolves before main().
@@ -38,7 +38,10 @@ def main(cfg: DictConfig) -> None:
     if cfg.model.name != "wearseizure1d":
         raise ValueError("export_int8_reference.py is scoped to model=wearseizure1d")
 
-    run_dir = Path(cfg.profile.artifacts_dir) / cfg.model.name / cfg.split.name / cfg.window.name
+    seed = int(cfg.seed)
+    run_dir = fold_run_dir(
+        cfg.profile.artifacts_dir, cfg.model.name, cfg.split.name, cfg.window.name, seed
+    )
     folds = load_folds(str(Path(cfg.split.folds_path)))
     if not folds:
         raise RuntimeError("no folds found -- run make_splits.py and train.py first")

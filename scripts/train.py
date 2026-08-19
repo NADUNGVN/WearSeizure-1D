@@ -19,11 +19,17 @@ from wearseizure.data.manifest import load_manifest
 from wearseizure.data.splits import load_folds, subject_from_fold_id
 from wearseizure.models.factory import build_model
 from wearseizure.training.engine_baseline import run_fold
-from wearseizure.training.pretrain import get_or_train_cohort_init
+from wearseizure.training.pretrain import get_or_train_cohort_init, load_pretrain_corpus
 from wearseizure.utils.env import bootstrap_env
 from wearseizure.utils.logging import get_logger
+from wearseizure.utils.paths import (
+    ensure_dir,
+    fold_run_dir,
+    pretrain_cache_dir,
+    seeds_from_cfg,
+    warn_if_legacy_artifacts,
+)
 from wearseizure.utils.profile_guard import check_profile_data_pairing
-from wearseizure.utils.paths import ensure_dir
 from wearseizure.utils.seeding import seed_everything
 
 # Must run at import time: configs/profile/server.yaml interpolates
@@ -46,7 +52,6 @@ log = get_logger(__name__)
 @hydra.main(version_base=None, config_path="../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
     check_profile_data_pairing(cfg)
-    seed_everything(cfg.seed)
 
     manifest_df = load_manifest(str(Path(cfg.data.manifest_path)))
     data_dir = cfg.data.generated_dir if cfg.data.name == "synthetic" else None
@@ -63,17 +68,34 @@ def main(cfg: DictConfig) -> None:
         )
         folds = folds[:max_folds]
 
+    threshold_grid = cfg.postprocess.get("threshold_search", OmegaConf.create({}))
+    force_retrain = cfg.train.get("force_retrain", False)
+
+    seeds = seeds_from_cfg(cfg)
+    if len(seeds) > 1:
+        log.info(
+            f"multi-seed run (lever L7): seeds={seeds}. Every fold is trained once per seed into "
+            f"its own seed<N> directory; scripts/evaluate.py then reports mean +/- std across "
+            f"them. Without this, differences of ~1 seizure out of 77 cannot be told from noise."
+        )
+    for seed in seeds:
+        _run_one_seed(cfg, seed, records, manifest_df, folds, threshold_grid, force_retrain)
+
+
+def _run_one_seed(cfg, seed, records, manifest_df, folds, threshold_grid, force_retrain) -> None:
+    seed_everything(seed)
+
     # window.name is part of the path (not just model/split) because window_s/
     # stride_s changes what the training data itself looks like (memo 7.2
     # ablates window/stride) -- without this, switching window configs would
     # find the previous window's metrics.json already sitting there and
     # silently skip training instead of producing a real, comparable result.
-    run_dir = ensure_dir(
-        Path(cfg.profile.artifacts_dir) / cfg.model.name / cfg.split.name / cfg.window.name
+    # seed<N> is there for the same reason: two seeds are two different runs.
+    run_dir = fold_run_dir(
+        cfg.profile.artifacts_dir, cfg.model.name, cfg.split.name, cfg.window.name, seed
     )
-    threshold_grid = cfg.postprocess.get("threshold_search", OmegaConf.create({}))
-
-    force_retrain = cfg.train.get("force_retrain", False)
+    warn_if_legacy_artifacts(run_dir, log)
+    ensure_dir(run_dir)
 
     # Lever L1 (docs/RESEARCH_REALITY_CHECK.md section 14): initialise each
     # fold from a model pre-trained on every OTHER patient, instead of from
@@ -87,8 +109,15 @@ def main(cfg: DictConfig) -> None:
             f"{cfg.split.strategy!r}: that split already trains on other subjects. Ignoring."
         )
         use_pretrain = False
-    pretrain_dir = Path(cfg.profile.artifacts_dir) / "pretrain" / cfg.model.name / cfg.window.name
+    pretrain_dir = pretrain_cache_dir(
+        cfg.profile.artifacts_dir, cfg.model.name, cfg.window.name, seed
+    )
     finetune_lr = cfg.train.get("finetune_lr", cfg.train.lr)
+    extra_manifest_df, extra_records = (
+        load_pretrain_corpus(cfg, log) if use_pretrain else (None, {})
+    )
+    if extra_records:
+        records = {**records, **extra_records}
     if use_pretrain:
         log.info(
             f"cohort pre-training ENABLED: per-subject inits cached under {pretrain_dir}; "
@@ -118,7 +147,7 @@ def main(cfg: DictConfig) -> None:
                 cache_dir=pretrain_dir,
                 window_s=cfg.window.window_s,
                 stride_s=cfg.window.stride_s,
-                seed=cfg.seed,
+                seed=seed,
                 epochs=pretrain_cfg.get("epochs", cfg.train.epochs),
                 lr=pretrain_cfg.get("lr", cfg.train.lr),
                 weight_decay=cfg.train.weight_decay,
@@ -131,6 +160,7 @@ def main(cfg: DictConfig) -> None:
                 val_subject_fraction=pretrain_cfg.get("val_subject_fraction", 0.2),
                 class_balanced_sampling=cfg.train.class_balanced_sampling,
                 force=pretrain_cfg.get("force", False),
+                extra_manifest_df=extra_manifest_df,
             )
             model.load_state_dict(init_state)
             fold_lr = finetune_lr
@@ -174,6 +204,7 @@ def main(cfg: DictConfig) -> None:
                     # file has to say which it was.
                     "pretrained_from_cohort_excluding": pretrained_from,
                     "lr": fold_lr,
+                    "seed": seed,
                     "frozen_postprocess": result.frozen_postprocess.to_dict(),
                     "test_event_metrics": asdict(result.test_event_metrics),
                     "test_segment_metrics": asdict(result.test_segment_metrics),
@@ -190,7 +221,7 @@ def main(cfg: DictConfig) -> None:
         n_trained += 1
 
     log.info(
-        f"trained {n_trained} folds (skipped {n_skipped} already done) for "
+        f"seed {seed}: trained {n_trained} folds (skipped {n_skipped} already done) for "
         f"model={cfg.model.name}, split={cfg.split.name} -> {run_dir}"
     )
 

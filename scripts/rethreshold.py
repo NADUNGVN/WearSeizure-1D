@@ -26,6 +26,7 @@ from wearseizure.models.factory import build_model
 from wearseizure.training.engine_baseline import evaluate_fold
 from wearseizure.utils.env import bootstrap_env
 from wearseizure.utils.logging import get_logger
+from wearseizure.utils.paths import fold_run_dir
 from wearseizure.utils.profile_guard import check_profile_data_pairing
 
 # Must run at import time: configs/profile/server.yaml interpolates
@@ -46,7 +47,10 @@ def main(cfg: DictConfig) -> None:
     records = load_records_from_manifest(manifest_df, data_dir=data_dir, raw_dir=raw_dir)
 
     folds = load_folds(str(Path(cfg.split.folds_path)))
-    run_dir = Path(cfg.profile.artifacts_dir) / cfg.model.name / cfg.split.name / cfg.window.name
+    seed = int(cfg.seed)
+    run_dir = fold_run_dir(
+        cfg.profile.artifacts_dir, cfg.model.name, cfg.split.name, cfg.window.name, seed
+    )
     threshold_grid = cfg.postprocess.get("threshold_search", OmegaConf.create({}))
 
     n_done = n_missing = 0

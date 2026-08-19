@@ -18,7 +18,17 @@ batch_size: 256
 lr: 0.001
 weight_decay: 0.0001
 optimizer: adamw
-seeds: [0, 1, 2]     # memo 5.3: three random seeds for training
+# Lever L7. This key existed from the first commit (memo 5.3 asks for three
+# random seeds) but nothing read it -- scripts/train.py only ever used
+# `cfg.seed` -- so not one of the 26 runs in docs/EXPERIMENT_LOG_G1a.md has an
+# error bar. It is wired up now (utils/paths.seeds_from_cfg).
+#
+# Default stays null = "just cfg.seed", because turning three seeds on by
+# default would silently triple every run and change every recorded number.
+# Ask for error bars explicitly:  train.seeds=[0,1,2]
+# Each seed trains into its own `<window>/seed<N>/` directory and
+# scripts/evaluate.py aggregates them as mean +/- std.
+seeds: null
 early_stopping_patience: 15
 class_balanced_sampling: true   # train partition only
 max_folds: null      # set via CLI (train.max_folds=2) to smoke-test on a few folds before a full run
@@ -58,6 +68,19 @@ pretrain:
   batch_size: 256
   val_subject_fraction: 0.2   # subject-level val split inside the pre-training cohort
   force: false
+  # Lever L5. false = pre-train on the other 12 evaluation cases only (what
+  # rows 21-26 did). true = also draw on the CHB-MIT cases the protocol does
+  # NOT evaluate on, read from `data.pretrain_manifest_path`.
+  #
+  # Evaluation is untouched either way: the wider corpus is only ever a
+  # pre-training pool, `data/splits.py` never sees it, and
+  # `cohort_pretrain_fold` still refuses if any recording of the held-out
+  # person reaches it -- including chb21, which is chb01 recorded again.
+  #
+  # Requires `scripts/make_manifest.py profile=server data=chbmit` to have been
+  # re-run so the pre-training manifest exists. Changing the corpus invalidates
+  # cached inits automatically (they carry the cohort manifest hash).
+  use_wider_corpus: false
 
 # Fine-tuning LR, used ONLY when pretrain.enabled. Lower than `lr` because the
 # model starts from a trained cohort model rather than random weights; a full
