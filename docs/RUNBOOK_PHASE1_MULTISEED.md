@@ -9,7 +9,9 @@ Mục tiêu của đợt chạy này **không phải nâng điểm**. Nó trả 
    được thử.** k5only là 11 786 params / 585 920 MACs so với 14 834 / 765 632 — chỉ nó đạt mức
    target của cổng MAC, và luận điểm "ưu thế tính toán 4.3×" của bài báo dựa trên con số của nó.
 
-Commit để checkout: **`c57e272`**
+Commit để checkout: **SHA được bàn giao kèm runbook này** — không hardcode ở đây, vì một SHA viết
+sẵn trong file luôn trỏ vào commit *trước* commit chứa chính nó. Lấy nó bằng `git log --oneline -1`
+trên máy local sau khi đã review, hoặc từ tin nhắn bàn giao.
 
 ---
 
@@ -18,7 +20,7 @@ Commit để checkout: **`c57e272`**
 ```bash
 cd ~/Manh/WearSeizure-1D
 git fetch
-git checkout c57e272          # kỷ luật: SHA đã review, không bao giờ đầu nhánh
+git checkout <sha>            # kỷ luật: SHA đã review, không bao giờ đầu nhánh
 
 conda activate chbmit-cnn
 export CHBMIT_RAW_DIR=~/Manh/datasets/CHB-MIT/1.0.0
