@@ -1,0 +1,45 @@
+# Same postprocessor as `hysteresis_runlength`, with the WIDE threshold search
+# grid that produced rows 21-26 of docs/EXPERIMENT_LOG_G1a.md -- including row
+# 22, the best result on record.
+#
+# Why this file exists
+# --------------------
+# That grid only ever existed as a command-line override. Recovering it meant
+# reading `.hydra/overrides.yaml` out of the run directories on SERVER-02
+# (runs/2026-08-17_11-54-01), which is archaeology, not reproducibility: the
+# artifacts directory is gitignored and could be cleaned at any time, and a
+# first attempt to re-run row 22 from a grid reconstructed by hand landed on
+# sensitivity 0.9218 and FAR 0.1878 (both exact) but delay 17.01s instead of
+# 17.06s, because four extra grid points shifted one fold's chosen threshold by
+# a notch.
+#
+# It is a separate file rather than an edit to `hysteresis_runlength.yaml`
+# because rows 1-20 were produced with that file's narrower grid (floor 0.20),
+# and changing it in place would silently make those numbers unreproducible.
+#
+# Why the grid needs to go this low
+# ---------------------------------
+# Cohort pre-training (lever L1) produces better-separated scores, so the
+# operating point that satisfies the FAR cap sits lower than an un-pre-trained
+# model's. Row 21 ran with the 0.20 floor, landed at FAR 0.1243 against a 0.30
+# cap -- leaving 2.4x of the budget unspent -- and read as "L1 lost 3.2pp of
+# sensitivity". It had not: the search was pinned at the edge of the grid.
+# Widening it to 0.02, with no fold re-trained, turned that into row 22
+# (0.8485 -> 0.9218). This is the same class of bug that stalled the project at
+# step 2 of the timeline, when the floor was still 0.50.
+name: hysteresis_widegrid
+method: hysteresis_runlength
+ema_alpha: 0.125
+run_length: 3
+event_merge_gap_s: 2.0
+# Verbatim from runs/2026-08-17_11-54-01/.hydra/overrides.yaml. Do not "tidy"
+# the spacing: the delay figures in rows 22-26 are only reproducible against
+# exactly these points.
+threshold_search:
+  on_grid: [0.02, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.60, 0.70, 0.80]
+  off_grid: [0.01, 0.02, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50]
+far_cap_per_hour: 0.30
+frozen_params_dir: ${profile.artifacts_dir}/frozen_postprocess
+objective: max_sensitivity
+sensitivity_floor: null
+alarm_timestamp: window_end

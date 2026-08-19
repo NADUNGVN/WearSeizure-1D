@@ -60,14 +60,33 @@ lệnh `mv` cần chạy; đọc cảnh báo thay vì để nó chạy tiếp.
 
 ### 0c. Xác nhận trạng thái cũ vẫn tái lập được
 
-Trước khi thêm seed mới, kiểm tra rằng seed 0 đọc đúng những gì đã có và cho lại **đúng row 22**:
+Lưu ý: thư mục `wearseizure1d/.../w4s_stride1s/` **không** giữ row 22. Mỗi lần `rethreshold` ghi đè
+cùng bộ `metrics.json`, nên nó giữ row cuối cùng đã chạy — row 26 (`L=2`, `α=0.5`, sens 0.8731,
+FAR 0.5029). Row 22 nằm riêng ở `row22_backup/`.
+
+Phép kiểm tra đúng là **tái tạo row 22 từ chính checkpoint**, mạnh hơn việc chỉ đọc lại số cũ:
 
 ```bash
-python scripts/evaluate.py profile=server data=chbmit
+cd ~/Manh/WearSeizure-1D
+python scripts/rethreshold.py profile=server data=chbmit postprocess=hysteresis_widegrid
+python scripts/evaluate.py    profile=server data=chbmit postprocess=hysteresis_widegrid
 ```
 
-Kỳ vọng: `macro sensitivity=0.922 FAR/h=0.188`, exposure 185.0h. Nếu khác, **dừng lại và báo**,
-đừng chạy tiếp — nghĩa là bước di chuyển ở 0b sai hoặc checkpoint không phải cái đã sinh ra row 22.
+Kỳ vọng, khớp từng chữ số với row 22:
+
+```
+macro sensitivity=0.922 FAR/h=0.188 exposure=185.0h
+delay mean=17.06s = floor 13.00s (window 4.00 + run-length 2.00 + EMA 7.00) + model reaction 4.06s
+```
+
+Nếu sensitivity và FAR khớp mà delay lệch vài phần trăm giây, đó là lưới ngưỡng sai — luôn dùng
+`postprocess=hysteresis_widegrid`, đừng gõ tay lưới. Gõ tay chính là cách sinh ra sai lệch đó: một
+lần thử với lưới dựng lại bằng tay cho sens 0.9218 và FAR 0.1878 (khớp tuyệt đối) nhưng delay
+17.01s thay vì 17.06s, vì bốn điểm lưới thừa làm một fold chọn ngưỡng lệch một nấc.
+
+`evaluate.py` sẽ kết thúc bằng `RuntimeError` vì `profile=server` bật `enforce_gates` và các cổng
+v1 vẫn fail. Đó là hành vi bình thường, không phải hỏng — report đã ghi và mọi dòng log đã in
+trước khi nó raise.
 
 ---
 
@@ -127,14 +146,13 @@ checkpoint đã lưu — không train lại**. Chạy cả hai trên cả hai ki
 ```bash
 for model in wearseizure1d wearseizure1d_k5only; do
   for seed in 0 1 2; do
-    # --- row 22: run_length=3, ema_alpha=0.125 (mặc định), lưới rộng ---
+    # --- row 22: run_length=3, ema_alpha=0.125 (mặc định của cấu hình lưới rộng) ---
     python scripts/rethreshold.py profile=server data=chbmit \
-      model=$model seed=$seed \
-      'postprocess.threshold_search.on_grid=[0.02,0.05,0.08,0.10,0.15,0.20,0.25,0.30,0.35,0.40,0.45,0.50,0.55,0.60,0.65,0.70,0.75,0.80]' \
-      'postprocess.threshold_search.off_grid=[0.01,0.02,0.05,0.10,0.15,0.20,0.25,0.30,0.35,0.40,0.45,0.50]'
+      model=$model seed=$seed postprocess=hysteresis_widegrid
   done
   echo "=== $model @ row-22 postprocess ==="
-  python scripts/evaluate.py profile=server data=chbmit model=$model 'train.seeds=[0,1,2]'
+  python scripts/evaluate.py profile=server data=chbmit model=$model \
+    postprocess=hysteresis_widegrid 'train.seeds=[0,1,2]'
 done
 ```
 
@@ -143,16 +161,15 @@ Chép kết quả về, **rồi** chạy cấu hình row 24 (nó ghi đè cùng 
 ```bash
 for model in wearseizure1d wearseizure1d_k5only; do
   for seed in 0 1 2; do
-    # --- row 24: run_length=2, ema_alpha=0.25 ---
+    # --- row 24: cùng lưới, run_length=2, ema_alpha=0.25 ---
     python scripts/rethreshold.py profile=server data=chbmit \
-      model=$model seed=$seed \
-      postprocess.run_length=2 postprocess.ema_alpha=0.25 \
-      'postprocess.threshold_search.on_grid=[0.02,0.05,0.08,0.10,0.15,0.20,0.25,0.30,0.35,0.40,0.45,0.50,0.55,0.60,0.65,0.70,0.75,0.80]' \
-      'postprocess.threshold_search.off_grid=[0.01,0.02,0.05,0.10,0.15,0.20,0.25,0.30,0.35,0.40,0.45,0.50]'
+      model=$model seed=$seed postprocess=hysteresis_widegrid \
+      postprocess.run_length=2 postprocess.ema_alpha=0.25
   done
   echo "=== $model @ row-24 postprocess ==="
   python scripts/evaluate.py profile=server data=chbmit model=$model \
-    postprocess.run_length=2 postprocess.ema_alpha=0.25 'train.seeds=[0,1,2]'
+    postprocess=hysteresis_widegrid postprocess.run_length=2 postprocess.ema_alpha=0.25 \
+    'train.seeds=[0,1,2]'
 done
 ```
 
@@ -164,7 +181,7 @@ kể cả khi lệnh `evaluate` thiếu override — nhưng cứ truyền vào c
 Không đổi kết quả, chỉ đổi bảng chấm — và nó áp quy tắc worst-patient ≥5 cơn, thứ chưa ai đo:
 
 ```bash
-python scripts/evaluate.py profile=server data=chbmit \
+python scripts/evaluate.py profile=server data=chbmit postprocess=hysteresis_widegrid \
   eval.gates_path=configs/eval/gates_v2_proposed.yaml 'train.seeds=[0,1,2]'
 ```
 

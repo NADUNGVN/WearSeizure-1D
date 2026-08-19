@@ -84,6 +84,43 @@ công cụ kế toán, không phải bất biến vật lý** — chỉ tổng d
 chết), nên **không thể khẳng định row 24 > row 22**. Lever L7 giờ là điều kiện chặn cho mọi so sánh
 trong nhóm này.
 
+### Provenance: which SERVER-02 run produced which row
+
+Recovered from `.hydra/overrides.yaml` in `$WEARSEIZURE_ARTIFACTS_DIR/runs/` on 08-19, because
+none of it was recorded anywhere in the repository. Rows 21-26 all share **one** set of 66
+checkpoints (`train.py`, run `07-16-16`, `train.pretrain.enabled=true train.force_retrain=true`);
+every later row is a `rethreshold.py` pass over those same checkpoints, so they differ only in
+post-processing.
+
+| Run directory | Overrides beyond `profile=server data=chbmit` | Row |
+|---|---|---|
+| `2026-08-17_07-16-16` train | `train.pretrain.enabled=true train.force_retrain=true` | L1 training for rows 21-26 |
+| `2026-08-17_11-03-24` eval | none (default grid, `on_grid` floor 0.20) | **21** |
+| `2026-08-17_11-54-01` → `12-23-46` | wide grid, `run_length=3`, `ema_alpha=0.125` | **22** |
+| `2026-08-17_12-30-57` → `12-36-41` | wide grid, `run_length=1`, `ema_alpha=0.5` | **23** |
+| `2026-08-17_13-04-49` → `13-10-23` | wide grid, `run_length=2`, `ema_alpha=0.25` | **24** |
+| `2026-08-17_13-10-30` → `13-16-02` | wide grid, `run_length=1`, `ema_alpha=0.25` | **25** |
+| `2026-08-17_13-16-08` → `13-21-32` | wide grid, `run_length=2`, `ema_alpha=0.5` | **26** |
+
+The "wide grid" is now a committed, named config, `configs/postprocess/hysteresis_widegrid.yaml`,
+rather than a command-line override that survives only in a gitignored directory:
+
+```
+on_grid:  [0.02, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.60, 0.70, 0.80]
+off_grid: [0.01, 0.02, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50]
+```
+
+**Row 22 was reproduced from the saved checkpoints on 08-19**, after the artifacts were migrated
+into the new `seed<N>/` layout: sensitivity 0.9218, FAR 0.1878/h, delay median 13.00s, worst-patient
+sensitivity 0.3333, worst-patient FAR 0.6182, exposure 185.0h — every one an exact match. A first
+attempt using a hand-reconstructed grid (four extra points) matched sensitivity and FAR exactly but
+gave delay mean 17.01s instead of 17.06s, one fold having picked a threshold one notch away. That
+0.05s is the entire practical argument for committing the grid instead of retyping it.
+
+Note that the directory `wearseizure1d/patient_specific_loso_edf/w4s_stride1s/` does **not** hold
+row 22: each `rethreshold.py` pass overwrites the same `*.metrics.json`, so it holds row 26, the
+last one run. Row 22 survives separately in `row22_backup/`.
+
 Row 11 and row 17/12 are duplicates of the same underlying run (kept separate because they were reported to me at different points for different reasons — row 11 as the fd-crash diagnosis, row 17 as part of the 4-way kernel ablation).
 
 ## 3. Per-patient failure notes (from `failure_analysis.py`, 08-15 23:41, w4s_stride1s, 60-epoch checkpoints)
