@@ -47,6 +47,7 @@ def load_edf_record(
     seizure_events: list[tuple[float, float]],
     annotation_source: str = "public_chbmit",
     channel_name: str | None = None,
+    raw_sha256: str | None = None,
 ) -> EEGRecord:
     """Load a single channel (per Appendix A) from a real CHB-MIT EDF file.
 
@@ -87,6 +88,10 @@ def load_edf_record(
         duration_sec=len(signal) / float(fs_hz),
         annotation_source=annotation_source,
         seizure_events=events,
-        raw_sha256=sha256_of_file(edf_path),
+        # Hashing a ~50MB EDF is the most expensive part of building a
+        # manifest row. The lever-L5 pre-training manifest emits one row per
+        # (EDF, wearable position), so the caller passes the hash it already
+        # computed for that file rather than paying for it four times over.
+        raw_sha256=sha256_of_file(edf_path) if raw_sha256 is None else raw_sha256,
     )
     return EEGRecord(meta=meta, signal=signal)

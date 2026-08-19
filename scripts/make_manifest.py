@@ -27,6 +27,7 @@ from wearseizure.data.manifest import (
     save_manifest,
 )
 from wearseizure.utils.env import bootstrap_env
+from wearseizure.utils.hashing import sha256_of_file
 from wearseizure.utils.logging import get_logger
 from wearseizure.utils.paths import ensure_dir
 from wearseizure.utils.profile_guard import check_profile_data_pairing
@@ -108,6 +109,7 @@ def _build_chbmit_pretrain_manifest(raw_dir: str, annotation_source: str, channe
                 log.warning(f"{edf_path} listed in summary but missing on disk, skipping")
                 continue
             labels = {lbl.strip().upper() for lbl in edf_channel_labels(str(edf_path))}
+            file_sha256 = sha256_of_file(str(edf_path))
             for channel in channels:
                 if channel.upper() not in labels:
                     skipped[channel] = skipped.get(channel, 0) + 1
@@ -123,6 +125,7 @@ def _build_chbmit_pretrain_manifest(raw_dir: str, annotation_source: str, channe
                     seizure_events=events,
                     annotation_source=annotation_source,
                     channel_name=channel,
+                    raw_sha256=file_sha256,
                 )
                 records.append(record.meta)
     if skipped:
