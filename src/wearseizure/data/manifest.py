@@ -32,6 +32,30 @@ CHBMIT_CHANNEL_MAP: dict[str, list[str]] = {
 }
 
 
+# The four wearable electrode positions, in the order a pre-training corpus
+# should sweep them. Every standard CHB-MIT montage carries all four.
+CHBMIT_WEARABLE_CHANNELS: tuple[str, ...] = tuple(CHBMIT_CHANNEL_MAP)
+
+# Cases that are the SAME PERSON recorded twice. PhysioNet's CHB-MIT
+# documentation states that chb21 was obtained 1.5 years after chb01 from the
+# same female subject. Holding out chb01 while pre-training on chb21 (or the
+# reverse) would put that person's own recordings in their initialisation --
+# exactly the leak `cohort_pretrain_fold` exists to prevent, and one that only
+# appears once the pre-training corpus grows past the 13 evaluation cases.
+CHBMIT_SAME_PATIENT_GROUPS: tuple[frozenset[str], ...] = (
+    frozenset({"chb01", "chb21"}),
+)
+
+
+def subjects_sharing_identity(subject_id: str) -> frozenset[str]:
+    """Every case id that is the same human being as `subject_id`, including
+    itself. Used to widen the pre-training exclusion beyond a string match."""
+    for group in CHBMIT_SAME_PATIENT_GROUPS:
+        if subject_id in group:
+            return group
+    return frozenset({subject_id})
+
+
 def subject_to_channel(subject_id: str) -> str:
     for channel, subjects in CHBMIT_CHANNEL_MAP.items():
         if subject_id in subjects:
@@ -39,6 +63,19 @@ def subject_to_channel(subject_id: str) -> str:
     raise KeyError(
         f"{subject_id!r} is not one of the 13 single-channel-eligible CHB-MIT cases"
     )
+
+
+def is_evaluation_case(subject_id: str) -> bool:
+    """True for the 13 Appendix-A cases the protocol evaluates on.
+
+    Lever L5 widens the PRE-TRAINING corpus to the rest of CHB-MIT while
+    leaving evaluation untouched: the 13-case restriction comes from Chung et
+    al. 2024 having clinically confirmed that seizure onset is observable from
+    one specific wearable position in those cases, which is a requirement for
+    *scoring* a single-channel detector, not for teaching it what ictal EEG
+    looks like.
+    """
+    return any(subject_id in subjects for subjects in CHBMIT_CHANNEL_MAP.values())
 
 
 @dataclass(frozen=True)

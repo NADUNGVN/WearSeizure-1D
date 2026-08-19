@@ -50,5 +50,12 @@ def load_records_from_manifest(
                 edf_id=row["edf_id"],
                 seizure_events=[(e.onset_sec, e.offset_sec) for e in events],
                 annotation_source=row["annotation_source"],
+                # Take the channel from the manifest row rather than
+                # re-deriving it. For the 13 evaluation cases this is the same
+                # Appendix A position that was written there in the first
+                # place; for lever-L5 pre-training-only cases there is no
+                # Appendix A entry to re-derive, and the same EDF may appear
+                # once per wearable position.
+                channel_name=row["channel_name"],
             )
     return records

@@ -50,7 +50,12 @@ import torch
 from torch.utils.data import DataLoader
 
 from wearseizure.data.dataset import build_fold_datasets
-from wearseizure.data.manifest import hash_manifest
+from wearseizure.data.loader import load_records_from_manifest
+from wearseizure.data.manifest import (
+    hash_manifest,
+    load_manifest,
+    subjects_sharing_identity,
+)
 from wearseizure.data.records import EEGRecord
 from wearseizure.data.sampler import make_class_balanced_sampler
 from wearseizure.data.splits import Fold, validate_fold
@@ -61,11 +66,74 @@ from wearseizure.utils.seeding import rng_for
 log = get_logger(__name__)
 
 
+def load_pretrain_corpus(cfg, log) -> tuple[pd.DataFrame | None, dict[str, EEGRecord]]:
+    """Lever L5: the extra pre-training-only manifest and its signals.
+
+    Returns `(None, {})` unless `train.pretrain.use_wider_corpus` is on, so the
+    default path allocates nothing and behaves exactly as before.
+
+    The records have to be loaded here rather than left to the caller because
+    `build_fold_datasets` resolves every `edf_id` in the fold through the
+    `records` dict; a manifest row whose signal is missing is a KeyError, not a
+    smaller cohort.
+    """
+    pretrain_cfg = cfg.train.get("pretrain", {})
+    if not pretrain_cfg.get("use_wider_corpus", False):
+        return None, {}
+
+    path = cfg.data.get("pretrain_manifest_path")
+    if not path:
+        raise ValueError(
+            "train.pretrain.use_wider_corpus=true but data.pretrain_manifest_path is unset "
+            "(it is only defined for data=chbmit)"
+        )
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found -- re-run scripts/make_manifest.py profile=server data=chbmit "
+            "to build the lever-L5 pre-training manifest"
+        )
+    df = load_manifest(str(path))
+    records = load_records_from_manifest(df, raw_dir=cfg.data.raw_dir)
+    log.info(
+        f"lever L5: pre-training corpus widened with {len(df)} rows from "
+        f"{df['subject_id'].nunique()} non-evaluation case(s) "
+        f"({sorted(df['subject_id'].unique())}), "
+        f"{df['duration_sec'].sum() / 3600:.1f}h of single-channel signal, "
+        f"positions {sorted(df['channel_name'].unique())}"
+    )
+    return df, records
+
+
+def build_cohort_manifest(
+    manifest_df: pd.DataFrame,
+    extra_manifest_df: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """The pool a cohort initialisation may be trained on.
+
+    With `extra_manifest_df` this is lever L5: the evaluation manifest (13
+    Appendix-A cases) plus the pre-training-only CHB-MIT cases produced by
+    `scripts/make_manifest.py`. Evaluation still runs off `manifest_df` alone --
+    `data/splits.py` never sees this frame -- so widening the corpus cannot
+    change what the protocol scores.
+    """
+    if extra_manifest_df is None or extra_manifest_df.empty:
+        return manifest_df
+    overlap = set(manifest_df["edf_id"]) & set(extra_manifest_df["edf_id"])
+    if overlap:
+        raise ValueError(
+            f"pre-training manifest reuses {len(overlap)} edf_id(s) from the evaluation "
+            f"manifest, e.g. {sorted(overlap)[:5]} -- ids must be disjoint"
+        )
+    return pd.concat([manifest_df, extra_manifest_df], ignore_index=True)
+
+
 def cohort_pretrain_fold(
     manifest_df: pd.DataFrame,
     held_out_subject: str,
     seed: int,
     val_subject_fraction: float = 0.2,
+    extra_manifest_df: pd.DataFrame | None = None,
 ) -> Fold:
     """A fold whose train/val partitions cover every subject EXCEPT
     `held_out_subject`, and whose test partition is empty.
@@ -78,12 +146,18 @@ def cohort_pretrain_fold(
     every EDF it is given, and the held-out subject's signals are not needed
     here. Including them would copy ~1/13 of the corpus 13 times for nothing.
     """
-    manifest_hash = hash_manifest(manifest_df)
-    subjects = sorted(manifest_df["subject_id"].unique())
+    cohort_df = build_cohort_manifest(manifest_df, extra_manifest_df)
+    manifest_hash = hash_manifest(cohort_df)
+    subjects = sorted(cohort_df["subject_id"].unique())
     if held_out_subject not in subjects:
         raise ValueError(f"subject {held_out_subject!r} not in manifest (have {subjects})")
 
-    remaining = [s for s in subjects if s != held_out_subject]
+    # Exclude every case that IS this person, not just the matching id string.
+    # chb21 is chb01 recorded 1.5 years later; with only the 13 evaluation
+    # cases in play that distinction never mattered, because chb21 was not in
+    # the manifest at all. Lever L5 puts it there.
+    excluded = subjects_sharing_identity(held_out_subject)
+    remaining = [s for s in subjects if s not in excluded]
     if len(remaining) < 2:
         raise ValueError(
             f"cohort pre-training for {held_out_subject!r} needs >=2 other subjects "
@@ -96,8 +170,8 @@ def cohort_pretrain_fold(
     val_subjects = {remaining[i] for i in val_idx}
     train_subjects = [s for s in remaining if s not in val_subjects]
 
-    val_ids = frozenset(manifest_df.loc[manifest_df["subject_id"].isin(val_subjects), "edf_id"])
-    train_ids = frozenset(manifest_df.loc[manifest_df["subject_id"].isin(train_subjects), "edf_id"])
+    val_ids = frozenset(cohort_df.loc[cohort_df["subject_id"].isin(val_subjects), "edf_id"])
+    train_ids = frozenset(cohort_df.loc[cohort_df["subject_id"].isin(train_subjects), "edf_id"])
 
     fold = Fold(
         fold_id=f"pretrain__{held_out_subject}",
@@ -112,13 +186,13 @@ def cohort_pretrain_fold(
     # Assert the exclusion instead of trusting the filter above: this is the
     # one property that makes cohort pre-training leakage-safe at all.
     held_out_ids = frozenset(
-        manifest_df.loc[manifest_df["subject_id"] == held_out_subject, "edf_id"]
+        cohort_df.loc[cohort_df["subject_id"].isin(excluded), "edf_id"]
     )
     contaminated = held_out_ids & (fold.train_edf_ids | fold.val_edf_ids)
     if contaminated:
         raise ValueError(
-            f"cohort pre-training for {held_out_subject!r} would train on that subject's own "
-            f"EDF(s) {sorted(contaminated)} -- refusing"
+            f"cohort pre-training for {held_out_subject!r} would train on recordings of that "
+            f"same person ({sorted(excluded)}): EDF(s) {sorted(contaminated)} -- refusing"
         )
     return fold
 
@@ -148,6 +222,7 @@ def get_or_train_cohort_init(
     prefetch_factor: int = 4,
     compile_mode: str | None = None,
     force: bool = False,
+    extra_manifest_df: pd.DataFrame | None = None,
 ) -> dict:
     """Return a cohort-pre-trained `state_dict` for `held_out_subject`,
     training and caching it on first use.
@@ -157,17 +232,37 @@ def get_or_train_cohort_init(
     impossible because `cache_dir` is keyed by model and window name.
     """
     ckpt_path, meta_path = _cache_paths(cache_dir, held_out_subject)
+    fold = cohort_pretrain_fold(
+        manifest_df, held_out_subject, seed, val_subject_fraction, extra_manifest_df
+    )
     if ckpt_path.exists() and not force:
-        log.info(f"cohort pre-train: reusing cached init for {held_out_subject} <- {ckpt_path}")
-        return torch.load(ckpt_path, map_location="cpu", weights_only=True)
+        # The cache is keyed by (model, window, seed, held-out subject) via the
+        # directory, but NOT by which corpus it was pre-trained on. Turning
+        # lever L5 on or changing `data.pretrain_channels` produces a different
+        # cohort and must not silently reuse the narrower initialisation --
+        # that would look like "L5 did nothing" while L5 never actually ran.
+        cached_hash = None
+        if meta_path.exists():
+            try:
+                cached_hash = json.loads(meta_path.read_text(encoding="utf-8")).get("manifest_hash")
+            except json.JSONDecodeError:
+                cached_hash = None
+        if cached_hash == fold.manifest_hash:
+            log.info(f"cohort pre-train: reusing cached init for {held_out_subject} <- {ckpt_path}")
+            return torch.load(ckpt_path, map_location="cpu", weights_only=True)
+        log.warning(
+            f"cohort pre-train: cached init for {held_out_subject} was built from a different "
+            f"corpus (cached manifest_hash={cached_hash}, now {fold.manifest_hash}); re-training it"
+        )
 
-    fold = cohort_pretrain_fold(manifest_df, held_out_subject, seed, val_subject_fraction)
     datasets, _band, _normalizer = build_fold_datasets(records, fold, window_s, stride_s)
     train_ds, val_ds = datasets["train"], datasets["val"]
+    n_extra = 0 if extra_manifest_df is None else len(extra_manifest_df)
     log.info(
         f"cohort pre-train for {held_out_subject}: "
         f"{len(fold.train_edf_ids)} train EDFs / {len(fold.val_edf_ids)} val EDFs, "
         f"{len(train_ds)} train windows / {len(val_ds)} val windows"
+        + (f" (lever L5: {n_extra} extra pre-training-only rows in the pool)" if n_extra else "")
     )
 
     dl_kwargs = {
@@ -209,6 +304,7 @@ def get_or_train_cohort_init(
                 "n_val_edfs": len(fold.val_edf_ids),
                 "n_train_windows": len(train_ds),
                 "n_val_windows": len(val_ds),
+                "n_extra_pretrain_rows": n_extra,
                 "best_val_loss": result.best_val_loss,
                 "epochs_run": len(result.history),
                 "epochs_max": epochs,

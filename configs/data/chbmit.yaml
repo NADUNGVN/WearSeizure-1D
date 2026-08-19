@@ -11,3 +11,29 @@ channel_map:
   Fp2-F4: []
 raw_dir: ${profile.data_root}
 manifest_path: ${profile.artifacts_dir}/manifest/chbmit_manifest.csv
+
+# --- Lever L5: wider pre-training corpus ------------------------------------
+# The 13-case restriction above exists because Chung et al. 2024 clinically
+# confirmed that seizure onset is observable from one specific wearable
+# position in exactly those cases. That is a requirement for SCORING a
+# single-channel detector, not for teaching it what ictal EEG looks like -- so
+# pre-training (lever L1, which produced the largest jump on record:
+# 0.8806 -> 0.9218) may draw on the rest of CHB-MIT while evaluation stays
+# untouched at 13 cases / 66 folds / 185.0h.
+#
+# Built by scripts/make_manifest.py alongside the evaluation manifest; used
+# only when train.pretrain.use_wider_corpus=true.
+pretrain_manifest_path: ${profile.artifacts_dir}/manifest/chbmit_pretrain_manifest.csv
+
+# Which wearable positions to take from each pre-training-only case. Those
+# cases have no Appendix A position assigned, so there is no single "correct"
+# channel to pick; taking all four makes the pre-trained representation
+# position-agnostic, which matches a wearable whose electrode sits at one of
+# these four spots.
+#
+# The trade-off to watch, and the first ablation to run if L5 disappoints: a
+# seizure that is not visible at a given position still labels its windows
+# ictal there, so more positions also means more label noise. Narrow the list
+# (e.g. data.pretrain_channels=[P8-O2]) to test that. Memory also scales with
+# this list -- four positions is roughly four times the resident signal.
+pretrain_channels: [Fp1-F3, P7-O1, P8-O2, Fp2-F4]

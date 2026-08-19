@@ -24,12 +24,29 @@ def _find_channel_index(edf_labels: list[str], channel_name: str) -> int:
     raise KeyError(f"channel {channel_name!r} not found among EDF labels {edf_labels}")
 
 
+def edf_channel_labels(edf_path: str) -> list[str]:
+    """Signal labels of an EDF, without reading any sample data.
+
+    Used when building the lever-L5 pre-training corpus: cases outside the 13
+    evaluation cases have no Appendix-A position assigned, so which of the four
+    wearable positions they actually carry has to be read off the file.
+    """
+    import pyedflib
+
+    reader = pyedflib.EdfReader(str(edf_path))
+    try:
+        return list(reader.getSignalLabels())
+    finally:
+        reader.close()
+
+
 def load_edf_record(
     edf_path: str,
     subject_id: str,
     edf_id: str,
     seizure_events: list[tuple[float, float]],
     annotation_source: str = "public_chbmit",
+    channel_name: str | None = None,
 ) -> EEGRecord:
     """Load a single channel (per Appendix A) from a real CHB-MIT EDF file.
 
@@ -39,7 +56,13 @@ def load_edf_record(
     """
     import pyedflib
 
-    channel_name = subject_to_channel(subject_id)
+    # `channel_name=None` keeps the original behaviour: look the position up in
+    # the Appendix A map. It is passed explicitly for pre-training-only cases,
+    # which are not in that map at all (see manifest.is_evaluation_case), and by
+    # `loader.load_records_from_manifest`, which reads it back off the manifest
+    # row that recorded it.
+    if channel_name is None:
+        channel_name = subject_to_channel(subject_id)
     reader = pyedflib.EdfReader(str(edf_path))
     try:
         labels = reader.getSignalLabels()
