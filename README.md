@@ -98,6 +98,33 @@ Checklist:
 5. Pull result summaries back with `scripts/pull_results.sh` for local analysis in `notebooks/`.
 6. Do not commit checkpoints, raw `.edf` files, or generated splits — see `.gitignore`.
 
+**One-time migration.** Per-fold artifacts now live one level deeper, under
+`<model>/<split>/<window>/seed<N>/`, so that multi-seed runs cannot overwrite each other.
+Existing checkpoints from before this change sit in the `<window>` directory; adopt them as seed 0
+rather than re-training 66 folds:
+
+```bash
+cd "$WEARSEIZURE_ARTIFACTS_DIR/wearseizure1d/patient_specific_loso_edf/w4s_stride1s"
+mkdir -p seed0 && mv ./*.pt ./*.json seed0/
+```
+
+`train.py` / `evaluate.py` print this exact command if they find artifacts in the old location.
+
+## Runtime switches worth knowing
+
+| Override | What it does |
+|---|---|
+| `train.seeds=[0,1,2]` | Lever L7. Trains every fold once per seed into its own `seed<N>/`; `evaluate.py` then reports mean ± std and gates the **mean**. Default `null` = one run at `cfg.seed`, exactly as every number in `docs/EXPERIMENT_LOG_G1a.md` was produced. |
+| `train.pretrain.enabled=true` | Lever L1. Cohort pre-training then per-patient fine-tuning — the change that produced the largest jump on record (0.8806 → 0.9218). |
+| `train.pretrain.use_wider_corpus=true` | Lever L5. Also pre-trains on the CHB-MIT cases the protocol does *not* evaluate on. Evaluation stays at 13 cases / 66 folds / 185.0h; only the pre-training pool grows. Requires `make_manifest.py` to have been re-run. |
+| `eval.gates_path=configs/eval/gates_v2_proposed.yaml` | Score against the proposed v2 gate table instead of v1. |
+| `postprocess.objective=min_delay` | Spend surplus FAR budget on detection speed instead of sensitivity. |
+
+`scripts/paired_bootstrap.py A_DIR B_DIR --all-metrics` compares two runs with a patient-clustered
+paired bootstrap, from saved `*.metrics.json` only — no GPU, no re-training. Use it instead of
+comparing point estimates: the three best configurations to date are ~1.4pp apart on 77 seizures,
+which is about one seizure.
+
 ## Repository layout
 
 ```

@@ -958,6 +958,64 @@ Worst-patient rơi vào **chb17 với 3 cơn** (1/3 = 0.3333), tức thuộc di�
 `ema_alpha` 0.125→0.5 đưa sàn từ 13.0 xuống **5.0 s**. Nếu phần dư model giữ nguyên ở 4.06 s thì
 delay trung bình rơi về **~9.1 s** và trung vị về ~5 s — cũng chỉ cần `rethreshold`, không train lại.
 
+### 14.2d Trạng thái hiện thực hoá — L5 và L7 đã cài, chưa chạy trên dữ liệu thật
+
+Cùng nguyên tắc như L1: **mặc định không đổi hành vi**, mọi khả năng mới phải bật rõ ràng, và mọi
+con số trong `EXPERIMENT_LOG_G1a.md` vẫn tái lập được.
+
+**L7 — nhiều seed.** `train.seeds` tồn tại từ commit đầu tiên nhưng không nơi nào đọc; `train.py`
+chỉ dùng `cfg.seed`. Nay đã nối (`utils/paths.seeds_from_cfg`). Artifacts của mỗi fold chuyển
+xuống sâu thêm một cấp, `<model>/<split>/<window>/seed<N>/`, để hai seed không ghi đè
+`<fold_id>.metrics.json` của nhau — cùng lý do `window.name` đã nằm trong đường dẫn từ commit
+`5564f9f`. Artifacts cũ nằm ở thư mục cha; `train.py` và `evaluate.py` in ra đúng lệnh `mv` để nhận
+chúng làm seed 0 thay vì train lại 66 fold. `evaluate.py` gộp qua các seed thành mean ± std và
+**chấm cổng trên giá trị trung bình**, không phải trên seed tốt nhất — chọn seed tốt nhất chính là
+lỗi chọn-trên-dữ liệu-đánh-giá mà `PROTOCOL.md` cấm với ngưỡng.
+
+**`scripts/paired_bootstrap.py`** *(mới)* — so hai cấu hình bất kỳ từ `*.metrics.json` đã lưu,
+không train lại, không cần GPU. Lõi thống kê là `eval/bootstrap.paired_cluster_bootstrap`: lấy mẫu
+lặp **theo bệnh nhân**, và tính lại cả hai phía trên đúng danh sách bệnh nhân đó trong mỗi lần lặp,
+nên hai phía luôn ghép cặp. Thư mục đưa vào có thể là một `seed<N>/` hoặc thư mục cha chứa nhiều
+seed — trường hợp sau được trung bình theo seed trước, để một cấu hình 3 seed vẫn so sánh được với
+một cấu hình 1 seed.
+
+**L5 — corpus tiền huấn luyện mở rộng.** Giới hạn 13 case đến từ việc Chung 2024 đã xác nhận lâm
+sàng rằng khởi phát cơn quan sát được từ một vị trí điện cực cụ thể ở đúng những case đó. Đó là yêu
+cầu để **chấm điểm** một bộ phát hiện một kênh, không phải để **dạy** nó ictal EEG trông thế nào.
+`make_manifest.py` nay dựng thêm một manifest thứ hai gồm các case CHB-MIT *không* nằm trong tập
+đánh giá, một dòng cho mỗi (EDF × vị trí điện cực); `data/splits.py` không bao giờ thấy manifest
+này, nên **tập đánh giá vẫn đúng 13 case / 66 fold / 185.0h**.
+
+Một rủi ro rò rỉ mới xuất hiện cùng L5 và đã được xử lý: **chb21 là chb01 ghi lại sau 1.5 năm**
+(tài liệu CHB-MIT trên PhysioNet). Khi tập tiền huấn luyện chỉ có 13 case thì chb21 không tồn tại
+nên so sánh chuỗi id là đủ; với L5 thì không còn đủ. `manifest.subjects_sharing_identity` mở rộng
+phép loại trừ theo **danh tính con người**, và `cohort_pretrain_fold` vẫn *khẳng định* điều đó bằng
+raise chứ không tin. `tests/unit/test_pretrain_wider_corpus.py` kiểm tra vòng qua cả 13 case.
+
+Cache init cũng được bảo vệ: mỗi init lưu kèm hash của corpus đã sinh ra nó, và bị train lại nếu
+corpus đổi. Nếu không, bật L5 lên sẽ lặng lẽ dùng lại init hẹp và cho ra kết quả trông như "L5
+không có tác dụng" trong khi L5 chưa hề chạy.
+
+Một lựa chọn cần theo dõi: `data.pretrain_channels` mặc định lấy **cả bốn** vị trí điện cực cho mỗi
+case ngoài tập đánh giá, vì những case đó không có vị trí nào được xác nhận lâm sàng, và một biểu
+diễn không phụ thuộc vị trí đúng với một thiết bị đeo mà điện cực có thể nằm ở một trong bốn chỗ.
+Đánh đổi: một cơn không quan sát được ở vị trí X vẫn gán nhãn ictal cho các cửa sổ ở X, tức **thêm
+nhiễu nhãn**. Nếu L5 không cho cải thiện, phép thử đầu tiên là thu hẹp danh sách này
+(`data.pretrain_channels=[P8-O2]`), chứ không phải bỏ L5.
+
+**Hai việc dọn dẹp ở §9 đã xong.** Bộ gate không còn bị hardcode trong `evaluate.py` — chọn bằng
+`eval.gates_path`, nên bảng v2 chấm được mà không phải sửa mã. Và log 0 byte đã sửa: các logger của
+dự án đặt `propagate=False` cùng handler stdout riêng, nên bản ghi không bao giờ tới `FileHandler`
+mà Hydra gắn vào root logger; nay chúng propagate lên root và handler stdout dự phòng nằm ở root,
+nơi `dictConfig` của Hydra sẽ thay thế nó.
+
+**Cổng worst-patient nay chấm đúng người.** Trước đây `min_events_to_gate` chỉ *miễn trừ* cổng khi
+bệnh nhân tệ nhất có quá ít cơn — tức là không ai biết worst-patient thật sự trong nhóm đủ mẫu là
+bao nhiêu. Nay `worst_patient(per_patient, min_events=...)` báo cáo cả hai: giá trị tệ nhất toàn
+nhóm (không bao giờ bị giấu) *và* giá trị tệ nhất trong số bệnh nhân đủ cơn để một ngưỡng
+sensitivity có nghĩa — đó mới là giá trị được chấm. Các bệnh nhân dưới sàn được báo cáo kèm khoảng
+tin cậy nhị thức chính xác trong `report["small_sample_patients"]`.
+
 ### 14.3 Thứ tự đề xuất
 
 L1 trước tiên và một mình, để đo riêng tác dụng của nó — đây là thay đổi lớn nhất và cần biết nó
