@@ -141,3 +141,34 @@ def test_macro_and_micro_sensitivity_differ_when_patients_are_unbalanced(tmp_pat
     # patient dominates. Reporting only one of the two hides that difference.
     assert paired_bootstrap.statistic(per_patient, ids, "sensitivity_macro") == pytest.approx(0.75)
     assert paired_bootstrap.statistic(per_patient, ids, "sensitivity_micro") == pytest.approx(12 / 22)
+
+
+# --------------------------------------------------------------------------
+# Verdict direction. Getting this wrong turns a win into a loss in the one
+# line a reader actually looks at.
+# --------------------------------------------------------------------------
+
+
+def test_lower_is_better_metrics_credit_a_negative_delta_to_a():
+    # The real Phase 1 numbers: k5only FAR 0.2577/h vs default 0.3658/h, an
+    # interval that excludes zero. delta is A-B and therefore negative, which
+    # an unqualified `delta > 0` test reported as "B better".
+    assert paired_bootstrap.favours_a("far_per_hour_micro", -0.1081, False) == "A"
+    assert paired_bootstrap.favours_a("far_per_hour_micro", +0.1081, False) == "B"
+    assert paired_bootstrap.favours_a("delay_mean_s", +0.5163, False) == "B"
+    assert paired_bootstrap.favours_a("delay_mean_s", -0.5163, False) == "A"
+
+
+def test_higher_is_better_metrics_credit_a_positive_delta_to_a():
+    assert paired_bootstrap.favours_a("sensitivity_macro", +0.0115, False) == "A"
+    assert paired_bootstrap.favours_a("sensitivity_micro", -0.0043, False) == "B"
+
+
+def test_an_interval_containing_zero_favours_neither_whatever_the_sign():
+    for metric in paired_bootstrap.METRICS:
+        assert paired_bootstrap.favours_a(metric, +1.0, True) == "neither"
+        assert paired_bootstrap.favours_a(metric, -1.0, True) == "neither"
+
+
+def test_every_reported_metric_declares_a_direction():
+    assert set(paired_bootstrap.METRICS) == set(paired_bootstrap.METRIC_DIRECTION)

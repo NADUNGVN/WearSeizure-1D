@@ -35,7 +35,26 @@ import numpy as np
 from wearseizure.data.splits import subject_from_fold_id
 from wearseizure.eval.bootstrap import paired_cluster_bootstrap
 
-METRICS = ("sensitivity_macro", "sensitivity_micro", "far_per_hour_micro", "delay_mean_s")
+# Which way is "better" for each metric. Without this the verdict line reads the
+# sign of the difference literally and reports a genuine improvement as a loss,
+# which is exactly what happened on the first real Phase 1 result: k5only
+# reached FAR 0.2577/h against the default's 0.3658/h, with an interval that
+# excludes zero, and the script printed "B better".
+METRIC_DIRECTION = {
+    "sensitivity_macro": "higher_is_better",
+    "sensitivity_micro": "higher_is_better",
+    "far_per_hour_micro": "lower_is_better",
+    "delay_mean_s": "lower_is_better",
+}
+METRICS = tuple(METRIC_DIRECTION)
+
+
+def favours_a(metric: str, delta: float, ci_contains_zero: bool) -> str:
+    """Which configuration a difference favours: "A", "B", or "neither"."""
+    if ci_contains_zero:
+        return "neither"
+    ahead = delta > 0 if METRIC_DIRECTION[metric] == "higher_is_better" else delta < 0
+    return "A" if ahead else "B"
 
 
 def _seed_dirs(root: Path) -> list[Path]:
@@ -160,19 +179,20 @@ def main() -> None:
         contains_zero = result["ci_low"] <= 0 <= result["ci_high"]
         result["ci_contains_zero"] = bool(contains_zero)
         out["results"][metric] = result
-        if contains_zero:
-            verdict = "indistinguishable"
-        else:
-            verdict = "A better" if result["delta"] > 0 else "B better"
+        direction = METRIC_DIRECTION[metric]
+        result["direction"] = direction
+        result["favours"] = favours_a(metric, result["delta"], contains_zero)
+        verdict = {"neither": "indistinguishable", "A": "A better", "B": "B better"}[result["favours"]]
+        arrow = "higher better" if direction == "higher_is_better" else "lower better"
         print(
-            f"{metric:22s} A={result['a']:.4f}  B={result['b']:.4f}  "
+            f"{metric:22s} ({arrow:13s}) A={result['a']:.4f}  B={result['b']:.4f}  "
             f"delta={result['delta']:+.4f}  "
             f"{100 * (1 - args.alpha):.0f}% CI [{result['ci_low']:+.4f}, {result['ci_high']:+.4f}]"
             f"  -> {verdict}"
         )
     print(
-        "\nNote: for far_per_hour_micro and delay_mean_s, lower is better, so a NEGATIVE "
-        "delta favours A."
+        "\n'delta' is always A minus B. The verdict already accounts for direction, so a "
+        "negative delta on a lower-is-better metric reads as 'A better'."
     )
 
     if args.json:
