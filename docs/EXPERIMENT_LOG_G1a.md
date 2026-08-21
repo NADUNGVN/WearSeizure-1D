@@ -123,6 +123,85 @@ last one run. Row 22 survives separately in `row22_backup/`.
 
 Row 11 and row 17/12 are duplicates of the same underlying run (kept separate because they were reported to me at different points for different reasons — row 11 as the fd-crash diagnosis, row 17 as part of the 4-way kernel ablation).
 
+## 2b. Phase 1 — the first results with error bars (rows 27-30, 08-20)
+
+Three seeds per configuration (lever L7), two architectures, both post-processing
+configurations. All from `scripts/run_phase1_server02.sh`; all share `postprocess=hysteresis_widegrid`.
+Values are **mean +/- sample std across 3 seeds**, copied verbatim from the `[3 seeds]` lines of
+`phase1_server02.log`.
+
+| # | Model | Postproc | Sensitivity | FAR/h | Delay mean | Delay median | Floor | Worst-pt sens (>=5 seizures) | Worst-pt FAR/h |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 27 | `wearseizure1d` | row22 cfg (L=3, a=.125) | 0.9175 ± 0.0171 | 0.2701 ± 0.0774 | 18.20 ± 1.20 | 14.33 | 13.0 | **0.9000 ± 0.0500** (chb15, 20 ev) | 0.8472 ± 0.2098 |
+| 28 | **`k5only`** | **row22 cfg** | **0.9358 ± 0.0304** | **0.2261 ± 0.0601** | 18.83 ± 0.69 | 15.33 | 13.0 | **0.8714 ± 0.0247** | 0.7785 ± 0.2860 |
+| 29 | `wearseizure1d` | row24 cfg (L=2, a=.25) | 0.9063 ± 0.0284 | 0.3406 ± 0.0972 | 16.94 ± 0.68 | 13.00 | 8.0 | 0.8190 ± 0.0330 | 1.1231 ± 0.4452 |
+| 30 | `k5only` | row24 cfg | 0.9179 ± 0.0391 | 0.2496 ± 0.0687 | 17.42 ± 1.18 | 13.67 | 8.0 | 0.8000 ± 0.0000 (chb08, 5 ev) | 0.8701 ± 0.3246 |
+
+Paired cluster bootstrap by patient, `k5only` vs `wearseizure1d`, on the **row 24** configuration
+(the one left on disk when the driver finished), 10 000 replicates:
+
+| Metric | k5only | default | delta | 95% CI | Verdict |
+|---|---:|---:|---:|---|---|
+| sensitivity_macro | 0.9179 | 0.9063 | +0.0115 | [-0.0256, +0.0579] | indistinguishable |
+| sensitivity_micro | 0.9134 | 0.9177 | -0.0043 | [-0.0286, +0.0343] | indistinguishable |
+| far_per_hour_micro | 0.2577 | 0.3658 | -0.1081 | [-0.2118, -0.0023] | **k5only better** |
+| delay_mean_s | 17.4455 | 16.9292 | +0.5163 | [-0.3261, +1.2446] | indistinguishable |
+
+(The verdict column was initially printed inverted for the two lower-is-better metrics; fixed in
+commit `a13539e`, and the FAR line reads as a k5only win.)
+
+### Three findings, two of which overturn earlier conclusions
+
+**1. The worst-patient gate was never failing. It was measuring chb17.**
+
+`worst_patient_sensitivity` sat at 0.3333 across 26 runs and was recorded as never cleared. Under
+the `min_events_to_gate: 5` rule it lands on a patient where a sensitivity threshold is actually
+expressible, and the picture reverses completely:
+
+| Config | Gated patient(s) across seeds | Worst-pt sens |
+|---|---|---:|
+| row 27 | chb15 (20 ev) x3 | **0.9000** |
+| row 28 | chb23 (7), chb03 (7), chb15 (20) | **0.8714** |
+| row 29 | chb23 (7), chb08 (5), chb08 (5) | 0.8190 |
+| row 30 | chb08 (5) x3 | 0.8000 |
+
+Rows 27 and 28 clear **0.85 — the original v1 minimum**, and row 27 reaches the v1 *target* of 0.90.
+The gate this project has been failing for its entire history was, in three of four configurations,
+already passed. This is exactly the argument of section 4 of `RESEARCH_REALITY_CHECK.md`, now
+measured rather than predicted.
+
+The honest caveat is large and must be stated in the paper: **6 of 13 patients are exempt** --
+chb02, chb04, chb07, chb11, chb17, chb22 all have fewer than 5 seizures. Only 7 patients are
+gateable at all. The exempt six are reported with exact binomial intervals in
+`report["small_sample_patients"]`, and their raw worst value is still carried as
+`worst_patient_sensitivity_all` (0.4444-0.6111 across these rows) so nothing is hidden.
+
+**2. "Row 24 beats row 22" was seed noise. With error bars the ranking flips.**
+
+Single-seed row 24 scored 0.9359 against row 22's 0.9218, and the log recorded row 24 as the "new
+reference configuration". Across three seeds:
+
+| Config | 3-seed mean | Single-seed value that was reported | Seed range |
+|---|---:|---:|---|
+| row 22 cfg, default | **0.9175** | 0.9218 | 0.8987 - 0.9321 |
+| row 24 cfg, default | **0.9063** | 0.9359 | 0.8800 - 0.9364 |
+
+Row 24's 0.9359 was the top of its own seed range -- the favourable draw. Its mean is 1.1pp *below*
+row 22's. The seed spread is 3-6pp, i.e. **two to four times the 1.4pp gap that was being ranked
+on**. Every ordering of rows 22-26 by point estimate should be treated as unsupported.
+
+**3. The row 22 configuration is the better operating point, not row 24.**
+
+For `k5only`, row 22 cfg dominates row 24 cfg on both axes at once: sensitivity 0.9358 vs 0.9179 and
+FAR 0.2261 vs 0.2496. The cost is the delay floor (13.0s vs 8.0s) and 1.4s of real delay
+(18.83 vs 17.42). Since `detection_delay_floor_s` is a constraint on the measurement setup rather
+than on the model, and the mean delay difference is small, row 22 cfg is the configuration to carry
+forward.
+
+Consequence for the architecture comparison: the paired bootstrap above was run on row 24 cfg, the
+weaker configuration for both models. It needs re-running on row 22 cfg -- `rethreshold` only, no
+training -- before the architecture question is settled.
+
 ## 3. Per-patient failure notes (from `failure_analysis.py`, 08-15 23:41, w4s_stride1s, 60-epoch checkpoints)
 
 Cohort mean segment AUROC: compact1d_7k 0.922, frontiers2d 0.937, wearseizure1d 0.909 (all across the same 66 folds).
