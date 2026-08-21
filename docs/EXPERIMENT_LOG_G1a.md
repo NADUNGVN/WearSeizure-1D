@@ -202,6 +202,58 @@ Consequence for the architecture comparison: the paired bootstrap above was run 
 weaker configuration for both models. It needs re-running on row 22 cfg -- `rethreshold` only, no
 training -- before the architecture question is settled.
 
+## 2c. Row 31 — the probe that killed the architecture claim (08-21)
+
+`scripts/run_phase2_probe.sh`: **`baseline_frontiers2d` WITH cohort pre-training**, seed 0, row 24
+post-processing config (L=2, a=0.25), same wide threshold grid as rows 27-30. One combination,
+~5h, run to answer one question before committing ~60h to the full grid.
+
+| # | Model | L1 | Seeds | Sensitivity | FAR/h | Delay mean | Floor | Model reaction |
+|---|---|---|---|---:|---:|---:|---:|---:|
+| 2 | `frontiers2d` | no | 1 | 0.8811 | 0.1432 | 23.40 | 13.0 | 10.40 |
+| 31 | **`frontiers2d`** | **yes** | 1 | **0.9705** | 0.3297 (micro) / 0.346 (macro) | **13.16** | 8.0 | **5.16** |
+| 30 | `k5only` | yes | 3 | 0.9179 ± 0.0391 | 0.2577 (micro) | 17.42 ± 1.18 | 8.0 | ~9.42 |
+| 28 | `k5only` | yes | 3 | 0.9358 ± 0.0304 | 0.2261 | 18.83 ± 0.69 | 13.0 | ~5.83 |
+
+Paired bootstrap, `k5only`+L1 (3 seeds) vs `frontiers2d`+L1 (1 seed), row 24 config both sides:
+
+| Metric | k5only | frontiers2d | delta | 95% CI | Verdict |
+|---|---:|---:|---:|---|---|
+| sensitivity_macro | 0.9179 | 0.9705 | -0.0526 | [-0.1317, +0.0185] | indistinguishable |
+| sensitivity_micro | 0.9134 | 0.9740 | -0.0606 | [-0.1178, -0.0051] | **frontiers2d better** |
+| far_per_hour_micro | 0.2577 | 0.3297 | -0.0721 | [-0.2129, +0.0599] | indistinguishable |
+| delay_mean_s | 17.4455 | 13.1600 | +4.2855 | [+1.5659, +7.0755] | **frontiers2d better** |
+
+### What this means
+
+**Cohort pre-training, not architecture, is what closes the single-channel gap.** L1 lifts
+`frontiers2d` by **8.9pp**, from 0.8811 to 0.9705 -- past the v1 gate of 0.970 that 26 runs had
+recorded as unreachable. Applied to `k5only` the same lever gives 0.9358. The Phase 1 conclusion
+that `k5only` leads was an artefact of comparing a pre-trained model against un-pre-trained
+baselines.
+
+The paper's thesis therefore changes. Not "this architecture detects better", but: cohort
+pre-training closes the gap, and `k5only` reaches a *nearby* operating point at **4.3x lower
+compute** (585,920 vs 2,523,328 MACs) -- an accuracy/compute trade-off, quantified, with the
+accelerator built for the efficient end of it. The compute side needs no new experiment; it is
+already measured.
+
+### Three reasons not to rewrite anything yet
+
+**1. Row 31 is ONE seed, and this log has just been burned by exactly that.** Row 24's 0.9359 was
+the top of its own seed range and its 3-seed mean came out 1.1pp *below* row 22's. `k5only`'s own
+single-seed maxima are 0.9577 (row 24 cfg) and 0.9621 (row 22 cfg) -- so a favourable draw can move
+a number by 4pp here. 0.9705 from one seed cannot carry a thesis change.
+
+**2. The comparison is not at matched FAR.** `frontiers2d`+L1 sits at FAR 0.3297/h while `k5only`
+sits at 0.2577/h. Part of that 5.3pp sensitivity gap was bought with false alarms, and how much is
+unknown until both are re-thresholded to the same FAR. This costs a `rethreshold` pass, no training.
+
+**3. `k5only` was measured on its weaker configuration.** Row 22 cfg gives it 0.9358, not 0.9179,
+and `frontiers2d`+L1 has never been run on row 22 cfg at all.
+
+None of these three requires retraining except the seeds.
+
 ## 3. Per-patient failure notes (from `failure_analysis.py`, 08-15 23:41, w4s_stride1s, 60-epoch checkpoints)
 
 Cohort mean segment AUROC: compact1d_7k 0.922, frontiers2d 0.937, wearseizure1d 0.909 (all across the same 66 folds).
