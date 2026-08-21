@@ -36,16 +36,36 @@ reproduction:
 # ---------------------------------------------------------------------------
 
 # v1: 0.970 / 0.985 / 0.990.
-# Changed because 0.990 (the v1 *stretch*) is still BELOW the baseline's
-# reported 0.9962, so clearing v1 would not demonstrate any accuracy
-# advantage -- while the leakage-safe protocol structurally produces lower
-# numbers than the leaky one it is compared against (Ali et al. 2024 measured
-# 91.88% -> 64.24% for the same system when leakage is removed).
-# Best real-data value at a valid FAR so far: 0.8806 (run #12/#17).
+#
+# REVISED UPWARDS from a first draft of 0.920/0.940/0.960. That draft justified
+# 0.920 on the grounds that it was the level already reached (row 22, 0.9218) --
+# which is reasoning backwards. What a threshold is set to has to be anchored in
+# what makes the result stand up in a benchmark table beside the published
+# literature, which reports 95-99%; how far away the current number sits decides
+# how much work remains, not where the bar goes. A table showing 0.92 next to
+# those figures does not survive review, however correct the accompanying
+# explanation of protocol differences is.
+#
+# So: minimum 0.950. Current best is 0.9179 macro (k5only, 3 seeds, Phase 1),
+# a gap of 3.2pp -- about 2.5 seizures out of 77 -- against five untried
+# training levers (L2, L3, L4, L5, L6). Not a research breakthrough away.
+#
+# Still below the v1 minimum of 0.970 for one reason only, and it is not
+# convenience: 0.970 was derived from Chung et al. 2024's 99.62%, measured with
+# 1-sample window stride, thresholds tuned on evaluation data, and ~91h of test
+# exposure. Ali et al. 2024 quantified what that inflation is worth -- the same
+# system scores 91.88% on a random split and 64.24% cross-subject. Chasing
+# 0.970 under a leakage-safe protocol at 185h is chasing a different quantity.
+#
+# NOTE on accuracy: it is deliberately absent from this file and must stay out
+# of the paper's comparison table. Ictal windows are ~0.5% of the corpus, so a
+# detector that never fires scores >99% accuracy. docs/PROTOCOL.md item 3
+# forbids exactly this. Report balanced accuracy, AUROC and AUPRC alongside
+# prevalence instead (eval/metrics_segment.py already computes all three).
 personalized_event_sensitivity:
-  minimum: 0.920
-  target: 0.940
-  stretch: 0.960
+  minimum: 0.950
+  target: 0.960
+  stretch: 0.970
 
 # v1: 0.30 / 0.20 / 0.10.
 # TIGHTENED. FAR is the project's strongest axis by a wide margin: the best
