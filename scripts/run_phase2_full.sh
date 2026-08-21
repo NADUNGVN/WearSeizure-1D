@@ -83,8 +83,12 @@ sweep_far_cap() {                # sweep_far_cap <model> <seed...>
 sweep_far_cap wearseizure1d_k5only 0 1 2
 sweep_far_cap baseline_frontiers2d 0          # only seed 0 has L1 so far
 
+# Summary goes to a SEPARATE file. `grep "$LOG" | tee -a "$LOG"` appends every
+# matching line back into the file it just read, doubling them -- which silently
+# breaks any later `grep -c` used to track progress.
 say "STAGE A done. The comparison to read: sensitivity of each model at EQUAL test FAR."
-grep -E "macro sensitivity|STAGE A evaluate" "$LOG" | tail -40 | tee -a "$LOG"
+grep -E "macro sensitivity|STAGE A evaluate" "$LOG" | tail -40 > "$ART/phase2_stageA_summary.txt"
+say "stage A summary -> $ART/phase2_stageA_summary.txt"
 
 # ===========================================================================
 # STAGE B -- error bars for the L1 arm of every architecture (~50h)
