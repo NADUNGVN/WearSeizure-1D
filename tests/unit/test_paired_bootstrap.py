@@ -196,3 +196,47 @@ def test_double_digit_seeds_are_not_dropped(tmp_path: Path):
     for name in ("seed0", "seed10"):
         _write_fold(window / name, "chb01__chb01_03", n_events=4, n_matched=2)
     assert paired_bootstrap._load_per_patient(window, "patient_specific_loso_edf")["chb01"]["n_seeds"] == 2
+
+
+# --------------------------------------------------------------------------
+# Worst-patient axes. This is where the architectures differ most, so it is
+# the axis most in need of an interval rather than a point estimate.
+# --------------------------------------------------------------------------
+
+
+def test_worst_patient_far_takes_the_maximum(tmp_path: Path):
+    run_dir = tmp_path / "seed0"
+    _write_fold(run_dir, "chb01__chb01_03", 4, 4, n_false_alarms=1, exposure_hours=10.0)   # 0.1/h
+    _write_fold(run_dir, "chb11__chb11_82", 6, 5, n_false_alarms=9, exposure_hours=3.0)    # 3.0/h
+    per_patient = paired_bootstrap._load_per_patient(run_dir, "patient_specific_loso_edf")
+    v = paired_bootstrap.statistic(per_patient, ["chb01", "chb11"], "worst_patient_far_per_hour")
+    assert v == pytest.approx(3.0)
+
+
+def test_worst_patient_sensitivity_respects_the_seizure_floor(tmp_path: Path):
+    run_dir = tmp_path / "seed0"
+    _write_fold(run_dir, "chb15__chb15_10", 20, 16)   # 0.80, gateable
+    _write_fold(run_dir, "chb17__chb17_63", 3, 1)     # 0.333, below the floor
+    per_patient = paired_bootstrap._load_per_patient(run_dir, "patient_specific_loso_edf")
+    ids = ["chb15", "chb17"]
+    assert paired_bootstrap.statistic(per_patient, ids, "worst_patient_sensitivity") == pytest.approx(0.80)
+    # Drop the floor and the 3-seizure patient takes the slot back.
+    assert paired_bootstrap.statistic(
+        per_patient, ids, "worst_patient_sensitivity", min_events=1) == pytest.approx(1 / 3)
+
+
+def test_far_has_no_seizure_floor(tmp_path: Path):
+    # A rate over hours is meaningful for every patient, unlike a count over
+    # events -- so the floor must not silently apply to FAR as well.
+    run_dir = tmp_path / "seed0"
+    _write_fold(run_dir, "chb17__chb17_63", 3, 1, n_false_alarms=12, exposure_hours=4.0)  # 3.0/h
+    _write_fold(run_dir, "chb15__chb15_10", 20, 16, n_false_alarms=1, exposure_hours=10.0)
+    per_patient = paired_bootstrap._load_per_patient(run_dir, "patient_specific_loso_edf")
+    v = paired_bootstrap.statistic(per_patient, ["chb17", "chb15"], "worst_patient_far_per_hour")
+    assert v == pytest.approx(3.0)
+
+
+def test_worst_patient_metrics_declare_a_direction():
+    assert paired_bootstrap.METRIC_DIRECTION["worst_patient_far_per_hour"] == "lower_is_better"
+    assert paired_bootstrap.METRIC_DIRECTION["worst_patient_sensitivity"] == "higher_is_better"
+    assert paired_bootstrap.favours_a("worst_patient_far_per_hour", -1.44, False) == "A"

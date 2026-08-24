@@ -46,8 +46,26 @@ METRIC_DIRECTION = {
     "sensitivity_micro": "higher_is_better",
     "far_per_hour_micro": "lower_is_better",
     "delay_mean_s": "lower_is_better",
+    # The worst-patient axes belong here rather than in a descriptive table:
+    # worst-patient FAR is where the architectures differ most (0.78/h against
+    # 2.22/h), and it is the axis that justifies choosing the cheaper model for
+    # a wearable -- a device that cries wolf twice an hour on its worst patient
+    # gets taken off. An axis that carries an argument has to carry an interval.
+    #
+    # They resample cleanly: min/max is recomputed over each replicate's
+    # patients, so the identity of the "worst" patient is free to change between
+    # replicates, which is exactly the uncertainty being measured.
+    "worst_patient_far_per_hour": "lower_is_better",
+    "worst_patient_sensitivity": "higher_is_better",
 }
 METRICS = tuple(METRIC_DIRECTION)
+
+# Patients below this seizure count are excluded from worst-patient SENSITIVITY
+# only. With 3 seizures the reachable values are 0, 1/3, 2/3 and 1, so the
+# statistic reports the cohort's smallest sample rather than its weakest
+# detection. FAR has no such floor: it is a rate over hours, not a count over
+# events, so every patient's is meaningful.
+DEFAULT_MIN_EVENTS = 5
 
 
 def favours_a(metric: str, delta: float, ci_contains_zero: bool) -> str:
@@ -120,8 +138,15 @@ def _load_per_patient(root: Path, strategy: str) -> dict[str, dict]:
     return averaged
 
 
-def statistic(per_patient: dict[str, dict], ids: Sequence[str], metric: str) -> float:
+def statistic(per_patient: dict[str, dict], ids: Sequence[str], metric: str,
+              min_events: int = DEFAULT_MIN_EVENTS) -> float:
     rows = [per_patient[i] for i in ids]
+    if metric == "worst_patient_far_per_hour":
+        vals = [r["n_false_alarms"] / r["exposure_hours"] for r in rows if r["exposure_hours"] > 0]
+        return float(max(vals)) if vals else float("nan")
+    if metric == "worst_patient_sensitivity":
+        vals = [r["n_matched"] / r["n_events"] for r in rows if r["n_events"] >= min_events]
+        return float(min(vals)) if vals else float("nan")
     if metric == "sensitivity_macro":
         vals = [r["n_matched"] / r["n_events"] for r in rows if r["n_events"] > 0]
         return float(np.mean(vals)) if vals else float("nan")
@@ -149,6 +174,8 @@ def main() -> None:
     ap.add_argument("--n-boot", type=int, default=10000)
     ap.add_argument("--alpha", type=float, default=0.05)
     ap.add_argument("--seed", type=int, default=0, help="bootstrap RNG seed, not a training seed")
+    ap.add_argument("--min-events", type=int, default=DEFAULT_MIN_EVENTS,
+                    help="seizure floor for worst_patient_sensitivity (default 5)")
     ap.add_argument("--json", type=Path, default=None, help="also write the result here")
     args = ap.parse_args()
 
@@ -178,13 +205,14 @@ def main() -> None:
     for metric in metrics:
         result = paired_cluster_bootstrap(
             patients,
-            lambda ids, m=metric: statistic(a, ids, m) - statistic(b, ids, m),
+            lambda ids, m=metric: (statistic(a, ids, m, args.min_events)
+                                   - statistic(b, ids, m, args.min_events)),
             n_boot=args.n_boot,
             alpha=args.alpha,
             rng=np.random.default_rng(args.seed),
         )
-        result["a"] = statistic(a, patients, metric)
-        result["b"] = statistic(b, patients, metric)
+        result["a"] = statistic(a, patients, metric, args.min_events)
+        result["b"] = statistic(b, patients, metric, args.min_events)
         contains_zero = result["ci_low"] <= 0 <= result["ci_high"]
         result["ci_contains_zero"] = bool(contains_zero)
         out["results"][metric] = result
