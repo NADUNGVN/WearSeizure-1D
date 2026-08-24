@@ -172,3 +172,27 @@ def test_an_interval_containing_zero_favours_neither_whatever_the_sign():
 
 def test_every_reported_metric_declares_a_direction():
     assert set(paired_bootstrap.METRICS) == set(paired_bootstrap.METRIC_DIRECTION)
+
+
+def test_only_seed_digit_directories_count_as_seeds(tmp_path: Path):
+    # The Phase 2 scripts park an un-pre-trained run in `seed0_noL1` before
+    # writing the pre-trained one into `seed0`. A plain `seed*` glob swept that
+    # backup up as a fourth seed and averaged a no-L1 run into a 3-seed L1
+    # result -- which moved baseline_frontiers2d from 0.9726 to 0.9591 and
+    # invalidated both architecture comparisons without erroring.
+    window = tmp_path / "w4s"
+    for name in ("seed0", "seed1", "seed2"):
+        _write_fold(window / name, "chb01__chb01_03", n_events=4, n_matched=4)
+    _write_fold(window / "seed0_noL1", "chb01__chb01_03", n_events=4, n_matched=0)
+
+    per_patient = paired_bootstrap._load_per_patient(window, "patient_specific_loso_edf")
+    assert per_patient["chb01"]["n_seeds"] == 3
+    # 4/4 on every real seed. Including the backup would have given 3/4.
+    assert paired_bootstrap.statistic(per_patient, ["chb01"], "sensitivity_macro") == pytest.approx(1.0)
+
+
+def test_double_digit_seeds_are_not_dropped(tmp_path: Path):
+    window = tmp_path / "w4s"
+    for name in ("seed0", "seed10"):
+        _write_fold(window / name, "chb01__chb01_03", n_events=4, n_matched=2)
+    assert paired_bootstrap._load_per_patient(window, "patient_specific_loso_edf")["chb01"]["n_seeds"] == 2

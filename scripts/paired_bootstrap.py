@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -57,8 +58,16 @@ def favours_a(metric: str, delta: float, ci_contains_zero: bool) -> str:
     return "A" if ahead else "B"
 
 
+# `seed<digits>` exactly. A plain `seed*` glob also matches `seed0_noL1`, the
+# directory the Phase 2 scripts move an un-pre-trained run into before writing
+# the pre-trained one -- and that folded a no-L1 run into the average as a
+# fourth "seed", dragging baseline_frontiers2d from 0.9726 down to 0.9591 and
+# silently invalidating both architecture comparisons.
+_SEED_DIR = re.compile(r"^seed\d+$")
+
+
 def _seed_dirs(root: Path) -> list[Path]:
-    seeds = sorted(p for p in root.glob("seed*") if p.is_dir())
+    seeds = sorted(p for p in root.glob("seed*") if p.is_dir() and _SEED_DIR.match(p.name))
     return seeds or [root]
 
 
