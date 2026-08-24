@@ -77,3 +77,26 @@ def test_validate_fold_raises_on_synthetic_overlap():
     )
     with pytest.raises(ValueError, match="overlap"):
         validate_fold(bad_fold)
+
+
+def test_stale_folds_are_refused_when_the_manifest_changed(tmp_path, synthetic_cohort):
+    """PROTOCOL.md calls splits version-locked by manifest hash. Until the
+    scripts started passing `expected_manifest_hash`, nothing enforced it: a
+    manifest rebuilt from changed data would pair silently with folds built
+    from the old one, and every comparison against earlier results would be
+    invalid with nothing to indicate it."""
+    import pytest
+    from wearseizure.data.manifest import hash_manifest
+    from wearseizure.data.splits import load_folds, make_patient_specific_loso_edf, save_folds
+
+    manifest_df, _ = synthetic_cohort
+    folds = make_patient_specific_loso_edf(manifest_df, seed=0)
+    path = tmp_path / "folds.json"
+    save_folds(folds, str(path))
+
+    # Matching hash: accepted, and identical to the unchecked load.
+    good = hash_manifest(manifest_df)
+    assert len(load_folds(str(path), expected_manifest_hash=good)) == len(folds)
+
+    with pytest.raises(ValueError, match="Regenerate splits"):
+        load_folds(str(path), expected_manifest_hash="0" * 64)

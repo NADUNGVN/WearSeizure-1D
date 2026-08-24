@@ -28,7 +28,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from wearseizure.data.dataset import build_fold_datasets
 from wearseizure.data.loader import load_records_from_manifest
-from wearseizure.data.manifest import load_manifest
+from wearseizure.data.manifest import hash_manifest, load_manifest
 from wearseizure.data.splits import load_folds, subject_from_fold_id
 from wearseizure.eval.metrics_event import EventMetrics, compute_event_metrics
 from wearseizure.eval.metrics_segment import compute_segment_metrics
@@ -56,7 +56,14 @@ def main(cfg: DictConfig) -> None:
     raw_dir = cfg.data.raw_dir if cfg.data.name != "synthetic" else None
     records = load_records_from_manifest(manifest_df, data_dir=data_dir, raw_dir=raw_dir)
 
-    folds = load_folds(str(Path(cfg.split.folds_path)))
+    # Version-lock the split to the manifest it was built from. PROTOCOL.md
+    # calls splits version-locked by manifest hash; until now nothing checked
+    # it, so a manifest rebuilt from changed data would have been paired with
+    # stale folds silently -- and every comparison against earlier rows would
+    # have been invalid without anything saying so.
+    folds = load_folds(
+        str(Path(cfg.split.folds_path)), expected_manifest_hash=hash_manifest(manifest_df)
+    )
     seed = int(cfg.seed)
     run_dir = fold_run_dir(
         cfg.profile.artifacts_dir, cfg.model.name, cfg.split.name, cfg.window.name, seed, run_tag_from_cfg(cfg)

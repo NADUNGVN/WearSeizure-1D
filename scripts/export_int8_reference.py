@@ -14,7 +14,7 @@ import torch
 from omegaconf import DictConfig
 
 from wearseizure.data.loader import load_records_from_manifest
-from wearseizure.data.manifest import load_manifest
+from wearseizure.data.manifest import hash_manifest, load_manifest
 from wearseizure.data.splits import load_folds
 from wearseizure.models.factory import build_model
 from wearseizure.quant.qat import QATConv1d, QATLinear, prepare_qat, set_calibrating
@@ -42,7 +42,15 @@ def main(cfg: DictConfig) -> None:
     run_dir = fold_run_dir(
         cfg.profile.artifacts_dir, cfg.model.name, cfg.split.name, cfg.window.name, seed, run_tag_from_cfg(cfg)
     )
-    folds = load_folds(str(Path(cfg.split.folds_path)))
+    manifest_df = load_manifest(str(Path(cfg.data.manifest_path)))
+    # Version-lock the split to the manifest it was built from. PROTOCOL.md
+    # calls splits version-locked by manifest hash; until now nothing checked
+    # it, so a manifest rebuilt from changed data would have been paired with
+    # stale folds silently -- and every comparison against earlier rows would
+    # have been invalid without anything saying so.
+    folds = load_folds(
+        str(Path(cfg.split.folds_path)), expected_manifest_hash=hash_manifest(manifest_df)
+    )
     if not folds:
         raise RuntimeError("no folds found -- run make_splits.py and train.py first")
     fold = folds[0]
@@ -55,7 +63,6 @@ def main(cfg: DictConfig) -> None:
     model = prepare_qat(model, weight_bits=8, act_bits=8)
     model.eval()
 
-    manifest_df = load_manifest(str(Path(cfg.data.manifest_path)))
     data_dir = cfg.data.generated_dir if cfg.data.name == "synthetic" else None
     raw_dir = cfg.data.raw_dir if cfg.data.name != "synthetic" else None
     records = load_records_from_manifest(manifest_df, data_dir=data_dir, raw_dir=raw_dir)
