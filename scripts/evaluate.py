@@ -25,7 +25,12 @@ from wearseizure.eval.report import (
 )
 from wearseizure.utils.env import bootstrap_env
 from wearseizure.utils.logging import get_logger
-from wearseizure.utils.paths import fold_run_dir, seeds_from_cfg, warn_if_legacy_artifacts
+from wearseizure.utils.paths import (
+    fold_run_dir,
+    run_tag_from_cfg,
+    seeds_from_cfg,
+    warn_if_legacy_artifacts,
+)
 from wearseizure.utils.profile_guard import check_profile_data_pairing
 
 # Must run at import time: configs/profile/server.yaml interpolates
@@ -70,7 +75,7 @@ def _aggregate_per_patient(fold_dicts: list[dict], strategy: str) -> dict[str, E
     return per_patient
 
 
-def _budget_from_frozen_params(fold_dicts: list[dict], cfg) -> "object":
+def _budget_from_frozen_params(fold_dicts: list[dict], cfg) -> object:
     """Delay floor from the postprocess params the folds ACTUALLY used.
 
     Taking these from `cfg.postprocess` instead is a trap: `rethreshold.py`
@@ -141,7 +146,7 @@ def _resolve_gates_path(cfg) -> Path:
 def _evaluate_one_seed(cfg, seed: int, gates: dict, min_events_to_gate: int | None) -> tuple[dict, dict]:
     """Build and score the report for one seed. Returns (report, gate_results)."""
     run_dir = fold_run_dir(
-        cfg.profile.artifacts_dir, cfg.model.name, cfg.split.name, cfg.window.name, seed
+        cfg.profile.artifacts_dir, cfg.model.name, cfg.split.name, cfg.window.name, seed, run_tag_from_cfg(cfg)
     )
     warn_if_legacy_artifacts(run_dir, log)
     fold_dicts = _load_fold_metrics(run_dir)

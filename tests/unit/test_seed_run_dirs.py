@@ -17,6 +17,7 @@ from omegaconf import OmegaConf
 from wearseizure.utils.paths import (
     fold_run_dir,
     pretrain_cache_dir,
+    run_tag_from_cfg,
     seeds_from_cfg,
     warn_if_legacy_artifacts,
 )
@@ -94,3 +95,29 @@ def test_no_warning_when_there_is_nothing_to_migrate(tmp_path: Path, caplog):
     with caplog.at_level(logging.WARNING, logger="test_legacy_none"):
         warn_if_legacy_artifacts(run_dir, log)
     assert caplog.text == ""
+
+
+def test_run_tag_separates_runs_that_the_path_would_otherwise_collide(tmp_path: Path):
+    # Lever L5 changes the pre-training corpus, which the path does not encode,
+    # so without a tag an L5 run overwrites the run it exists to be compared
+    # against -- silently destroying rows 32-34.
+    plain = fold_run_dir("/art", "m", "loso", "w4s", 0)
+    tagged = fold_run_dir("/art", "m", "loso", "w4s", 0, "L5")
+    assert plain != tagged
+    assert tagged.parent.name == "w4s__L5"
+    assert pretrain_cache_dir("/art", "m", "w4s", 0) != pretrain_cache_dir("/art", "m", "w4s", 0, "L5")
+
+
+def test_no_tag_leaves_every_existing_path_unchanged():
+    assert fold_run_dir("/art", "m", "loso", "w4s", 0, "") == fold_run_dir("/art", "m", "loso", "w4s", 0)
+    assert pretrain_cache_dir("/art", "m", "w4s", 0, "") == pretrain_cache_dir("/art", "m", "w4s", 0)
+
+
+def test_run_tag_is_read_from_config_and_validated():
+    assert run_tag_from_cfg(OmegaConf.create({"train": {"run_tag": None}})) == ""
+    assert run_tag_from_cfg(OmegaConf.create({"train": {"run_tag": "L5"}})) == "L5"
+    assert run_tag_from_cfg(OmegaConf.create({"train": {"run_tag": "  L5  "}})) == "L5"
+    # A tag becomes a directory name, so anything that could escape it is refused.
+    for bad in ("L5/../evil", "a b", "x;y"):
+        with pytest.raises(ValueError, match="alphanumeric"):
+            run_tag_from_cfg(OmegaConf.create({"train": {"run_tag": bad}}))

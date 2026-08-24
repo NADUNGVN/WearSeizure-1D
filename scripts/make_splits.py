@@ -15,8 +15,8 @@ from wearseizure.data.splits import (
 )
 from wearseizure.utils.env import bootstrap_env
 from wearseizure.utils.logging import get_logger
-from wearseizure.utils.profile_guard import check_profile_data_pairing
 from wearseizure.utils.paths import ensure_dir
+from wearseizure.utils.profile_guard import check_profile_data_pairing
 
 # Must run at import time: configs/profile/server.yaml interpolates
 # ${oc.env:...} into hydra.run.dir, which Hydra resolves before main().

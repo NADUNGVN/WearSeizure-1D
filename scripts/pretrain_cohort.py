@@ -54,7 +54,7 @@ from wearseizure.models.factory import build_model
 from wearseizure.training.pretrain import get_or_train_cohort_init, load_pretrain_corpus
 from wearseizure.utils.env import bootstrap_env
 from wearseizure.utils.logging import get_logger
-from wearseizure.utils.paths import ensure_dir, pretrain_cache_dir
+from wearseizure.utils.paths import ensure_dir, pretrain_cache_dir, run_tag_from_cfg
 from wearseizure.utils.profile_guard import check_profile_data_pairing
 from wearseizure.utils.seeding import seed_everything
 
@@ -92,7 +92,7 @@ def main(cfg: DictConfig) -> None:
         records = {**records, **extra_records}
     cache_dir = ensure_dir(
         pretrain_cache_dir(
-            cfg.profile.artifacts_dir, cfg.model.name, cfg.window.name, int(cfg.seed)
+            cfg.profile.artifacts_dir, cfg.model.name, cfg.window.name, int(cfg.seed), run_tag_from_cfg(cfg)
         )
     )
     log.info(

@@ -48,8 +48,29 @@ def seeds_from_cfg(cfg) -> list[int]:
     return seeds
 
 
+def run_tag_from_cfg(cfg) -> str:
+    """A label distinguishing runs that differ in something the artifact path
+    does not otherwise encode.
+
+    The path is keyed by (model, split, window, seed). The pre-training corpus
+    is none of those, so turning lever L5 on produces a genuinely different run
+    that would land in exactly the same directory as the run it is meant to be
+    compared against -- overwriting it. `train.run_tag=L5` separates them.
+
+    Defaults to empty, which leaves every existing path byte-identical.
+    """
+    tag = str(cfg.train.get("run_tag") or "").strip()
+    if tag and not tag.replace("_", "").replace("-", "").isalnum():
+        raise ValueError(f"train.run_tag={tag!r} must be alphanumeric, '-' or '_' only")
+    return tag
+
+
+def _tagged(window_name: str, tag: str) -> str:
+    return f"{window_name}__{tag}" if tag else window_name
+
+
 def fold_run_dir(artifacts_dir: str | Path, model_name: str, split_name: str,
-                 window_name: str, seed: int) -> Path:
+                 window_name: str, seed: int, tag: str = "") -> Path:
     """Where one (model, split, window, seed) run keeps its checkpoints,
     per-fold metrics and report.
 
@@ -59,17 +80,17 @@ def fold_run_dir(artifacts_dir: str | Path, model_name: str, split_name: str,
     Artifacts produced before this level existed sit one directory up; see
     `warn_if_legacy_artifacts`.
     """
-    return Path(artifacts_dir) / model_name / split_name / window_name / f"seed{seed}"
+    return Path(artifacts_dir) / model_name / split_name / _tagged(window_name, tag) / f"seed{seed}"
 
 
 def pretrain_cache_dir(artifacts_dir: str | Path, model_name: str,
-                       window_name: str, seed: int) -> Path:
+                       window_name: str, seed: int, tag: str = "") -> Path:
     """Cohort pre-training inits are keyed by seed too: `cohort_pretrain_fold`
     draws the subject-level validation split from `rng_for(..., base_seed=seed)`,
     so two seeds genuinely produce different initialisations and must not share
     a cache entry.
     """
-    return Path(artifacts_dir) / "pretrain" / model_name / window_name / f"seed{seed}"
+    return Path(artifacts_dir) / "pretrain" / model_name / _tagged(window_name, tag) / f"seed{seed}"
 
 
 def warn_if_legacy_artifacts(run_dir: Path, log) -> None:

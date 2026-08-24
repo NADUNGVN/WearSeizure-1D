@@ -96,3 +96,11 @@ finetune_lr: 0.0001
 # targets exactly that. Off by default: verify against an uncompiled run before
 # adopting it for anything that feeds the paper.
 compile_mode: null
+
+# Distinguishes runs that differ in something the artifact path does not
+# otherwise encode. The path is keyed by (model, split, window, seed); the
+# pre-training corpus is none of those, so a lever-L5 run would land on top of
+# the run it is meant to be compared against. Set `train.run_tag=L5` alongside
+# `train.pretrain.use_wider_corpus=true` and it writes to `<window>__L5/` instead.
+# Empty leaves every existing path byte-identical.
+run_tag: null

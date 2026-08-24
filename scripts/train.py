@@ -26,6 +26,7 @@ from wearseizure.utils.paths import (
     ensure_dir,
     fold_run_dir,
     pretrain_cache_dir,
+    run_tag_from_cfg,
     seeds_from_cfg,
     warn_if_legacy_artifacts,
 )
@@ -92,7 +93,7 @@ def _run_one_seed(cfg, seed, records, manifest_df, folds, threshold_grid, force_
     # silently skip training instead of producing a real, comparable result.
     # seed<N> is there for the same reason: two seeds are two different runs.
     run_dir = fold_run_dir(
-        cfg.profile.artifacts_dir, cfg.model.name, cfg.split.name, cfg.window.name, seed
+        cfg.profile.artifacts_dir, cfg.model.name, cfg.split.name, cfg.window.name, seed, run_tag_from_cfg(cfg)
     )
     warn_if_legacy_artifacts(run_dir, log)
     ensure_dir(run_dir)
@@ -110,7 +111,7 @@ def _run_one_seed(cfg, seed, records, manifest_df, folds, threshold_grid, force_
         )
         use_pretrain = False
     pretrain_dir = pretrain_cache_dir(
-        cfg.profile.artifacts_dir, cfg.model.name, cfg.window.name, seed
+        cfg.profile.artifacts_dir, cfg.model.name, cfg.window.name, seed, run_tag_from_cfg(cfg)
     )
     finetune_lr = cfg.train.get("finetune_lr", cfg.train.lr)
     extra_manifest_df, extra_records = (
