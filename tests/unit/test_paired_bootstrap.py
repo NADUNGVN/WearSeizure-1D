@@ -240,3 +240,45 @@ def test_worst_patient_metrics_declare_a_direction():
     assert paired_bootstrap.METRIC_DIRECTION["worst_patient_far_per_hour"] == "lower_is_better"
     assert paired_bootstrap.METRIC_DIRECTION["worst_patient_sensitivity"] == "higher_is_better"
     assert paired_bootstrap.favours_a("worst_patient_far_per_hour", -1.44, False) == "A"
+
+
+# --------------------------------------------------------------------------
+# Paired per-patient comparison. The bootstrap cannot resolve a max over 13
+# clusters -- its distribution collapses onto "is the worst patient in this
+# replicate?" -- so the tail argument needs a statistic that is not a min/max.
+# --------------------------------------------------------------------------
+
+
+def test_sign_test_detects_a_consistent_far_advantage():
+    rows = [{"far_a": 0.1 * i, "far_b": 0.1 * i + 0.5} for i in range(1, 14)]
+    st = paired_bootstrap.sign_test(rows, "far_a", "far_b", lower_is_better=True)
+    assert st["wins_a"] == 13 and st["wins_b"] == 0
+    assert st["p_value"] < 0.001
+
+
+def test_sign_test_reports_no_effect_when_patients_split_evenly():
+    rows = [{"far_a": 1.0, "far_b": 2.0} for _ in range(6)]
+    rows += [{"far_a": 2.0, "far_b": 1.0} for _ in range(6)]
+    st = paired_bootstrap.sign_test(rows, "far_a", "far_b", lower_is_better=True)
+    assert st["wins_a"] == 6 and st["wins_b"] == 6
+    assert st["p_value"] == pytest.approx(1.0)
+
+
+def test_sign_test_drops_ties_rather_than_counting_them():
+    # Standard sign-test convention: a patient where both configurations are
+    # identical carries no evidence either way, so it must not dilute the count.
+    rows = [{"far_a": 1.0, "far_b": 2.0}] * 5 + [{"far_a": 1.0, "far_b": 1.0}] * 4
+    st = paired_bootstrap.sign_test(rows, "far_a", "far_b", lower_is_better=True)
+    assert (st["wins_a"], st["wins_b"], st["ties"], st["n"]) == (5, 0, 4, 5)
+
+
+def test_sign_test_honours_direction():
+    rows = [{"sens_a": 0.9, "sens_b": 0.8} for _ in range(10)]
+    st = paired_bootstrap.sign_test(rows, "sens_a", "sens_b", lower_is_better=False)
+    assert st["wins_a"] == 10
+
+
+def test_a_nan_patient_is_treated_as_a_tie_not_a_win():
+    rows = [{"far_a": float("nan"), "far_b": 2.0}, {"far_a": 1.0, "far_b": 2.0}]
+    st = paired_bootstrap.sign_test(rows, "far_a", "far_b", lower_is_better=True)
+    assert (st["wins_a"], st["ties"]) == (1, 1)
