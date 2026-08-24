@@ -1042,6 +1042,71 @@ Không có gì bảo đảm bảy đòn bẩy trên đưa sensitivity lên 0.97.
 
 ---
 
+## 15. Phase 2 đã bác bỏ những gì trong chính tài liệu này (08-23)
+
+Tài liệu này được viết trước khi có thanh sai số. Ba phần của nó giờ **sai**, và được nêu ở đây
+thay vì sửa tại chỗ — một sổ nghiên cứu phải giữ lại điều đã tin và vì sao, nếu không thì không
+audit được.
+
+### 15.1 §11.4 "kiến trúc đã chốt k5only" — bác bỏ
+
+§11.4 chốt `k5only` dựa trên row #15: nó giảm FAR gần một nửa so với mặc định. Phase 2 cho thấy
+kết luận đó dựa trên một so sánh không hợp lệ — `k5only` khi ấy **có** tiền huấn luyện theo nhóm
+còn các baseline thì **không**. Ở cùng công thức, ba kiến trúc **không phân biệt được** về
+sensitivity macro, FAR và delay (rows 32–34).
+
+### 15.2 §6.3 trục 2, "đóng góp kiến trúc: nhánh k3 là nguồn phát sinh false alarm" — bác bỏ
+
+Luận điểm này sống sót qua nhiều phiên bản của tài liệu và là một trong ba trục đóng góp đề xuất.
+Bảng per-patient ở `EXPERIMENT_LOG_G1a.md` §2d cho thấy **toàn bộ lợi thế FAR của `k5only` nằm ở
+đúng một bệnh nhân, chb23**. Sign test: quieter ở 4/11 bệnh nhân so với `frontiers2d` (p = 0.55) và
+5/10 so với `compact1d_7k` (p = 1.00). **Không có lợi thế báo động giả.**
+
+Bài học phương pháp, đáng giữ: chỉ số worst-patient là **max/min trên 13 cụm**, nên percentile
+bootstrap cho khoảng suy biến — cận dưới rơi đúng vào ước lượng điểm. Một thống kê mang luận điểm
+phải là thống kê kiểm định được; ở đây đó là sign test theo cặp bệnh nhân, không phải max.
+
+### 15.3 §14.2c "row 22 là kết quả tốt nhất, thắng thẳng cả hai baseline" — bác bỏ
+
+Viết khi mỗi cấu hình chỉ có một seed. Với ba seed, biên độ seed là 3–6pp, tức 2–4 lần khoảng cách
+đang được dùng để xếp hạng. Row 24 (0.9359, được ghi là "cấu hình tham chiếu mới") hoá ra là **đỉnh
+biên độ seed của chính nó**; trung bình 3 seed của nó là 0.9063, **thấp hơn** row 22.
+
+### 15.4 Điều gì còn đứng vững
+
+| | Bằng chứng |
+|---|---|
+| **Tiền huấn luyện theo nhóm là hiệu ứng chính** | `frontiers2d` 0.8811 → 0.9726, **+8.9pp**, seed std **0.0037**. Lớn nhất và ổn định nhất dự án từng đo, và không phụ thuộc kiến trúc |
+| **Đóng góp giao thức** | Kiến trúc Chung 2024 tái lập trung thực cho 0.8811, không phải 0.9962. Vẫn là Figure 1 |
+| **Ưu thế tính toán** | `k5only` **585 920 MACs** so với 2 523 328 và 1 398 928 — **4.3× và 2.4×**. Đo bằng thop, không ước lượng. Đây là trục **duy nhất** ba kiến trúc thật sự tách nhau |
+
+### 15.5 Hình dạng bài báo, viết lại
+
+> Tiền huấn luyện theo nhóm đóng được khoảng cách của phát hiện EEG một kênh dưới giao thức
+> leakage-safe (0.8811 → 0.9726 trên 185h). Ở mức tương đương đó, ba kiến trúc **không phân biệt
+> được** về độ nhạy, FAR và độ trễ trên cohort 13 bệnh nhân — nên tiêu chí chọn còn lại là chi phí,
+> và `k5only` đạt cùng điểm vận hành ở **4.3× ít MACs hơn**. Accelerator được xây cho điểm đó.
+
+Không có luận điểm "phát hiện tốt hơn" và không có luận điểm "ít báo động giả hơn". Cả hai đều đã
+được thử và không đứng được.
+
+**Cảnh báo phải viết vào bài:** "không phân biệt được" ở 13 bệnh nhân một phần là phát biểu về
+**độ mạnh thống kê**. Chênh lệch điểm macro là 3.7pp và micro *có* đạt ý nghĩa, nên cách nói đúng là
+*cohort này không tách được chúng*, chứ không phải *chúng đã được chứng minh là bằng nhau*.
+
+### 15.6 Mốc M1 phải viết lại
+
+M1 đang là "thắng cả hai baseline tái lập, CI 95% loại trừ 0". Nó được đặt khi còn tin `k5only` dẫn
+đầu, và giờ **không đạt được** — không phải vì model yếu mà vì tiền đề sai. Bản đúng:
+
+> **M1′** — `k5only` **tương đương thống kê** với cả hai baseline tái lập về `sensitivity_macro`
+> (CI 95% của Δ chứa 0) ở FAR ≤0.30/h, trên 3 seed, **và** MACs ≤ ¼ của baseline nặng nhất.
+
+Cả hai vế đã đạt (rows 32–34). Đây không phải hạ chuẩn: đó là phát biểu mà dữ liệu chống đỡ được,
+và cũng đúng bằng phát biểu §11.3 đã đề xuất từ đầu trước khi row 22 làm nó có vẻ thừa.
+
+---
+
 ## Nguồn
 
 - Chung Y-G, Cho A, Kim H, Kim KJ. *Single-channel seizure detection with clinical confirmation of seizure locations using CHB-MIT dataset.* Front. Neurol. 15:1389731 (2024). <https://pmc.ncbi.nlm.nih.gov/articles/PMC11148866/>

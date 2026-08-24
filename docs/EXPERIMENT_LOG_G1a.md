@@ -254,6 +254,75 @@ and `frontiers2d`+L1 has never been run on row 22 cfg at all.
 
 None of these three requires retraining except the seeds.
 
+## 2d. Phase 2 — three architectures, one recipe, three seeds (rows 32-34, 08-23)
+
+All with cohort pre-training (L1), `postprocess=hysteresis_widegrid`, three seeds, same 66 folds.
+This is **block B of the paper's benchmark table**: the only comparison that is valid, because
+protocol, post-processing and training recipe are identical and only the architecture differs.
+
+| # | Architecture | Sensitivity | FAR/h | Delay mean | Worst-pt sens | Worst-pt FAR | MACs |
+|---|---|---:|---:|---:|---:|---:|---:|
+| 32 | `wearseizure1d_k5only` | 0.9358 ± 0.0304 | **0.2261** | 18.83 | 0.8714 | 0.7785 | **585,920** |
+| 33 | `baseline_frontiers2d` | **0.9726 ± 0.0037** | 0.2922 | 17.22 | 0.9500 | 2.2210 | 2,523,328 |
+| 34 | `baseline_compact1d_7k` | 0.9440 ± 0.0286 | 0.3353 | 16.97 | 0.9667 | 1.8317 | 1,398,928 |
+
+Paired cluster bootstrap by patient, 10 000 replicates, `k5only` as A:
+
+| Metric | vs `frontiers2d` | vs `compact1d_7k` |
+|---|---|---|
+| sensitivity_macro | -0.0368, CI [-0.0946, +0.0096] — indistinguishable | -0.0082, CI [-0.0454, +0.0299] — indistinguishable |
+| sensitivity_micro | -0.0390, CI [-0.0802, **-0.0044**] — B better | -0.0260, CI [-0.0521, +0.0117] — indistinguishable |
+| far_per_hour_micro | -0.0577, CI [-0.3495, +0.1077] — indistinguishable | -0.0955, CI [-0.3041, +0.0223] — indistinguishable |
+| delay_mean_s | +1.6111, CI [-1.7061, +4.1155] — indistinguishable | +1.8649, CI [-1.0344, +3.9052] — indistinguishable |
+
+### The false-alarm advantage was one patient
+
+Rows 32-34 look as though `k5only` has a large worst-patient FAR advantage: 0.7785/h against
+2.2210 and 1.8317. It does not. The bootstrap on that axis came back **degenerate** -- a CI bound
+sitting exactly on the point estimate -- because a max over 13 clusters is close to a yes/no
+question about whether one particular patient landed in the replicate. The paired per-patient table
+shows what was really happening:
+
+| Patient | n_ev | FAR `k5only` | FAR `frontiers2d` | | FAR `compact1d_7k` | |
+|---|---:|---:|---:|---|---:|---|
+| chb01 | 7 | 0.147 | 0.195 | k5 | 0.195 | k5 |
+| chb02 | 3 | 0.443 | 0.190 | f2d | 0.380 | c7k |
+| chb03 | 7 | 0.095 | 0.000 | f2d | 0.024 | c7k |
+| chb04 | 4 | 0.103 | 0.118 | k5 | 0.221 | k5 |
+| chb05 | 5 | 0.133 | 0.067 | f2d | 0.233 | k5 |
+| chb07 | 3 | 0.095 | 0.016 | f2d | 0.079 | c7k |
+| chb08 | 5 | 0.200 | 0.100 | f2d | 0.067 | c7k |
+| chb10 | 7 | 0.345 | 0.119 | f2d | 0.286 | c7k |
+| chb11 | 3 | 0.345 | 0.575 | k5 | 0.345 | tie |
+| chb15 | 20 | 0.143 | 0.143 | tie | 0.143 | tie |
+| chb17 | 3 | 0.111 | 0.055 | f2d | 0.555 | k5 |
+| chb22 | 3 | 0.000 | 0.000 | tie | 0.000 | tie |
+| **chb23** | 7 | **0.778** | **2.221** | k5 | **1.832** | k5 |
+
+Exact two-sided sign test: `k5only` is quieter in **4 of 11** patients against `frontiers2d`
+(p = 0.55) and **5 of 10** against `compact1d_7k` (p = 1.00). On sensitivity, 1 of 6 (p = 0.22) and
+2 of 6 (p = 0.69).
+
+**The entire worst-patient FAR gap is chb23.** On the other twelve patients `frontiers2d` is more
+often the quieter model. `k5only` has no false-alarm advantage, and no claim resting on one should
+be made. This is the same failure mode `tests/unit/test_paired_bootstrap.py::
+test_an_edge_carried_by_one_patient_is_not_called_significant` exists to catch -- it was caught by
+looking at the distribution rather than at a summary of it.
+
+### What Phase 2 actually established
+
+1. **Cohort pre-training is the effect.** It lifts `frontiers2d` 0.8811 -> 0.9726, +8.9pp, with a
+   seed std of 0.0037. That is the largest and most reproducible result in the project, and it is
+   architecture-agnostic.
+2. **The three architectures are statistically indistinguishable** on macro sensitivity, FAR and
+   delay. `frontiers2d` wins micro sensitivity, marginally (CI upper bound -0.0044).
+3. **`k5only` costs 4.3x and 2.4x fewer MACs** at that parity. Measured, not estimated. This is the
+   only axis on which the architectures genuinely separate.
+
+An honest caveat on (2): "indistinguishable" at 13 patients is partly a statement about **power**.
+The macro point estimates differ by 3.7pp and micro reaches significance, so the correct phrasing is
+that this cohort cannot separate them -- not that they are known to be equal.
+
 ## 3. Per-patient failure notes (from `failure_analysis.py`, 08-15 23:41, w4s_stride1s, 60-epoch checkpoints)
 
 Cohort mean segment AUROC: compact1d_7k 0.922, frontiers2d 0.937, wearseizure1d 0.909 (all across the same 66 folds).
