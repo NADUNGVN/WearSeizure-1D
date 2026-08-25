@@ -45,11 +45,13 @@ TAG=L5
 MODELS=(wearseizure1d_k5only baseline_frontiers2d)
 SEEDS=(0 1 2)
 
-# Concurrency is lower here than in Phase 2 on purpose. Each process holds the
-# whole pre-training corpus resident, and L5 makes that corpus several times
-# larger -- see the RAM check below, which computes the real figure rather than
-# trusting this comment.
-POOL="${POOL:-3}"
+# Concurrency is lower here than in Phase 2 because each process holds the whole
+# pre-training corpus resident and L5 makes that corpus 3.7x larger. The first
+# attempt ran POOL=3 and was OOM-killed after 10 hours with 35 of 78 inits
+# built: measured 72.6 GiB per process, against a check that had predicted 7.2.
+# The allocations behind that gap are fixed; POOL=2 is the margin for the part
+# of the estimate that is still an estimate.
+POOL="${POOL:-2}"
 CORES=14
 WORKERS=$(( CORES / POOL )); [ "$WORKERS" -lt 1 ] && WORKERS=1
 
@@ -86,21 +88,35 @@ PRETRAIN_CSV="$ART/manifest/chbmit_pretrain_manifest.csv"
 [ -f "$PRETRAIN_CSV" ] || { say "ABORT: $PRETRAIN_CSV was not produced"; exit 1; }
 
 say "Step 1b: corpus size and memory check"
-python - "$PRETRAIN_CSV" "$ART/manifest/chbmit_manifest.csv" "$POOL" <<'PYEOF' | tee -a "$LOG"
+AVAIL_GIB=$(free -g | awk '/^Mem:/ {print $7}')
+python - "$PRETRAIN_CSV" "$ART/manifest/chbmit_manifest.csv" "$POOL" "$AVAIL_GIB" <<'PYEOF' | tee -a "$LOG"
 import sys, pandas as pd
 pre = pd.read_csv(sys.argv[1], keep_default_na=False, na_values=[])
 ev  = pd.read_csv(sys.argv[2], keep_default_na=False, na_values=[])
-pool = int(sys.argv[3])
-# float32 at 256 Hz: 1 hour = 3600 * 256 * 4 bytes = 3.52 MiB.
-gib = lambda hours: hours * 3600 * 256 * 4 / (1024 ** 3)
+pool, avail = int(sys.argv[3]), float(sys.argv[4])
+
+# EMPIRICAL, not derived. The first version of this check computed 3.52 MiB per
+# corpus-hour from "float32 at 256 Hz" and cleared a configuration that the OOM
+# killer then destroyed: measured anon-rss was 72.6 GiB per process against a
+# 2085h corpus, i.e. 35.6 MiB/h -- ten times the theoretical figure, because
+# build_fold_datasets held four full copies and fit_affine_normalizer allocated
+# two more float64 temporaries the size of the train partition.
+#
+# Those allocations are gone (bit-identically), which removes roughly half the
+# peak, so 18 MiB/h is the post-fix figure. It is still a measurement scaled by
+# an estimate, so the margin below is deliberately generous -- a wrong guess
+# here costs ten hours of GPU time and an OOM, not a warning.
+MIB_PER_CORPUS_HOUR = 18.0
 h_pre, h_ev = pre["duration_sec"].sum() / 3600, ev["duration_sec"].sum() / 3600
-per_proc = gib(h_pre + h_ev)
-print(f"  evaluation corpus : {len(ev):5d} rows, {ev['subject_id'].nunique():2d} cases, {h_ev:8.1f}h")
+per_proc = (h_pre + h_ev) * MIB_PER_CORPUS_HOUR / 1024
+budget = 0.6 * avail
+print(f"  evaluation corpus  : {len(ev):5d} rows, {ev['subject_id'].nunique():2d} cases, {h_ev:8.1f}h")
 print(f"  L5 pre-train corpus: {len(pre):5d} rows, {pre['subject_id'].nunique():2d} cases, {h_pre:8.1f}h")
-print(f"  cases            : {sorted(pre['subject_id'].unique())}")
-print(f"  positions        : {sorted(pre['channel_name'].unique())}")
-print(f"  resident per process: {per_proc:.1f} GiB   x{pool} processes = {per_proc * pool:.1f} GiB")
-sys.exit(0 if per_proc * pool < 120 else 3)   # 120 GiB of the box's ~188
+print(f"  cases              : {sorted(pre['subject_id'].unique())}")
+print(f"  positions          : {sorted(pre['channel_name'].unique())}")
+print(f"  estimated resident : {per_proc:.1f} GiB/process x{pool} = {per_proc * pool:.1f} GiB")
+print(f"  RAM available now  : {avail:.0f} GiB, budget at 60% = {budget:.0f} GiB")
+sys.exit(0 if per_proc * pool < budget else 3)
 PYEOF
 rc=$?
 if [ "$rc" -eq 3 ]; then

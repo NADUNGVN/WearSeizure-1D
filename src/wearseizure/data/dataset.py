@@ -100,22 +100,38 @@ def build_fold_datasets(
     """
     band = CausalBandpass(low_hz=band_low_hz, high_hz=band_high_hz)
 
-    filtered_train = _filter_records(records, fold.train_edf_ids, band)
-    if not filtered_train:
+    if not fold.train_edf_ids:
         raise ValueError(f"fold {fold.fold_id} has an empty train partition")
-    normalizer = fit_affine_normalizer([r.signal for r in filtered_train.values()])
 
+    # Filter ONCE. This used to filter the train partition, then filter every
+    # partition again -- so the train EDFs were filtered twice and both float64
+    # copies stayed alive at the same time. Harmless at 553h; at the lever-L5
+    # corpus's 2085h it was one of the allocations that OOM-killed Phase 3.
     all_ids = fold.train_edf_ids | fold.val_edf_ids | fold.test_edf_ids
     filtered_all = _filter_records(records, all_ids, band)
+
+    # Sorted, so the concatenation order the normalizer sees does not depend on
+    # frozenset iteration order. Median and MAD are order-independent in value,
+    # so this changes nothing numerically -- it just makes the fit reproducible.
+    normalizer = fit_affine_normalizer(
+        [filtered_all[edf_id].signal for edf_id in sorted(fold.train_edf_ids)]
+    )
+
     # Store float32, not the float64 that scipy's lfilter and the normalizer
     # produce. Every window was already being cast to float32 on its way into
     # the model, so this is bit-identical -- it just happens once per EDF
     # instead of once per window, and it halves both the resident dataset
     # (~4.4GB -> ~2.2GB for the 13-case cohort) and the bytes each batch moves.
-    normalized_all = {
-        edf_id: replace(r, signal=normalizer.apply(r.signal).astype(np.float32, copy=False))
-        for edf_id, r in filtered_all.items()
-    }
+    #
+    # Built by draining `filtered_all` rather than comprehending over it, so the
+    # float64 originals are freed as the float32 copies appear instead of both
+    # corpora being resident at once.
+    normalized_all: dict[str, EEGRecord] = {}
+    for edf_id in sorted(filtered_all):
+        r = filtered_all.pop(edf_id)
+        normalized_all[edf_id] = replace(
+            r, signal=normalizer.apply(r.signal).astype(np.float32, copy=False)
+        )
 
     datasets: dict[Partition, WearSeizureWindowDataset] = {}
     for partition in ("train", "val", "test"):
