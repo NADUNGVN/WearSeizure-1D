@@ -323,6 +323,57 @@ An honest caveat on (2): "indistinguishable" at 13 patients is partly a statemen
 The macro point estimates differ by 3.7pp and micro reaches significance, so the correct phrasing is
 that this cohort cannot separate them -- not that they are known to be equal.
 
+## 2e. Rows 35-36 — lever L5 is a negative result (08-26)
+
+Cohort pre-training corpus widened from the 12 remaining evaluation patients (553h) to those plus
+the 11 non-evaluation CHB-MIT cases at all four wearable positions (2085h, **3.7x**). Evaluation
+untouched: 13 cases, 66 folds, 185.0h. Three seeds, both architectures, `hysteresis_widegrid`,
+each compared against **its own** Phase 2 control -- same architecture, same seeds, same
+post-processing, corpus the only difference.
+
+| # | Model | L5 | Sensitivity | FAR/h | Delay | Worst-pt FAR |
+|---|---|---|---:|---:|---:|---:|
+| 32 | `k5only` | no | 0.9358 ± 0.030 | 0.2216 | 18.83 | 0.7785 |
+| 35 | `k5only` | **yes** | 0.9348 ± 0.030 | 0.2198 | 17.71 | 0.6640 |
+| 33 | `frontiers2d` | no | **0.9726 ± 0.004** | **0.2793** | 17.22 | **2.2210** |
+| 36 | `frontiers2d` | **yes** | 0.9641 | 0.3928 | 16.21 | 3.3887 |
+
+All twelve paired comparisons return "neither" -- no metric moves significantly, for either
+architecture. Sign tests agree: L5 is quieter in 4 of 10 patients for `k5only` (p = 0.75) and 4 of
+11 for `frontiers2d` (p = 0.55).
+
+### Two things this establishes
+
+**1. The pre-training benefit saturates at the 13-case cohort.** Lever L1 -- going from one
+patient's recordings to twelve patients' -- was worth +6.0pp to `k5only` and +9.2pp to
+`frontiers2d`, the largest effect in the project. A further 3.7x of the same kind of data is worth
+nothing. The gain came from escaping a starved regime (a ~12k-parameter CNN learning from two
+seizures), not from data volume as such, and that escape has already happened.
+
+**2. The extra corpus carries label noise, and it shows up in FAR rather than sensitivity.**
+`frontiers2d` degrades on exactly the axes label noise would touch: FAR 0.2793 -> 0.3928 (+41%) and
+worst-patient FAR 2.2210 -> 3.3887 (+53%), with sensitivity almost unchanged (upper CI bound
+exactly 0.0000). The 11 added cases have **no clinical confirmation** that seizure onset is
+observable from these electrode positions -- that confirmation is precisely why Chung et al.
+restricted to 13 cases -- and all four positions were taken per case. Ictal windows at a position
+where the seizure is not visible are labelled positive regardless, teaching the model to fire on
+patterns that are not seizures.
+
+This was written down as the predicted failure mode in `configs/data/chbmit.yaml` before the run,
+along with the follow-up: narrow `data.pretrain_channels` to a single position to separate "more
+data does not help" from "more noisy data hurts".
+
+### What it means for the paper
+
+A bounded negative result on a lever that looked obvious, measured against its own control with
+error bars. It also settles a forward-looking question cheaply: **external corpora (TUSZ, Siena)
+are not worth pursuing on this evidence** unless the single-position ablation shows the loss was
+noise rather than saturation. That would have been a much larger investment to discover the same
+thing.
+
+Note the point estimates for `k5only` all move the right way -- delay 18.83 -> 17.71, worst-patient
+FAR 0.7785 -> 0.6640 -- but none of them significantly, and nothing should be built on them.
+
 ## 3. Per-patient failure notes (from `failure_analysis.py`, 08-15 23:41, w4s_stride1s, 60-epoch checkpoints)
 
 Cohort mean segment AUROC: compact1d_7k 0.922, frontiers2d 0.937, wearseizure1d 0.909 (all across the same 66 folds).
