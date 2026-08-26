@@ -41,7 +41,12 @@ ART="$WEARSEIZURE_ARTIFACTS_DIR"
 LOG="$ART/phase3_l5.log"
 SPLIT=patient_specific_loso_edf
 WINDOW=w4s_stride1s
-TAG=L5
+# Overridable, because the pre-registered follow-up to a disappointing L5 is the
+# same run with a narrower corpus -- and it must not land on top of the run it
+# is being compared against.
+#   TAG=L5single PRETRAIN_CHANNELS='[P8-O2]' bash scripts/run_phase3_l5.sh
+TAG="${TAG:-L5}"
+PRETRAIN_CHANNELS="${PRETRAIN_CHANNELS:-}"
 MODELS=(wearseizure1d_k5only baseline_frontiers2d)
 SEEDS=(0 1 2)
 
@@ -81,10 +86,19 @@ say "Phase 3 (L5) start. commit=$(git rev-parse --short HEAD) pool=${POOL}x${WOR
 # wearable whose electrode sits at one of four spots) but it is also the reason
 # the memory figure has to be checked rather than assumed.
 # ---------------------------------------------------------------------------
-say "Step 1: building manifests (this also rebuilds the 13-case evaluation manifest, identically)"
-run python scripts/make_manifest.py profile=server data=chbmit
-
+CHAN_ARGS=""
 PRETRAIN_CSV="$ART/manifest/chbmit_pretrain_manifest.csv"
+if [ -n "$PRETRAIN_CHANNELS" ]; then
+  # A different channel list is a different corpus, so it gets its own manifest
+  # file. Writing it to the default path would change the corpus hash the other
+  # run's cached inits were built against, forcing them to be retrained.
+  PRETRAIN_CSV="$ART/manifest/chbmit_pretrain_manifest_${TAG}.csv"
+  CHAN_ARGS="data.pretrain_channels=$PRETRAIN_CHANNELS data.pretrain_manifest_path=$PRETRAIN_CSV"
+  say "narrowed pre-training corpus: channels=$PRETRAIN_CHANNELS -> $PRETRAIN_CSV"
+fi
+
+say "Step 1: building manifests (this also rebuilds the 13-case evaluation manifest, identically)"
+run python scripts/make_manifest.py profile=server data=chbmit $CHAN_ARGS
 [ -f "$PRETRAIN_CSV" ] || { say "ABORT: $PRETRAIN_CSV was not produced"; exit 1; }
 
 say "Step 1b: corpus size and memory check"
@@ -127,7 +141,7 @@ elif [ "$rc" -ne 0 ]; then
   say "ABORT: the corpus check itself failed (exit $rc)"; exit 1
 fi
 
-L5="train.pretrain.enabled=true train.pretrain.use_wider_corpus=true train.run_tag=$TAG"
+L5="train.pretrain.enabled=true train.pretrain.use_wider_corpus=true train.run_tag=$TAG $CHAN_ARGS"
 
 # ---------------------------------------------------------------------------
 # Step 2 -- pre-training. Cached inits carry the hash of the corpus that made

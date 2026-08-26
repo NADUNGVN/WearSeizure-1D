@@ -213,6 +213,7 @@ def run_fold(
     sensitivity_floor: float | None = None,
     postprocess_alarm_timestamp: str = "window_end",
     compile_mode: str | None = None,
+    model_selection: str = "val_loss",
 ) -> FoldResult:
     datasets, _band, _normalizer = build_fold_datasets(records, fold, window_s, stride_s)
     train_ds, val_ds = datasets["train"], datasets["val"]
@@ -227,7 +228,7 @@ def run_fold(
     train_result = train_classifier(
         model, train_loader, val_loader, epochs=epochs, lr=lr, weight_decay=weight_decay,
         device=device, early_stopping_patience=early_stopping_patience,
-        compile_mode=compile_mode,
+        compile_mode=compile_mode, model_selection=model_selection,
     )
 
     return evaluate_fold(

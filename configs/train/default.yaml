@@ -104,3 +104,15 @@ compile_mode: null
 # `train.pretrain.use_wider_corpus=true` and it writes to `<window>__L5/` instead.
 # Empty leaves every existing path byte-identical.
 run_tag: null
+
+# Lever L4: what early stopping and checkpoint selection optimise.
+#   val_loss  -- cross-entropy. Default, and what every recorded result used.
+#   val_auprc -- area under the precision-recall curve on validation windows.
+#
+# Ictal windows are ~0.5% of the data, so cross-entropy can fall while the
+# model gets no better at the minority class that decides every reported
+# number. AUPRC scores the positive class specifically and ignores the
+# true-negative mass. It is threshold-free, which matters: selecting on event
+# sensitivity/FAR directly would need thresholds that threshold_selection.py
+# fits on this same validation partition afterwards -- circular.
+model_selection: val_loss

@@ -168,6 +168,7 @@ def _run_one_seed(cfg, seed, records, manifest_df, folds, threshold_grid, force_
                 val_subject_fraction=pretrain_cfg.get("val_subject_fraction", 0.2),
                 class_balanced_sampling=cfg.train.class_balanced_sampling,
                 force=pretrain_cfg.get("force", False),
+                model_selection=cfg.train.get("model_selection", "val_loss"),
                 extra_manifest_df=extra_manifest_df,
             )
             model.load_state_dict(init_state)
@@ -199,6 +200,7 @@ def _run_one_seed(cfg, seed, records, manifest_df, folds, threshold_grid, force_
             sensitivity_floor=cfg.postprocess.get("sensitivity_floor"),
             postprocess_alarm_timestamp=cfg.postprocess.get("alarm_timestamp", "window_end"),
             compile_mode=cfg.train.get("compile_mode"),
+            model_selection=cfg.train.get("model_selection", "val_loss"),
         )
 
         torch.save(result.model.state_dict(), run_dir / f"{fold.fold_id}.pt")

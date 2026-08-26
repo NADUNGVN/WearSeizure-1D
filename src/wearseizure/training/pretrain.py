@@ -221,6 +221,7 @@ def get_or_train_cohort_init(
     class_balanced_sampling: bool = True,
     prefetch_factor: int = 4,
     compile_mode: str | None = None,
+    model_selection: str = "val_loss",
     force: bool = False,
     extra_manifest_df: pd.DataFrame | None = None,
 ) -> dict:
@@ -289,7 +290,7 @@ def get_or_train_cohort_init(
     result = train_classifier(
         model, train_loader, val_loader, epochs=epochs, lr=lr, weight_decay=weight_decay,
         device=device, early_stopping_patience=early_stopping_patience,
-        compile_mode=compile_mode,
+        compile_mode=compile_mode, model_selection=model_selection,
     )
 
     state = {k: v.detach().cpu() for k, v in result.model.state_dict().items()}

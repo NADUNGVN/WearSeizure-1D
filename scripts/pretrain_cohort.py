@@ -123,6 +123,7 @@ def main(cfg: DictConfig) -> None:
             class_balanced_sampling=cfg.train.class_balanced_sampling,
             compile_mode=cfg.train.get("compile_mode"),
             force=pretrain_cfg.get("force", False),
+            model_selection=cfg.train.get("model_selection", "val_loss"),
             extra_manifest_df=extra_manifest_df,
         )
 
