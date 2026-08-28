@@ -41,6 +41,7 @@ class WearSeizureWindowDataset(Dataset):
         allowed_edf_ids: frozenset[str],
         window_s: float,
         stride_s: float,
+        teacher_logits: np.ndarray | None = None,
     ) -> None:
         self.records = filtered_normalized_records
         self.windows: list[Window] = []
@@ -48,13 +49,34 @@ class WearSeizureWindowDataset(Dataset):
             record = filtered_normalized_records[edf_id]
             self.windows.extend(windows_for_edf(record, window_s, stride_s, allowed_edf_ids))
 
+        # Lever L3. One row per window, in this dataset's own window order, so a
+        # sampler or shuffle carries a window's teacher logits along with it
+        # instead of the two being matched up by position after the fact.
+        #
+        # Windows are built from `record.meta` (sampling rate, event times) and
+        # index arithmetic alone -- never from signal values -- so the 18-channel
+        # view of an EDF yields exactly the same window list as the 1-channel
+        # view. That is what makes an offline logit array alignable at all.
+        if teacher_logits is not None:
+            if len(teacher_logits) != len(self.windows):
+                raise ValueError(
+                    f"teacher_logits has {len(teacher_logits)} rows for "
+                    f"{len(self.windows)} windows -- they must be built from the same "
+                    "fold, window_s and stride_s"
+                )
+            teacher_logits = np.ascontiguousarray(teacher_logits, dtype=np.float32)
+        self.teacher_logits = teacher_logits
+
     def __len__(self) -> int:
         return len(self.windows)
 
     def __getitem__(self, idx: int):
         w = self.windows[idx]
         x = extract(self.records[w.edf_id], w)
-        return torch.from_numpy(x).float().unsqueeze(0), torch.tensor(w.label, dtype=torch.long)
+        item = (torch.from_numpy(x).float().unsqueeze(0), torch.tensor(w.label, dtype=torch.long))
+        if self.teacher_logits is None:
+            return item
+        return (*item, torch.from_numpy(self.teacher_logits[idx]))
 
     def __getitems__(self, indices: list[int]):
         """Fetch a whole batch in one call (PyTorch's batched-fetch protocol).
@@ -81,7 +103,10 @@ class WearSeizureWindowDataset(Dataset):
             labels[row] = w.label
         x = torch.from_numpy(batch).unsqueeze(1)
         y = torch.from_numpy(labels)
-        return list(zip(x, y))
+        if self.teacher_logits is None:
+            return list(zip(x, y))
+        t = torch.from_numpy(self.teacher_logits[np.asarray(indices)])
+        return list(zip(x, y, t))
 
     def window_at(self, idx: int) -> Window:
         return self.windows[idx]
@@ -94,6 +119,7 @@ def build_fold_datasets(
     stride_s: float,
     band_low_hz: float = 1.0,
     band_high_hz: float = 30.0,
+    teacher_logits: np.ndarray | None = None,
 ) -> tuple[dict[Partition, WearSeizureWindowDataset], CausalBandpass, AffineNormalizer]:
     """Fit filter/normalizer on `fold.train_edf_ids` only, then build all three
     partitions' datasets from that single frozen (band, normalizer) pair.
@@ -136,5 +162,12 @@ def build_fold_datasets(
     datasets: dict[Partition, WearSeizureWindowDataset] = {}
     for partition in ("train", "val", "test"):
         allowed = _partition_edf_ids(fold, partition)
-        datasets[partition] = WearSeizureWindowDataset(normalized_all, allowed, window_s, stride_s)
+        # Teacher logits go on the TRAIN partition only. Distillation is a
+        # training signal; attaching it to val or test would put a
+        # multi-channel model's opinion inside the evaluation path, and the
+        # thing being evaluated is a single-channel detector.
+        datasets[partition] = WearSeizureWindowDataset(
+            normalized_all, allowed, window_s, stride_s,
+            teacher_logits=teacher_logits if partition == "train" else None,
+        )
     return datasets, band, normalizer

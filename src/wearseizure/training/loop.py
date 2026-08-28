@@ -55,6 +55,8 @@ def train_classifier(
     early_stopping_patience: int = 8,
     compile_mode: str | None = None,
     model_selection: str = "val_loss",
+    distill_alpha: float = 0.0,
+    distill_temperature: float = 2.0,
 ) -> TrainResult:
     """`compile_mode` is passed straight to `torch.compile(mode=...)`.
 
@@ -71,6 +73,10 @@ def train_classifier(
     a large behavioural change to take on trust in the middle of a run that
     feeds a publication. Turn it on with `train.compile_mode=reduce-overhead`
     and compare against an uncompiled run before adopting it.
+
+    `distill_alpha` (lever L3) mixes a soft-target loss against teacher
+    logits the dataset carries per window; 0.0 disables it, which is the
+    default and reproduces every recorded result.
 
     `model_selection` (lever L4) chooses what early stopping and checkpoint
     selection optimise:
@@ -96,6 +102,10 @@ def train_classifier(
     thresholds fitted to the checkpoint is circular. AUPRC is threshold-free,
     which breaks the circle while still scoring the axis that matters.
     """
+    if not 0.0 <= distill_alpha <= 1.0:
+        raise ValueError(f"distill_alpha must be in [0, 1], got {distill_alpha}")
+    if distill_temperature <= 0:
+        raise ValueError(f"distill_temperature must be > 0, got {distill_temperature}")
     if model_selection not in MODEL_SELECTION:
         raise ValueError(
             f"unknown model_selection {model_selection!r}, expected one of {MODEL_SELECTION}"
@@ -119,10 +129,22 @@ def train_classifier(
     for epoch in range(epochs):
         model.train()
         train_loss, n_train = 0.0, 0
-        for x, y in train_loader:
+        for batch in train_loader:
+            # Two- or three-tuple: the dataset attaches teacher logits only when
+            # lever L3 is on, and only to the train partition.
+            if len(batch) == 3:
+                x, y, teacher = batch
+                teacher = teacher.to(device, non_blocking=True)
+            else:
+                (x, y), teacher = batch, None
             x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
             optimizer.zero_grad()
-            loss = criterion(model(x), y)
+            logits = model(x)
+            loss = criterion(logits, y)
+            if teacher is not None and distill_alpha > 0:
+                loss = (1.0 - distill_alpha) * loss + distill_alpha * _distillation_loss(
+                    logits, teacher, distill_temperature
+                )
             loss.backward()
             optimizer.step()
             train_loss += loss.item() * x.size(0)
@@ -171,6 +193,30 @@ def train_classifier(
         best_val_auprc=best_val_auprc,
         selection=model_selection,
     )
+
+
+def _distillation_loss(
+    student_logits: torch.Tensor, teacher_logits: torch.Tensor, temperature: float
+) -> torch.Tensor:
+    """Hinton-style soft-target loss: KL(teacher || student) at temperature T.
+
+    Why lever L3 exists at all: the student sees ONE EEG channel, and lever L5
+    established that the missing information cannot be bought with more
+    pre-training data. A teacher reading all 18 channels solves a materially
+    easier problem, and its soft probabilities carry more than the hard label
+    does -- how confident it is, and on which windows -- which is exactly the
+    signal a single channel is short of.
+
+    The `T**2` factor is from the original formulation: softening by T shrinks
+    the gradients of the soft term by roughly 1/T**2, so without it the balance
+    between the hard and soft terms would silently depend on the temperature.
+    """
+    t = temperature
+    student_log_p = torch.log_softmax(student_logits / t, dim=1)
+    teacher_p = torch.softmax(teacher_logits / t, dim=1)
+    return torch.nn.functional.kl_div(
+        student_log_p, teacher_p, reduction="batchmean"
+    ) * (t * t)
 
 
 def _eval_val(

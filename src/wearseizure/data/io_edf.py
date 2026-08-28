@@ -40,6 +40,49 @@ def edf_channel_labels(edf_path: str) -> list[str]:
         reader.close()
 
 
+def load_edf_multichannel(
+    edf_path: str, channel_names: list[str] | None = None
+) -> tuple[np.ndarray, list[str]]:
+    """All (or the named) channels of an EDF as `(C, T)` float32, plus the
+    channel names actually read, in row order.
+
+    For lever L3: the teacher reads every channel while the student still reads
+    one. It returns the names rather than assuming a fixed montage because
+    CHB-MIT files are not uniform -- some carry a dummy `-` channel, and a few
+    have a different montage entirely.
+
+    Channels shorter than the longest are refused rather than padded: a length
+    mismatch means the file is not what the manifest says it is, and silently
+    zero-filling would teach the teacher on fabricated signal.
+    """
+    import pyedflib
+
+    reader = pyedflib.EdfReader(str(edf_path))
+    try:
+        labels = [lbl.strip() for lbl in reader.getSignalLabels()]
+        if channel_names is None:
+            wanted = [
+                i for i, lbl in enumerate(labels)
+                if lbl and lbl != "-" and lbl.upper() != "--"
+            ]
+        else:
+            upper = [lbl.upper() for lbl in labels]
+            wanted = [upper.index(c.strip().upper()) for c in channel_names if c.strip().upper() in upper]
+        if not wanted:
+            raise KeyError(f"no usable channels in {edf_path} (labels={labels})")
+        signals = [reader.readSignal(i).astype(np.float32) for i in wanted]
+        names = [labels[i] for i in wanted]
+    finally:
+        reader.close()
+
+    lengths = {len(sig) for sig in signals}
+    if len(lengths) != 1:
+        raise ValueError(
+            f"{edf_path}: channels have differing lengths {sorted(lengths)}; refusing to pad"
+        )
+    return np.stack(signals, axis=0), names
+
+
 def load_edf_record(
     edf_path: str,
     subject_id: str,
