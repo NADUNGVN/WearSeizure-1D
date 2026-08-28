@@ -18,6 +18,7 @@ from wearseizure.data.loader import load_records_from_manifest
 from wearseizure.data.manifest import hash_manifest, load_manifest
 from wearseizure.data.splits import load_folds, subject_from_fold_id
 from wearseizure.models.factory import build_model
+from wearseizure.training.distill import get_or_train_fold_teacher_logits
 from wearseizure.training.engine_baseline import run_fold
 from wearseizure.training.pretrain import get_or_train_cohort_init, load_pretrain_corpus
 from wearseizure.utils.env import bootstrap_env
@@ -120,6 +121,28 @@ def _run_one_seed(cfg, seed, records, manifest_df, folds, threshold_grid, force_
     pretrain_dir = pretrain_cache_dir(
         cfg.profile.artifacts_dir, cfg.model.name, cfg.window.name, seed, run_tag_from_cfg(cfg)
     )
+    # Lever L3. Teachers are cached by FOLD, not by seed: the teacher depends on
+    # the fold's train partition and window geometry, none of which the student's
+    # seed touches. Caching per seed would cost three times as much for three
+    # answers to the same question, and would stop a seed-to-seed comparison
+    # from isolating the student.
+    distill_cfg = cfg.train.get("distill", {})
+    use_distill = bool(distill_cfg.get("enabled", False))
+    teacher_dir = (
+        Path(cfg.profile.artifacts_dir) / "teacher" / cfg.window.name
+        / (run_tag_from_cfg(cfg) or "base")
+    )
+    if use_distill:
+        if cfg.data.name == "synthetic":
+            raise ValueError(
+                "train.distill.enabled=true needs real multi-channel EDFs; the synthetic "
+                "generator produces one channel per record"
+            )
+        log.info(
+            f"lever L3 ENABLED: teacher logits cached under {teacher_dir}; "
+            f"alpha={distill_cfg.get('alpha')} temperature={distill_cfg.get('temperature')}"
+        )
+
     finetune_lr = cfg.train.get("finetune_lr", cfg.train.lr)
     extra_manifest_df, extra_records = (
         load_pretrain_corpus(cfg, log) if use_pretrain else (None, {})
@@ -175,6 +198,27 @@ def _run_one_seed(cfg, seed, records, manifest_df, folds, threshold_grid, force_
             fold_lr = finetune_lr
             pretrained_from = subject_id
 
+        teacher_logits = None
+        if use_distill:
+            teacher_logits = get_or_train_fold_teacher_logits(
+                records=records,
+                manifest_df=manifest_df,
+                raw_dir=cfg.data.raw_dir,
+                fold=fold,
+                cache_dir=teacher_dir,
+                window_s=cfg.window.window_s,
+                stride_s=cfg.window.stride_s,
+                epochs=distill_cfg.get("teacher_epochs", 30),
+                lr=distill_cfg.get("teacher_lr", 1e-3),
+                weight_decay=cfg.train.weight_decay,
+                batch_size=cfg.train.batch_size,
+                device=cfg.profile.device,
+                early_stopping_patience=distill_cfg.get("teacher_patience", 8),
+                num_workers=cfg.profile.get("num_workers", 0),
+                class_balanced_sampling=cfg.train.class_balanced_sampling,
+                force=distill_cfg.get("force", False),
+            )
+
         result = run_fold(
             model=model,
             records=records,
@@ -201,6 +245,9 @@ def _run_one_seed(cfg, seed, records, manifest_df, folds, threshold_grid, force_
             postprocess_alarm_timestamp=cfg.postprocess.get("alarm_timestamp", "window_end"),
             compile_mode=cfg.train.get("compile_mode"),
             model_selection=cfg.train.get("model_selection", "val_loss"),
+            teacher_logits=teacher_logits,
+            distill_alpha=float(distill_cfg.get("alpha", 0.0)) if use_distill else 0.0,
+            distill_temperature=float(distill_cfg.get("temperature", 2.0)),
         )
 
         torch.save(result.model.state_dict(), run_dir / f"{fold.fold_id}.pt")
@@ -215,6 +262,7 @@ def _run_one_seed(cfg, seed, records, manifest_df, folds, threshold_grid, force_
                     "pretrained_from_cohort_excluding": pretrained_from,
                     "lr": fold_lr,
                     "seed": seed,
+                    "distilled": bool(use_distill),
                     "frozen_postprocess": result.frozen_postprocess.to_dict(),
                     "test_event_metrics": asdict(result.test_event_metrics),
                     "test_segment_metrics": asdict(result.test_segment_metrics),

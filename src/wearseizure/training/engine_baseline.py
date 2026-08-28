@@ -214,8 +214,13 @@ def run_fold(
     postprocess_alarm_timestamp: str = "window_end",
     compile_mode: str | None = None,
     model_selection: str = "val_loss",
+    teacher_logits: np.ndarray | None = None,
+    distill_alpha: float = 0.0,
+    distill_temperature: float = 2.0,
 ) -> FoldResult:
-    datasets, _band, _normalizer = build_fold_datasets(records, fold, window_s, stride_s)
+    datasets, _band, _normalizer = build_fold_datasets(
+        records, fold, window_s, stride_s, teacher_logits=teacher_logits
+    )
     train_ds, val_ds = datasets["train"], datasets["val"]
     dl_kwargs = _dataloader_kwargs(device, num_workers)
 
@@ -229,6 +234,7 @@ def run_fold(
         model, train_loader, val_loader, epochs=epochs, lr=lr, weight_decay=weight_decay,
         device=device, early_stopping_patience=early_stopping_patience,
         compile_mode=compile_mode, model_selection=model_selection,
+        distill_alpha=distill_alpha, distill_temperature=distill_temperature,
     )
 
     return evaluate_fold(

@@ -116,3 +116,30 @@ run_tag: null
 # sensitivity/FAR directly would need thresholds that threshold_selection.py
 # fits on this same validation partition afterwards -- circular.
 model_selection: val_loss
+
+# Lever L3: distil a multi-channel teacher into the single-channel student.
+#
+# Lever L5 established that the missing information cannot be bought with more
+# pre-training data -- widening the corpus changed nothing at four electrode
+# positions and made things significantly worse at one. This goes the other way
+# and extracts more from the recordings already in hand: a teacher reading every
+# channel of the same EDFs solves a materially easier problem, and its soft
+# probabilities carry what the hard label does not.
+#
+# Off by default, so every recorded number stays reproducible. Needs real EDFs
+# (data=chbmit): the synthetic generator produces one channel per record.
+#
+# Teachers are cached by FOLD under ${artifacts}/teacher/, not by seed -- the
+# teacher does not depend on the student seed, and identical soft targets across
+# seeds are what let a seed-to-seed comparison isolate the student.
+distill:
+  enabled: false
+  # Weight on the soft-target term; the hard cross-entropy keeps (1 - alpha).
+  alpha: 0.5
+  # Softmax temperature. The loss carries the T**2 factor from the original
+  # formulation, so the hard/soft balance does not silently depend on this.
+  temperature: 2.0
+  teacher_epochs: 30
+  teacher_lr: 0.001
+  teacher_patience: 8
+  force: false

@@ -36,6 +36,9 @@ system is a single-channel detector; the teacher is a training-time scaffold.
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
@@ -43,6 +46,7 @@ from torch.utils.data import DataLoader, Dataset
 from wearseizure.data.records import EEGRecord
 from wearseizure.data.splits import Fold
 from wearseizure.data.windowing import Window, windows_for_edf
+from wearseizure.models.teacher import build_teacher
 from wearseizure.signal.filters import CausalBandpass
 from wearseizure.signal.normalize import fit_affine_normalizer
 from wearseizure.utils.logging import get_logger
@@ -201,3 +205,120 @@ def fold_teacher_logits(
     return teacher_logits_for_windows(
         result.model, signals, train_windows, device=device, batch_size=batch_size
     )
+
+
+def load_multichannel_for_fold(
+    manifest_df, raw_dir: str, edf_ids: frozenset[str]
+) -> dict[str, np.ndarray]:
+    """Every channel of each EDF in `edf_ids`, as `(C, T)` float32.
+
+    Uses the manifest's own `subject_id` / `edf_relpath` rather than a second
+    manifest: the evaluation manifest already records where each file is, and
+    the only thing that differs for the teacher is how many channels come back
+    out of it. A separate multi-channel manifest would be one more thing that
+    can drift out of step with the one the splits are version-locked to.
+    """
+    from wearseizure.data.io_edf import load_edf_multichannel
+
+    rows = manifest_df[manifest_df["edf_id"].isin(edf_ids)]
+    signals: dict[str, np.ndarray] = {}
+    channel_counts: dict[int, int] = {}
+    for _, row in rows.iterrows():
+        path = Path(raw_dir) / row["subject_id"] / row["edf_relpath"]
+        sig, names = load_edf_multichannel(str(path))
+        signals[row["edf_id"]] = sig
+        channel_counts[len(names)] = channel_counts.get(len(names), 0) + 1
+
+    missing = set(edf_ids) - signals.keys()
+    if missing:
+        raise ValueError(f"multi-channel load found no rows for {sorted(missing)}")
+    if len(channel_counts) > 1:
+        # CHB-MIT is not uniform: a few files carry a different montage. Padding
+        # or truncating to a common width would feed the teacher fabricated or
+        # silently reordered channels, so this is refused rather than patched.
+        raise ValueError(
+            f"EDFs in this fold have differing channel counts {channel_counts}; "
+            "the teacher needs one consistent montage per fold"
+        )
+    return signals
+
+
+def _teacher_cache_paths(cache_dir: Path, fold_id: str) -> tuple[Path, Path]:
+    return cache_dir / f"{fold_id}.npz", cache_dir / f"{fold_id}.json"
+
+
+def get_or_train_fold_teacher_logits(
+    records: dict[str, EEGRecord],
+    manifest_df,
+    raw_dir: str,
+    fold: Fold,
+    cache_dir: Path,
+    window_s: float,
+    stride_s: float,
+    epochs: int,
+    lr: float,
+    weight_decay: float,
+    batch_size: int,
+    device: str,
+    early_stopping_patience: int,
+    num_workers: int = 0,
+    class_balanced_sampling: bool = True,
+    force: bool = False,
+) -> np.ndarray:
+    """Teacher logits for a fold, training and caching them on first use.
+
+    Cached by FOLD, not by seed. The teacher depends on the fold's train
+    partition, the window geometry and its own hyperparameters -- none of which
+    the student's seed touches -- so training one per seed would be three times
+    the cost for three answers to the same question. It also makes the soft
+    targets identical across seeds, which is what lets a seed-to-seed comparison
+    isolate the student.
+
+    The cache carries the settings it was built from and is rebuilt when they
+    change, the same guard `training/pretrain.py` uses: reusing logits from a
+    different teacher configuration would look like "distillation did nothing"
+    while the distillation being measured never ran.
+    """
+    ckpt, meta_path = _teacher_cache_paths(cache_dir, fold.fold_id)
+    signature = {
+        "fold_id": fold.fold_id,
+        "manifest_hash": fold.manifest_hash,
+        "window_s": window_s,
+        "stride_s": stride_s,
+        "epochs": epochs,
+        "lr": lr,
+        "weight_decay": weight_decay,
+        "batch_size": batch_size,
+        "early_stopping_patience": early_stopping_patience,
+        "class_balanced_sampling": class_balanced_sampling,
+    }
+    if ckpt.exists() and not force:
+        cached = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+        if cached.get("signature") == signature:
+            log.info(f"teacher: reusing cached logits for {fold.fold_id} <- {ckpt}")
+            return np.load(ckpt)["logits"]
+        log.warning(
+            f"teacher: cached logits for {fold.fold_id} were built from different settings; "
+            "re-training"
+        )
+
+    signals = load_multichannel_for_fold(manifest_df, raw_dir, fold.train_edf_ids | fold.val_edf_ids)
+    logits = fold_teacher_logits(
+        records=records, multichannel_raw=signals, fold=fold,
+        teacher_factory=build_teacher, window_s=window_s, stride_s=stride_s,
+        epochs=epochs, lr=lr, weight_decay=weight_decay, batch_size=batch_size,
+        device=device, early_stopping_patience=early_stopping_patience,
+        num_workers=num_workers, class_balanced_sampling=class_balanced_sampling,
+    )
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(ckpt, logits=logits)
+    meta_path.write_text(
+        json.dumps(
+            {"signature": signature, "n_windows": len(logits),
+             "n_channels": int(next(iter(signals.values())).shape[0])},
+            indent=2, sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    log.info(f"teacher: {len(logits)} logits for {fold.fold_id} -> {ckpt}")
+    return logits
