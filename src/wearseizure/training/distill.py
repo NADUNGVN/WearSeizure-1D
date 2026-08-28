@@ -264,6 +264,7 @@ def get_or_train_fold_teacher_logits(
     num_workers: int = 0,
     class_balanced_sampling: bool = True,
     force: bool = False,
+    single_channel: bool = False,
 ) -> np.ndarray:
     """Teacher logits for a fold, training and caching them on first use.
 
@@ -281,6 +282,7 @@ def get_or_train_fold_teacher_logits(
     """
     ckpt, meta_path = _teacher_cache_paths(cache_dir, fold.fold_id)
     signature = {
+        "single_channel": single_channel,
         "fold_id": fold.fold_id,
         "manifest_hash": fold.manifest_hash,
         "window_s": window_s,
@@ -302,7 +304,19 @@ def get_or_train_fold_teacher_logits(
             "re-training"
         )
 
-    signals = load_multichannel_for_fold(manifest_df, raw_dir, fold.train_edf_ids | fold.val_edf_ids)
+    if single_channel:
+        # The ablation a reviewer will ask for. The teacher is both wider and
+        # multi-channel, so a gain from distillation confounds "more channels"
+        # with "more capacity". This control keeps the teacher architecture
+        # identical and feeds it the student's single channel, isolating the
+        # channels as the thing being tested.
+        ids = fold.train_edf_ids | fold.val_edf_ids
+        signals = {edf_id: records[edf_id].signal[None, :].astype(np.float32) for edf_id in ids}
+        log.info(f"teacher for fold {fold.fold_id}: SINGLE-channel control")
+    else:
+        signals = load_multichannel_for_fold(
+            manifest_df, raw_dir, fold.train_edf_ids | fold.val_edf_ids
+        )
     logits = fold_teacher_logits(
         records=records, multichannel_raw=signals, fold=fold,
         teacher_factory=build_teacher, window_s=window_s, stride_s=stride_s,

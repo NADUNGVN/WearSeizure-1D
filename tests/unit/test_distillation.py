@@ -212,3 +212,45 @@ def test_alpha_zero_reproduces_training_without_a_teacher():
                          distill_alpha=0.0)
     for (_, va), (_, vb) in zip(a.model.state_dict().items(), b.model.state_dict().items()):
         assert torch.equal(va, vb)
+
+
+def test_single_channel_teacher_control_is_cached_separately(tmp_path, synthetic_cohort, monkeypatch):
+    """The multi-channel teacher is both wider AND multi-channel, so a gain from
+    distillation confounds the two. The control keeps the architecture and drops
+    to one channel -- and must not share a cache entry with the real teacher, or
+    the second run would silently reuse the first one's logits."""
+    import wearseizure.training.distill as distill
+
+    manifest_df, records = synthetic_cohort
+    fold = make_patient_specific_loso_edf(manifest_df, seed=0)[0]
+
+    calls = []
+
+    def fake_fold_teacher_logits(**kwargs):
+        n_ch = next(iter(kwargs["multichannel_raw"].values())).shape[0]
+        calls.append(n_ch)
+        n = len(windows_for_partition(records, fold.train_edf_ids, 4.0, 1.0))
+        return np.full((n, 2), float(n_ch), dtype=np.float32)
+
+    monkeypatch.setattr(distill, "fold_teacher_logits", fake_fold_teacher_logits)
+    monkeypatch.setattr(
+        distill, "load_multichannel_for_fold",
+        lambda mdf, raw, ids: {i: np.zeros((7, records[i].meta.n_samples), np.float32) for i in ids},
+    )
+
+    common = dict(
+        records=records, manifest_df=manifest_df, raw_dir="/unused", fold=fold,
+        cache_dir=tmp_path, window_s=4.0, stride_s=1.0, epochs=1, lr=1e-3,
+        weight_decay=0.0, batch_size=32, device="cpu", early_stopping_patience=1,
+    )
+    multi = distill.get_or_train_fold_teacher_logits(**common, single_channel=False)
+    single = distill.get_or_train_fold_teacher_logits(**common, single_channel=True)
+
+    assert calls == [7, 1], "the control must feed the teacher one channel, not seven"
+    assert multi[0, 0] == 7.0 and single[0, 0] == 1.0, "the two must not share a cache entry"
+
+    # Re-asking for the multi-channel one rebuilds it, because the cache now
+    # holds the control's signature -- a mismatch is retrained, never reused.
+    again = distill.get_or_train_fold_teacher_logits(**common, single_channel=False)
+    assert again[0, 0] == 7.0
+    assert calls == [7, 1, 7]

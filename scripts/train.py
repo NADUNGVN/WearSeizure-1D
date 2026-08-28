@@ -217,6 +217,7 @@ def _run_one_seed(cfg, seed, records, manifest_df, folds, threshold_grid, force_
                 num_workers=cfg.profile.get("num_workers", 0),
                 class_balanced_sampling=cfg.train.class_balanced_sampling,
                 force=distill_cfg.get("force", False),
+                single_channel=bool(distill_cfg.get("single_channel_teacher", False)),
             )
 
         result = run_fold(

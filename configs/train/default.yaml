@@ -143,3 +143,9 @@ distill:
   teacher_lr: 0.001
   teacher_patience: 8
   force: false
+  # Ablation: keep the teacher architecture identical but feed it the
+  # student's single channel. The teacher is both wider and multi-channel, so a
+  # gain from distillation otherwise confounds "more channels" with "more
+  # capacity" -- this isolates the channels. Cached separately from the
+  # multi-channel teacher, so the two never overwrite each other.
+  single_channel_teacher: false
