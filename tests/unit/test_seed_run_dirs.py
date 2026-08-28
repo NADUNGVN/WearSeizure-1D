@@ -121,3 +121,24 @@ def test_run_tag_is_read_from_config_and_validated():
     for bad in ("L5/../evil", "a b", "x;y"):
         with pytest.raises(ValueError, match="alphanumeric"):
             run_tag_from_cfg(OmegaConf.create({"train": {"run_tag": bad}}))
+
+
+def test_every_fold_run_dir_call_in_the_scripts_passes_a_tag():
+    """Every `fold_run_dir(...)` call site must pass the run tag.
+
+    One did not: the multi-seed summary path in scripts/evaluate.py. Per-seed
+    reports went to the tagged directory while `report_multiseed.json` went to
+    the untagged one, so a lever-L5 run overwrote the control arm's summary with
+    its own numbers. Nothing errored; the control simply changed underneath a
+    comparison table.
+    """
+    import re
+
+    scripts = Path(__file__).resolve().parents[2] / "scripts"
+    offenders = []
+    for path in scripts.glob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        for call in re.findall(r"fold_run_dir\((?:[^()]|\([^()]*\))*\)", text, re.S):
+            if "run_tag" not in call:
+                offenders.append(f"{path.name}: {' '.join(call.split())[:90]}")
+    assert not offenders, "fold_run_dir called without a run tag:\n  " + "\n  ".join(offenders)

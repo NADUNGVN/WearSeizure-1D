@@ -265,9 +265,15 @@ def main(cfg: DictConfig) -> None:
 
     if len(seeds) > 1:
         summary = _multiseed_summary(reports)
+        # The tag has to be here too. Without it the per-seed reports land in the
+        # tagged directory while the summary lands in the UNTAGGED one -- so a
+        # lever-L5 run silently overwrote the control arm's summary with its own
+        # numbers, and the only symptom was a comparison table where the control
+        # had quietly changed.
         summary_path = (
             fold_run_dir(cfg.profile.artifacts_dir, cfg.model.name, cfg.split.name,
-                         cfg.window.name, seeds[0]).parent / "report_multiseed.json"
+                         cfg.window.name, seeds[0], run_tag_from_cfg(cfg)).parent
+            / "report_multiseed.json"
         )
         save_report({"seeds": seeds, "metrics": summary}, str(summary_path))
         log.info(f"multi-seed summary written to {summary_path}")
