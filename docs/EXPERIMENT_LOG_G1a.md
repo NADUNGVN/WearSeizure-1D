@@ -323,7 +323,7 @@ An honest caveat on (2): "indistinguishable" at 13 patients is partly a statemen
 The macro point estimates differ by 3.7pp and micro reaches significance, so the correct phrasing is
 that this cohort cannot separate them -- not that they are known to be equal.
 
-## 2e. Rows 35-36 — lever L5 is a negative result (08-26)
+## 2e. Rows 35-38 — lever L5 is a negative result, at both corpus widths (08-26 to 08-29)
 
 Cohort pre-training corpus widened from the 12 remaining evaluation patients (553h) to those plus
 the 11 non-evaluation CHB-MIT cases at all four wearable positions (2085h, **3.7x**). Evaluation
@@ -331,12 +331,31 @@ untouched: 13 cases, 66 folds, 185.0h. Three seeds, both architectures, `hystere
 each compared against **its own** Phase 2 control -- same architecture, same seeds, same
 post-processing, corpus the only difference.
 
-| # | Model | L5 | Sensitivity | FAR/h | Delay | Worst-pt FAR |
-|---|---|---|---:|---:|---:|---:|
-| 32 | `k5only` | no | 0.9358 ± 0.030 | 0.2216 | 18.83 | 0.7785 |
-| 35 | `k5only` | **yes** | 0.9348 ± 0.030 | 0.2198 | 17.71 | 0.6640 |
-| 33 | `frontiers2d` | no | **0.9726 ± 0.004** | **0.2793** | 17.22 | **2.2210** |
-| 36 | `frontiers2d` | **yes** | 0.9641 | 0.3928 | 16.21 | 3.3887 |
+| # | Model | Pre-training corpus | Sensitivity | FAR/h |
+|---|---|---|---:|---:|
+| 32 | `k5only` | 13 cases (control) | **0.9358 ± 0.0304** | **0.2261** |
+| 35 | `k5only` | + 11 cases, 4 positions | 0.9348 ± 0.0153 | 0.2318 |
+| 37 | `k5only` | + 11 cases, **1 position** | **0.8924 ± 0.0116** | 0.2547 |
+| 33 | `frontiers2d` | 13 cases (control) | **0.9726 ± 0.0037** | **0.2922** |
+| 36 | `frontiers2d` | + 11 cases, 4 positions | 0.9641 ± 0.0170 | 0.4011 |
+| 38 | `frontiers2d` | + 11 cases, **1 position** | 0.9641 ± 0.0279 | 0.3573 |
+
+**The control wins all six cells.** Macro sensitivity and macro FAR, three seeds each, same
+post-processing, same folds -- the only difference is what the cohort initialisation was
+pre-trained on.
+
+Paired bootstrap against each configuration's own control:
+
+| Comparison | Δ sensitivity_macro | 95% CI | Verdict |
+|---|---:|---|---|
+| `k5only` + 4 positions | -0.0010 | [-0.0476, +0.0361] | indistinguishable |
+| `k5only` + **1 position** | **-0.0434** | **[-0.0861, -0.0086]** | **control better** |
+| `frontiers2d` + 4 positions | -0.0085 | [-0.0256, +0.0000] | indistinguishable (boundary) |
+
+(Row-35/36 figures previously quoted here were the bootstrap's *micro* FAR; the table now uses
+macro throughout, matching rows 32-34. The `report_multiseed.json` files were also being written to
+the untagged control directory -- see commit `b237cfa`. The measurements were never affected, since
+`paired_bootstrap.py` reads `*.metrics.json` directly and those were untouched.)
 
 All twelve paired comparisons return "neither" -- no metric moves significantly, for either
 architecture. Sign tests agree: L5 is quieter in 4 of 10 patients for `k5only` (p = 0.75) and 4 of
@@ -350,7 +369,28 @@ patient's recordings to twelve patients' -- was worth +6.0pp to `k5only` and +9.
 nothing. The gain came from escaping a starved regime (a ~12k-parameter CNN learning from two
 seizures), not from data volume as such, and that escape has already happened.
 
-**2. The extra corpus carries label noise, and it shows up in FAR rather than sensitivity.**
+**2. Narrowing to one electrode position makes it WORSE, which reverses the diagnosis.**
+The follow-up pre-registered in `configs/data/chbmit.yaml` was to narrow `pretrain_channels` to a
+single position, on the theory that taking all four labels ictal windows positive at positions where
+the seizure is not visible. It does the opposite of rescuing L5: `k5only` drops to 0.8924, and that
+drop **is** significant (CI [-0.0861, -0.0086]).
+
+The reasoning was backwards. With four positions at least one view has a chance of containing the
+discriminative pattern; forcing every case onto P8-O2 means every patient whose seizure is not
+visible there contributes *only* mislabelled ictal windows. A single fixed position raises the
+mislabelled fraction rather than lowering it.
+
+So the conclusion is stronger and simpler than "label noise": **the pre-training corpus cannot be
+extended beyond the 13 clinically-confirmed cases at all.** Chung et al. excluded those 11 cases
+precisely because seizure onset was not confirmed observable from these wearable positions, and this
+is that exclusion being independently re-derived from the data.
+
+The practical consequence is large and cheap to have bought: **external corpora (TUSZ, Siena) are
+not worth pursuing.** They face the same problem at greater scale -- no per-patient confirmation of
+which single channel carries the seizure -- and two runs of about a day each have settled what would
+otherwise have been weeks of work.
+
+**3. The extra corpus also degrades FAR, at both widths.**
 `frontiers2d` degrades on exactly the axes label noise would touch: FAR 0.2793 -> 0.3928 (+41%) and
 worst-patient FAR 2.2210 -> 3.3887 (+53%), with sensitivity almost unchanged (upper CI bound
 exactly 0.0000). The 11 added cases have **no clinical confirmation** that seizure onset is
