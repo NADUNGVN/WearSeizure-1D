@@ -213,10 +213,13 @@ done
 # corpus change with an architecture change.
 # ---------------------------------------------------------------------------
 for model in "${MODELS[@]}"; do
-  say "paired bootstrap: $model WITH L5 vs WITHOUT (its Phase 2 control)"
+  # Filename carries TAG. Without it a narrowed-corpus run overwrites the
+  # four-position run's result file -- which is exactly what happened, and
+  # the two are only distinguishable afterwards by noticing the numbers moved.
+  say "paired bootstrap: $model WITH $TAG vs WITHOUT (its Phase 2 control)"
   run python scripts/paired_bootstrap.py \
     "$ART/$model/$SPLIT/${WINDOW}__${TAG}" "$ART/$model/$SPLIT/$WINDOW" \
-    --all-metrics --json "$ART/paired_${model}_L5_vs_noL5.json"
+    --all-metrics --json "$ART/paired_${model}_${TAG}_vs_noL5.json"
 done
 
 say "Phase 3 done. Send back $LOG and the paired_*_L5_vs_noL5.json files"
