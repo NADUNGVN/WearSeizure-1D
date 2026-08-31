@@ -138,7 +138,35 @@ def test_every_fold_run_dir_call_in_the_scripts_passes_a_tag():
     offenders = []
     for path in scripts.glob("*.py"):
         text = path.read_text(encoding="utf-8")
-        for call in re.findall(r"fold_run_dir\((?:[^()]|\([^()]*\))*\)", text, re.S):
+        for call in re.findall(r"fold_run_dir\((?:[^()]|\([^()]*\))*\)", text, re.DOTALL):
             if "run_tag" not in call:
                 offenders.append(f"{path.name}: {' '.join(call.split())[:90]}")
     assert not offenders, "fold_run_dir called without a run tag:\n  " + "\n  ".join(offenders)
+
+
+def test_pretrain_cache_sharing_is_opt_in_and_lives_under_pretrain():
+    """`share_cache_with_control` decides whether a tagged run reuses the
+    control's cohort initialisations.
+
+    It has to be read from `train.pretrain`, which is where train.py looks. An
+    earlier edit appended it to the end of the config file, where YAML folded it
+    into the `distill:` block instead -- the key existed, the docs described it,
+    and it could never have taken effect.
+
+    And it has to default to false: turning it on for a lever that DOES change
+    pre-training (as L4 does) would silently reuse the control initialisations,
+    and the experiment would measure nothing while looking like it ran.
+    """
+    import yaml
+
+    cfg_path = Path(__file__).resolve().parents[2] / "configs" / "train" / "default.yaml"
+    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+    assert cfg["pretrain"]["share_cache_with_control"] is False
+    assert "share_cache_with_control" not in cfg["distill"]
+
+
+def test_sharing_the_cache_selects_the_untagged_directory():
+    tagged = pretrain_cache_dir("/art", "m", "w4s", 0, "L3")
+    shared = pretrain_cache_dir("/art", "m", "w4s", 0, "")
+    assert tagged != shared
+    assert shared == pretrain_cache_dir("/art", "m", "w4s", 0)

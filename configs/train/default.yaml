@@ -68,6 +68,14 @@ pretrain:
   batch_size: 256
   val_subject_fraction: 0.2   # subject-level val split inside the pre-training cohort
   force: false
+  # Reuse the untagged (control) pre-training cache instead of one keyed by
+  # train.run_tag. Correct ONLY for levers that leave pre-training untouched:
+  # L3 changes the fine-tuning loss alone, so tagging its cache would spend
+  # about forty hours reproducing weights already on disk. L4, which DOES change
+  # how pre-training selects checkpoints, correctly rebuilt its own -- setting
+  # this there would have silently reused the control initialisations and the
+  # experiment would have measured nothing while looking like it ran.
+  share_cache_with_control: false
   # Lever L5. false = pre-train on the other 12 evaluation cases only (what
   # rows 21-26 did). true = also draw on the CHB-MIT cases the protocol does
   # NOT evaluate on, read from `data.pretrain_manifest_path`.
@@ -149,9 +157,3 @@ distill:
   # capacity" -- this isolates the channels. Cached separately from the
   # multi-channel teacher, so the two never overwrite each other.
   single_channel_teacher: false
-  # Reuse the untagged (control) pre-training cache instead of one keyed by
-  # train.run_tag. Correct ONLY for levers that leave pre-training untouched --
-  # L3 changes the fine-tuning loss alone. Turning it on for a lever that does
-  # change pre-training would silently reuse the control initialisations and
-  # the experiment would measure nothing.
-  share_cache_with_control: false
