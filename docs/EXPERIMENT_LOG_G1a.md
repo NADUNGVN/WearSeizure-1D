@@ -414,6 +414,51 @@ thing.
 Note the point estimates for `k5only` all move the right way -- delay 18.83 -> 17.71, worst-patient
 FAR 0.7785 -> 0.6640 -- but none of them significantly, and nothing should be built on them.
 
+## 2f. Rows 39-40 — lever L4 changes the operating point, it does not improve it (08-30)
+
+Checkpoint selection and early stopping on validation **AUPRC** instead of cross-entropy. Three
+seeds, both architectures, cohort pre-training on, same post-processing, each compared against its
+own control.
+
+| # | Model | Selection | Sensitivity | FAR/h | Delay | Worst-pt FAR |
+|---|---|---|---:|---:|---:|---:|
+| 32 | `k5only` | val_loss | 0.9358 ± 0.0304 | 0.2261 | 18.83 | 0.7785 |
+| 39 | `k5only` | **val_auprc** | 0.9380 ± 0.0350 | **0.1904** | 18.83 | 0.5701 |
+| 33 | `frontiers2d` | val_loss | **0.9726 ± 0.0037** | **0.2922** | 17.22 | **2.2210** |
+| 40 | `frontiers2d` | **val_auprc** | 0.9564 ± 0.0059 | 0.4673 | **15.03** | 4.1442 |
+
+Paired bootstrap, L4 as A:
+
+| Metric | vs `k5only` control | vs `frontiers2d` control |
+|---|---|---|
+| sensitivity_macro | +0.0022, CI [-0.0277, +0.0296] — neither | -0.0162, CI [-0.0385, +0.0000] — neither (boundary) |
+| far_per_hour_micro | -0.0360, CI [-0.1241, +0.0310] — neither | **+0.1784, CI [+0.0057, +0.5371] — control better** |
+| delay_mean_s | -0.0122, CI [-1.6112, +2.4462] — neither | **-2.1952, CI [-4.3039, -0.8909] — L4 better** |
+| worst_patient_far | -0.3354, CI [-0.4121, +0.0357] — neither | +1.9233, degenerate — neither |
+
+### What it did
+
+Nothing measurable for `k5only`. For `frontiers2d` it moved the model along the operating curve
+toward firing more readily: **2.2s faster and significantly so**, at **significantly worse FAR**,
+with worst-patient FAR nearly doubling and sensitivity down 1.6pp. That is a different trade-off,
+not a better one -- and it is the trade-off the wearable case cares least about, since detection
+delay was already inside the clinical window while false alarms were the binding constraint.
+
+### The confound, measured rather than assumed
+
+**66 fold-trainings reached the 60-epoch ceiling**, against 312 that early-stopped. AUPRC keeps
+improving after cross-entropy has saturated, so L4 also trains longer -- "selected on AUPRC" and
+"trained longer" are therefore partly confounded. With a null result this matters less than it
+would with a positive one, but any claim attributing an effect to the selection criterion has to
+raise `train.epochs` first and re-run.
+
+### Choosing versus claiming
+
+`k5only` + L4 reaches **FAR 0.1904, the first configuration on record under the M3 threshold of
+0.20**, with worst-patient FAR 0.5701 against M5's 0.50. Its interval contains zero, so it cannot
+be *claimed* as an improvement -- but it can be *chosen* as the operating point, which needs no
+significance test. Those are different acts and the paper should not blur them.
+
 ## 3. Per-patient failure notes (from `failure_analysis.py`, 08-15 23:41, w4s_stride1s, 60-epoch checkpoints)
 
 Cohort mean segment AUROC: compact1d_7k 0.922, frontiers2d 0.937, wearseizure1d 0.909 (all across the same 66 folds).

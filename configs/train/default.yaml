@@ -149,3 +149,9 @@ distill:
   # capacity" -- this isolates the channels. Cached separately from the
   # multi-channel teacher, so the two never overwrite each other.
   single_channel_teacher: false
+  # Reuse the untagged (control) pre-training cache instead of one keyed by
+  # train.run_tag. Correct ONLY for levers that leave pre-training untouched --
+  # L3 changes the fine-tuning loss alone. Turning it on for a lever that does
+  # change pre-training would silently reuse the control initialisations and
+  # the experiment would measure nothing.
+  share_cache_with_control: false

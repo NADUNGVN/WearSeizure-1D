@@ -118,8 +118,22 @@ def _run_one_seed(cfg, seed, records, manifest_df, folds, threshold_grid, force_
             f"{cfg.split.strategy!r}: that split already trains on other subjects. Ignoring."
         )
         use_pretrain = False
+    # The pre-training cache is normally tagged with the run, because a lever
+    # that changes pre-training produces genuinely different initialisations.
+    # But some levers do not touch it: L3 changes only the fine-tuning loss, so
+    # tagging its cache would retrain 13 initialisations per model per seed to
+    # arrive at bit-identical weights -- about forty hours to reproduce what is
+    # already on disk. `share_cache_with_control` says so explicitly rather than
+    # leaving it to whoever reads the run time and wonders.
+    #
+    # It must stay opt-in: turning it on for a lever that DOES change
+    # pre-training would silently reuse the control's initialisations and the
+    # experiment would measure nothing.
+    pretrain_tag = (
+        "" if pretrain_cfg.get("share_cache_with_control", False) else run_tag_from_cfg(cfg)
+    )
     pretrain_dir = pretrain_cache_dir(
-        cfg.profile.artifacts_dir, cfg.model.name, cfg.window.name, seed, run_tag_from_cfg(cfg)
+        cfg.profile.artifacts_dir, cfg.model.name, cfg.window.name, seed, pretrain_tag
     )
     # Lever L3. Teachers are cached by FOLD, not by seed: the teacher depends on
     # the fold's train partition and window geometry, none of which the student's
