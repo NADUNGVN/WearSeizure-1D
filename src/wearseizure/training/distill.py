@@ -207,6 +207,51 @@ def fold_teacher_logits(
     )
 
 
+MIN_TEACHER_CHANNELS = 8
+
+
+def fold_common_channels(manifest_df, raw_dir: str, edf_ids: frozenset[str]) -> list[str]:
+    """Channel names present in EVERY EDF of the fold, in a deterministic order.
+
+    CHB-MIT is not uniform: chb04, for instance, has 5 files with 23 channels
+    and 35 with 24. Requiring equal counts refuses the fold outright, which was
+    the first behaviour here and cost 49 of 66 folds. Padding to a common width
+    would be worse -- the teacher would learn on fabricated signal, or on
+    channels silently shifted into the wrong rows.
+
+    Intersecting by NAME is the version that is neither: every channel the
+    teacher reads is real, is the channel it claims to be, and is present in
+    every recording of the fold. Files with a duplicated label resolve to its
+    first occurrence, which `load_edf_multichannel` does deterministically.
+
+    Reads labels only, never sample data, so this is cheap.
+    """
+    from wearseizure.data.io_edf import edf_channel_labels
+
+    rows = manifest_df[manifest_df["edf_id"].isin(edf_ids)]
+    common: set[str] | None = None
+    for _, row in rows.iterrows():
+        path = Path(raw_dir) / row["subject_id"] / row["edf_relpath"]
+        # Upper-cased because `load_edf_multichannel` resolves an explicit list
+        # case-insensitively; intersecting case-sensitively here would drop a
+        # channel over nothing but a file's capitalisation.
+        labels = {
+            lbl.strip().upper() for lbl in edf_channel_labels(str(path))
+            if lbl.strip() and lbl.strip().upper() not in ("-", "--")
+        }
+        common = labels if common is None else (common & labels)
+    if not common:
+        raise ValueError(f"no channel name is present in every EDF of this fold ({sorted(edf_ids)})")
+    if len(common) < MIN_TEACHER_CHANNELS:
+        # Below this the "teacher reads every channel" hypothesis is not being
+        # tested any more, so fail loudly rather than quietly test something else.
+        raise ValueError(
+            f"only {len(common)} channels are common to this fold ({sorted(common)}); "
+            f"a multi-channel teacher needs at least {MIN_TEACHER_CHANNELS}"
+        )
+    return sorted(common)
+
+
 def load_multichannel_for_fold(
     manifest_df, raw_dir: str, edf_ids: frozenset[str]
 ) -> dict[str, np.ndarray]:
@@ -220,26 +265,25 @@ def load_multichannel_for_fold(
     """
     from wearseizure.data.io_edf import load_edf_multichannel
 
+    channels = fold_common_channels(manifest_df, raw_dir, edf_ids)
     rows = manifest_df[manifest_df["edf_id"].isin(edf_ids)]
     signals: dict[str, np.ndarray] = {}
-    channel_counts: dict[int, int] = {}
     for _, row in rows.iterrows():
         path = Path(raw_dir) / row["subject_id"] / row["edf_relpath"]
-        sig, names = load_edf_multichannel(str(path))
+        sig, names = load_edf_multichannel(str(path), channel_names=channels)
+        if [n.strip().upper() for n in names] != channels:
+            # The explicit list is the contract: every row of every EDF must be
+            # the same channel, or the teacher is fed a permuted montage between
+            # recordings and nothing reports it.
+            raise ValueError(
+                f"{row['edf_id']}: asked for {channels} but got {names}"
+            )
         signals[row["edf_id"]] = sig
-        channel_counts[len(names)] = channel_counts.get(len(names), 0) + 1
 
     missing = set(edf_ids) - signals.keys()
     if missing:
         raise ValueError(f"multi-channel load found no rows for {sorted(missing)}")
-    if len(channel_counts) > 1:
-        # CHB-MIT is not uniform: a few files carry a different montage. Padding
-        # or truncating to a common width would feed the teacher fabricated or
-        # silently reordered channels, so this is refused rather than patched.
-        raise ValueError(
-            f"EDFs in this fold have differing channel counts {channel_counts}; "
-            "the teacher needs one consistent montage per fold"
-        )
+    log.info(f"teacher montage for this fold: {len(channels)} channels {channels}")
     return signals
 
 
@@ -281,8 +325,13 @@ def get_or_train_fold_teacher_logits(
     while the distillation being measured never ran.
     """
     ckpt, meta_path = _teacher_cache_paths(cache_dir, fold.fold_id)
+    channels = (
+        ["<student single channel>"] if single_channel
+        else fold_common_channels(manifest_df, raw_dir, fold.train_edf_ids | fold.val_edf_ids)
+    )
     signature = {
         "single_channel": single_channel,
+        "channels": channels,
         "fold_id": fold.fold_id,
         "manifest_hash": fold.manifest_hash,
         "window_s": window_s,

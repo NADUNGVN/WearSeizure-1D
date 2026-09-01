@@ -237,6 +237,9 @@ def test_single_channel_teacher_control_is_cached_separately(tmp_path, synthetic
         distill, "load_multichannel_for_fold",
         lambda mdf, raw, ids: {i: np.zeros((7, records[i].meta.n_samples), np.float32) for i in ids},
     )
+    # The cache signature records the fold's montage, so a fold whose channel
+    # set changed cannot reuse logits from a teacher that read different inputs.
+    monkeypatch.setattr(distill, "fold_common_channels", lambda mdf, raw, ids: [f"CH{i}" for i in range(7)])
 
     common = dict(
         records=records, manifest_df=manifest_df, raw_dir="/unused", fold=fold,
@@ -254,3 +257,128 @@ def test_single_channel_teacher_control_is_cached_separately(tmp_path, synthetic
     again = distill.get_or_train_fold_teacher_logits(**common, single_channel=False)
     assert again[0, 0] == 7.0
     assert calls == [7, 1, 7]
+
+
+# ---------------------------------------------------------------------------
+# The fold montage -- what stopped Phase 5 at 17 of 66 folds
+# ---------------------------------------------------------------------------
+
+
+def _montage_manifest(per_file_labels: dict[str, list[str]]):
+    import pandas as pd
+
+    return pd.DataFrame([
+        {"edf_id": eid, "subject_id": "chb04", "edf_relpath": f"{eid}.edf"}
+        for eid in per_file_labels
+    ])
+
+
+@pytest.fixture
+def fake_edfs(monkeypatch):
+    """Serve channel labels and signals from a dict instead of real EDFs."""
+    import wearseizure.data.io_edf as io_edf
+
+    store: dict[str, list[str]] = {}
+
+    def labels(path):
+        return store[Path(path).stem]
+
+    def load(path, channel_names=None):
+        available = [lbl.strip() for lbl in store[Path(path).stem]]
+        if channel_names is None:
+            wanted = [i for i, l in enumerate(available) if l and l.upper() not in ("-", "--")]
+        else:
+            upper = [l.upper() for l in available]
+            wanted = [upper.index(c.upper()) for c in channel_names if c.upper() in upper]
+        names = [available[i] for i in wanted]
+        return np.zeros((len(wanted), 256), np.float32), names
+
+    monkeypatch.setattr(io_edf, "edf_channel_labels", labels)
+    monkeypatch.setattr(io_edf, "load_edf_multichannel", load)
+    return store
+
+
+from pathlib import Path  # noqa: E402  (used by the fixture above)
+
+from wearseizure.training.distill import (  # noqa: E402
+    fold_common_channels,
+    load_multichannel_for_fold,
+)
+
+_STD = [f"CH{i}" for i in range(23)]
+
+
+def test_a_fold_whose_files_differ_in_channel_count_is_loaded_not_refused(fake_edfs):
+    """This is chb04's real shape: 5 files with 23 channels, 35 with 24.
+
+    The first version of this code required every EDF of a fold to have the same
+    channel COUNT and raised otherwise. It was right that padding to a common
+    width would be wrong, but refusing cost 49 of 66 folds -- Phase 5 aborted at
+    fold 17. Intersecting by name keeps every fold and still never feeds the
+    teacher a channel that is absent, fabricated, or in the wrong row.
+    """
+    fake_edfs.update({f"a{i}": list(_STD) for i in range(5)})
+    fake_edfs.update({f"b{i}": _STD + ["EXTRA"] for i in range(35)})
+    ids = frozenset(fake_edfs)
+    mdf = _montage_manifest(fake_edfs)
+
+    channels = fold_common_channels(mdf, "/raw", ids)
+    assert channels == sorted(_STD), "the extra channel of the 35 must not be used"
+
+    signals = load_multichannel_for_fold(mdf, "/raw", ids)
+    assert set(signals) == ids
+    assert {s.shape[0] for s in signals.values()} == {23}, "one montage across the fold"
+
+
+def test_the_montage_order_is_the_same_for_every_file(fake_edfs):
+    """Row order IS the channel identity: the teacher has one Conv1d over C, so
+    a montage permuted between recordings would train it on channels that swap
+    meaning file to file, with nothing reporting it."""
+    fake_edfs["x"] = ["B", "A", "C"] + _STD[:8]
+    fake_edfs["y"] = _STD[:8] + ["C", "B", "A"]
+    ids = frozenset(fake_edfs)
+    mdf = _montage_manifest(fake_edfs)
+
+    channels = fold_common_channels(mdf, "/raw", ids)
+    assert channels == sorted(channels), "sorted, so it does not depend on file iteration order"
+    load_multichannel_for_fold(mdf, "/raw", ids)  # the names != channels guard must not fire
+
+
+def test_case_and_dummy_channels_do_not_shrink_the_montage(fake_edfs):
+    fake_edfs["x"] = [f"ch{i}" for i in range(23)] + ["-"]
+    fake_edfs["y"] = _STD + ["--"]
+    assert fold_common_channels(_montage_manifest(fake_edfs), "/raw", frozenset(fake_edfs)) == sorted(_STD)
+
+
+def test_a_fold_with_too_few_common_channels_is_refused(fake_edfs):
+    """Silently distilling from a 2-channel "multi-channel" teacher would report
+    a null for L3 that is really a null for a control nobody meant to run."""
+    fake_edfs["x"] = ["A", "B", "C"] + [f"P{i}" for i in range(20)]
+    fake_edfs["y"] = ["A", "B", "C"] + [f"Q{i}" for i in range(20)]
+    with pytest.raises(ValueError, match="only 3 channels are common"):
+        fold_common_channels(_montage_manifest(fake_edfs), "/raw", frozenset(fake_edfs))
+
+
+def test_a_fold_with_no_common_channel_is_refused(fake_edfs):
+    fake_edfs["x"] = [f"P{i}" for i in range(23)]
+    fake_edfs["y"] = [f"Q{i}" for i in range(23)]
+    with pytest.raises(ValueError, match="no channel name is present in every EDF"):
+        fold_common_channels(_montage_manifest(fake_edfs), "/raw", frozenset(fake_edfs))
+
+
+def test_a_silently_dropped_channel_is_caught(fake_edfs, monkeypatch):
+    """`load_edf_multichannel` skips names it cannot find rather than raising,
+    so a montage that shrinks between the label scan and the read would come
+    back short -- and the teacher would be built on the wrong channel count."""
+    import wearseizure.data.io_edf as io_edf
+
+    fake_edfs.update({"x": list(_STD), "y": list(_STD)})
+    real = io_edf.load_edf_multichannel
+
+    def lossy(path, channel_names=None):
+        sig, names = real(path, channel_names)
+        return (sig[:-1], names[:-1]) if Path(path).stem == "y" else (sig, names)
+
+    monkeypatch.setattr(io_edf, "load_edf_multichannel", lossy)
+    with pytest.raises(ValueError, match="asked for .* but got"):
+        load_multichannel_for_fold(_montage_manifest(fake_edfs), "/raw", frozenset(fake_edfs))
