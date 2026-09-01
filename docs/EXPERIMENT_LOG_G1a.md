@@ -474,6 +474,43 @@ Cohort mean segment AUROC: compact1d_7k 0.922, frontiers2d 0.937, wearseizure1d 
 
 `worst_patient_sensitivity` in the aggregate report has repeatedly resolved to **chb17** (compact1d_7k) landing on exactly 1/3 = 0.3333333... across two different training runs (30-epoch and 60-epoch) — flagged in the transcript as strong evidence this is a fixed data/pipeline characteristic of that specific patient/event, not something more training fixes.
 
+## 3b. The teacher montage each L3 fold actually gets (01-09)
+
+Phase 5 aborted at fold 17 of 66: `chb04` has EDFs with either 23 or 24 channels
+(5 files and 35), and the first version of `load_multichannel_for_fold` required
+one channel count per fold. Refusing was right about padding -- it would have
+fed the teacher fabricated signal -- but wrong as a policy, since it would have
+dropped 49 folds. The rule is now an intersection of channel NAMES, sorted, so
+row order is identical across files instead of inherited from EDF ordering.
+
+`scripts/check_fold_montage.py profile=server data=chbmit`, header reads only:
+
+| subject | per-file channel counts | common channels |
+|---|---|---:|
+| chb01–chb11, chb22, chb23 | `{23: n}` | **22** |
+| chb04 | `{23: 5, 24: 35}` | **22** |
+| chb15 | `{26: 1, 32: 37}` | **26** |
+| chb17 | `{23: 18, 18: 1}` | **18** |
+
+`66/66 folds usable; common channels min=18 median=22 max=26`.
+
+Three things to carry into the write-up:
+
+1. **23 signals but 22 names.** CHB-MIT repeats a label (`T8-P8`) on two rows.
+   Intersecting by name collapses the duplicate and `load_edf_multichannel`
+   resolves it to its first occurrence -- deterministic, and the duplicated row
+   carried no information anyway.
+2. **Teacher capacity is not uniform across patients** (18 / 22 / 26 channels).
+   Harmless mechanically, since each fold trains its own teacher, but it is a
+   confound to declare: the L3 arm's teacher is stronger for chb15 than chb17.
+   The L3single control uses the same per-fold architecture on one channel, so
+   the L3-vs-L3single contrast stays clean WITHIN a patient.
+3. **chb17 is pulled down to 18 by a single file.** chb17 is already the weakest
+   patient (3 seizures) and holds the worst-patient gate. If L3 fails to improve
+   chb17 specifically, its thinner teacher is one explanation to rule out before
+   concluding anything about distillation.
+
+
 ## 4. Gaps / not yet measured
 
 - **Zero-shot LOSO mode** (`split=zero_shot_loso_subject`) — never run in this session; only `patient_specific_loso_edf` has real-data results.

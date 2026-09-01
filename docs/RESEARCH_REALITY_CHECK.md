@@ -636,6 +636,10 @@ Figure 1 của bài báo và là lời giải thích duy nhất cần có cho m�
 
 ### 12.4 Mục tiêu thuật toán cần đạt
 
+> **LỖI THỜI — xem §16.3.** Bảng này viết trước khi có thanh sai số. Mốc sensitivity đã được
+> nâng lên 0.95 để bảng benchmark đứng cạnh được văn liệu đã công bố, và A1 ("tương đương
+frontiers2d") không còn là mốc đủ.
+
 | # | Mục tiêu | Ngưỡng | Vì sao đúng ngưỡng đó |
 |---|---|---|---|
 | A1 | **Tương đương thống kê** với `frontiers2d` | CI 95 % của Δsensitivity chứa 0, ở FAR ≤ 0.30/h | Khoảng cách 0.55 pp nhỏ hơn ảnh hưởng của một cơn duy nhất (~1.28 pp) |
@@ -723,6 +727,10 @@ Mốc so sánh: **row #15** (`wearseizure1d_k5only`, `w4s_stride1s`, hậu xử 
 thật tốt nhất tính đến nay.
 
 ### 13.1 Bảng khoảng cách — thuật toán
+
+> **LỖI THỜI — xem §16.3.** Kết luận "không mục nào đòi hỏi một đột phá nghiên cứu" ở cuối mục
+> này đã bị Phase 2–4 bác bỏ: khoảng cách còn lại là 3.7 pp sensitivity giữa hai kiến trúc, và bốn
+> đòn bẩy đã đo không đóng được nó.
 
 | # | Mục tiêu | Ngưỡng | Hiện tại | Khoảng cách | Cách đóng | Chi phí |
 |---|---|---:|---:|---|---|---|
@@ -1106,6 +1114,109 @@ Cả hai vế đã đạt (rows 32–34). Đây không phải hạ chuẩn: đó
 và cũng đúng bằng phát biểu §11.3 đã đề xuất từ đầu trước khi row 22 làm nó có vẻ thừa.
 
 ---
+
+## 16. Trạng thái sau Phase 3–5 (01-09): §12.4 và §13.1 đã lỗi thời
+
+§13.1 kết luận *"2/7 đã đạt; không mục nào đòi hỏi một đột phá nghiên cứu"*. Bốn đợt chạy sau đó
+cho thấy câu đó **sai**, và sai ở chỗ quan trọng nhất. Mục này thay thế §12.4 và §13.1; hai mục kia
+giữ nguyên để còn audit được điều đã tin.
+
+### 16.1 L5 — mở rộng corpus tiền huấn luyện: âm tính (rows 35–38)
+
+L5 từng được xếp **hạng 1** trong bảy đòn bẩy ở §14.2, theo lập luận "làm nhiều hơn đúng thứ đã
+hiệu quả". Kết quả đo được ở cả hai độ rộng corpus:
+
+| | control (13 case) | + 11 case, 4 vị trí | + 11 case, 1 vị trí |
+|---|---:|---:|---:|
+| `k5only` sens | **0.9358 ± 0.0304** | 0.9348 ± 0.0153 | **0.8924 ± 0.0116** |
+| `frontiers2d` sens | **0.9726 ± 0.0037** | 0.9641 ± 0.0170 | 0.9641 ± 0.0279 |
+
+Null ở 3/4 vị trí và **kém đi có ý nghĩa** ở vị trí thứ tư. Giả thuyết của chính tôi — rằng corpus
+rộng hơn bị nhiễu nhãn nên cần lọc — bị chính dữ liệu này bác: nếu là nhiễu nhãn thì bản 4 vị trí
+(nhiều dữ liệu lạ hơn) phải tệ hơn bản 1 vị trí, thực tế ngược lại.
+
+**Điều này đóng lại cả một hướng.** Lợi ích của L1 không đến từ *khối lượng* dữ liệu tiền huấn
+luyện mà từ việc nó **cùng cohort, cùng vị trí điện cực**. Hệ quả trực tiếp: TUSZ và Siena —
+hai corpus ngoài vẫn được nhắc tới như bước tiếp theo hiển nhiên — **không còn cơ sở để kỳ vọng**,
+và đã được loại mà không tốn một run nào. Đây là giá trị thật của một kết quả âm tính.
+
+### 16.2 L4 — chọn checkpoint theo AUPRC: đổi điểm vận hành, không nâng chất lượng (rows 39–40)
+
+| | sens | FAR/h | delay | worst-patient FAR |
+|---|---:|---:|---:|---:|
+| `k5only` val_loss | 0.9358 ± 0.0304 | 0.2261 | 18.83 | 0.7785 |
+| `k5only` **val_auprc** | 0.9380 ± 0.0350 | **0.1904** | 18.83 | **0.5701** |
+| `frontiers2d` val_loss | **0.9726 ± 0.0037** | **0.2922** | 17.22 | **2.2210** |
+| `frontiers2d` **val_auprc** | 0.9564 ± 0.0059 | 0.4673 | **15.03** | 4.1442 |
+
+`k5only` không đổi về sensitivity nhưng **FAR giảm 16 %** và worst-patient FAR giảm 27 %;
+`frontiers2d` đánh đổi ngược — nhanh hơn 2.2 s, trả bằng 60 % FAR. Không phải một đòn bẩy chất
+lượng; là một **núm chỉnh điểm vận hành**, và với `k5only` thì núm đó chỉnh đúng chiều.
+
+Kèm một confound đã đo chứ không đoán: fold L4 chạy tới trần epoch nhiều hơn hẳn control, nên
+"chọn theo AUPRC" và "train lâu hơn" chưa tách được. Muốn dùng con số FAR 0.1904 làm luận điểm thì
+phải nâng trần epoch rồi chạy lại; muốn dùng nó làm **cấu hình** thì không cần.
+
+### 16.3 Bảng khoảng cách hiện tại
+
+Mục tiêu sensitivity ở đây là **0.95**, theo yêu cầu rằng bảng benchmark phải đứng cạnh được văn
+liệu đã công bố — không phải mức vừa đủ đạt được. `accuracy` đã bỏ khỏi bảng: nó vô nghĩa ở tỉ lệ
+mất cân bằng ~0.5 % ictal.
+
+| # | Mục tiêu | Ngưỡng | `k5only` (row 32/39) | `frontiers2d` (row 33) |
+|---|---|---:|---|---|
+| M2 | `sensitivity_macro`, 3 seed | ≥ **0.95** | 0.9358 ± 0.0304 ❌ | **0.9726 ± 0.0037** ✅ |
+| M10 | MACs ≤ ¼ baseline nặng nhất | ≤ 630 832 | **585 920** ✅ | 2 523 328 ❌ |
+| M3 | `far_per_hour` | ≤ 0.20/h | 0.2261 ❌ / **0.1904 (L4)** ✅ | 0.2922 ❌ |
+| M4 | worst-patient sens (≥5 cơn) | ≥ 0.85 | **0.8714** ✅ | **0.9500** ✅ |
+| M5 | worst-patient FAR | ≤ 0.50/h | 0.7785 ❌ / 0.5701 (L4) ❌ | 2.2210 ❌ |
+| M7 | `detection_delay_mean_s` | báo cáo, ≤ 17 s | 18.83 ❌ | 17.22 ~ |
+| M8 | exposure | ≥ 185 h | **185.0** ✅ | **185.0** ✅ |
+| M9 | thanh sai số | 3 seed | ✅ | ✅ |
+| A4 | INT8 loss | ≤ 0.5 pp | **chưa đo** | — |
+| A7 | delta giao thức (Figure 1) | có số | **chưa chạy** | — |
+
+### 16.4 Vấn đề còn lại, phát biểu bằng một câu
+
+> **Kiến trúc đạt cổng MAC không đạt cổng sensitivity, và kiến trúc đạt sensitivity vượt cổng MAC
+> 4.3 lần. Chưa có một cấu hình nào đạt cả hai.**
+
+Đây là toàn bộ phần việc còn lại, và nó **không** phải thứ mà §13.1 mô tả là "một phép tính hoặc
+một lần đổi tham số". Khoảng cách là **3.7 pp sensitivity giữa hai model một kênh, cùng đầu vào,
+cùng công thức huấn luyện** — chênh lệch duy nhất là dung lượng: 11 786 params / 585 920 MACs so
+với 2 523 328 MACs.
+
+Câu §15.5 đề xuất viết cho bài báo — *"cùng điểm vận hành ở 4.3× ít MACs hơn"* — chỉ đúng khi
+"cùng điểm vận hành" nghĩa là **không phân biệt được về mặt thống kê** trên 13 bệnh nhân. Nó đúng
+theo nghĩa đó. Nhưng ở mốc tuyệt đối 0.95 thì hai kiến trúc **nằm hai phía của lằn ranh**, và một
+phản biện sẽ hỏi đúng câu đó.
+
+### 16.5 Hai đòn bẩy tấn công trực diện khoảng cách này
+
+**L3 (đang chạy)** — teacher đa kênh chưng cất vào student một kênh. Tấn công giả thuyết *thiếu
+thông tin*: student chỉ có một kênh, teacher đọc 18–26 kênh của **cùng bản ghi đó**. Smoke test cho
+teacher đạt val AUPRC 0.99 nơi student đạt 0.75 — khoảng cách năng lực lớn nhất dự án từng đo. Arm
+`L3single` (cùng kiến trúc teacher, một kênh) tách "nhiều kênh" khỏi "nhiều dung lượng".
+
+**L8 (chưa cài) — chưng cất `frontiers2d` → `k5only`, cả hai một kênh.** Đòn bẩy này chưa từng có
+trong danh sách bảy đòn bẩy, và nó là hệ quả trực tiếp của bảng 16.3: khoảng cách chặn bài báo
+không phải giữa 1 kênh và 18 kênh, mà giữa **hai model một kênh đọc đúng cùng dữ liệu**. Teacher
+cho L8 không phải giả định — nó là row 33, **đã đo được 0.9726 ± 0.0037**, checkpoint đã nằm trên
+SERVER-02.
+
+Vì sao L8 đáng kỳ vọng hơn L3 đối với **đúng mốc M2**:
+
+| | L3 | L8 |
+|---|---|---|
+| Teacher | đa kênh, phải huấn luyện mới cho từng fold | `frontiers2d` + L1, **đã có, đã đo 0.9726** |
+| Giả thuyết | student thiếu *thông tin* | student thiếu *dung lượng*, không thiếu thông tin |
+| Nếu thành công | 1 kênh tiến gần đa kênh | **k5only đạt mức frontiers2d ở 4.3× ít MACs** = đúng câu bài báo cần |
+| Nếu thất bại | khoảng cách là thông tin, không lấp được bằng chưng cất | khoảng cách là dung lượng thật → phải nới ngân sách MAC |
+
+Cả hai kết cục của L8 đều là thông tin dùng được, và kết cục xấu của nó là thứ **phải biết trước
+khi chốt sizing PE array** — nếu 585 920 MACs thật sự không đủ, biết bây giờ rẻ hơn nhiều so với
+biết sau khi đã có RTL.
+
 
 ## Nguồn
 
