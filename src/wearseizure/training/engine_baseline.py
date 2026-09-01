@@ -215,13 +215,21 @@ def run_fold(
     compile_mode: str | None = None,
     model_selection: str = "val_loss",
     teacher_logits: np.ndarray | None = None,
+    teacher_logits_fn=None,
     distill_alpha: float = 0.0,
     distill_temperature: float = 2.0,
 ) -> FoldResult:
+    if teacher_logits is not None and teacher_logits_fn is not None:
+        raise ValueError("pass teacher_logits (lever L3) or teacher_logits_fn (lever L8), not both")
     datasets, _band, _normalizer = build_fold_datasets(
         records, fold, window_s, stride_s, teacher_logits=teacher_logits
     )
     train_ds, val_ds = datasets["train"], datasets["val"]
+    if teacher_logits_fn is not None:
+        # Lever L8's teacher reads the student's own filtered, normalised
+        # signal, so it can only be scored once this dataset exists. Attaching
+        # afterwards keeps it on the train partition alone, exactly as L3's is.
+        train_ds.attach_teacher_logits(teacher_logits_fn(train_ds))
     dl_kwargs = _dataloader_kwargs(device, num_workers)
 
     if class_balanced_sampling:

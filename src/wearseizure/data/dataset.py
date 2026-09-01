@@ -57,15 +57,25 @@ class WearSeizureWindowDataset(Dataset):
         # index arithmetic alone -- never from signal values -- so the 18-channel
         # view of an EDF yields exactly the same window list as the 1-channel
         # view. That is what makes an offline logit array alignable at all.
+        self.teacher_logits: np.ndarray | None = None
         if teacher_logits is not None:
-            if len(teacher_logits) != len(self.windows):
-                raise ValueError(
-                    f"teacher_logits has {len(teacher_logits)} rows for "
-                    f"{len(self.windows)} windows -- they must be built from the same "
-                    "fold, window_s and stride_s"
-                )
-            teacher_logits = np.ascontiguousarray(teacher_logits, dtype=np.float32)
-        self.teacher_logits = teacher_logits
+            self.attach_teacher_logits(teacher_logits)
+
+    def attach_teacher_logits(self, teacher_logits: np.ndarray) -> None:
+        """Attach soft targets after construction.
+
+        Lever L8's teacher reads the SAME filtered, normalised signal the
+        student does, so its logits cannot be computed until this dataset
+        exists -- unlike L3's teacher, which reads raw multi-channel EDF and can
+        be scored beforehand. Same validation either way.
+        """
+        if len(teacher_logits) != len(self.windows):
+            raise ValueError(
+                f"teacher_logits has {len(teacher_logits)} rows for "
+                f"{len(self.windows)} windows -- they must be built from the same "
+                "fold, window_s and stride_s"
+            )
+        self.teacher_logits = np.ascontiguousarray(teacher_logits, dtype=np.float32)
 
     def __len__(self) -> int:
         return len(self.windows)

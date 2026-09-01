@@ -18,7 +18,10 @@ from wearseizure.data.loader import load_records_from_manifest
 from wearseizure.data.manifest import hash_manifest, load_manifest
 from wearseizure.data.splits import load_folds, subject_from_fold_id
 from wearseizure.models.factory import build_model
-from wearseizure.training.distill import get_or_train_fold_teacher_logits
+from wearseizure.training.distill import (
+    get_or_train_fold_teacher_logits,
+    pretrained_teacher_logits_fn,
+)
 from wearseizure.training.engine_baseline import run_fold
 from wearseizure.training.pretrain import get_or_train_cohort_init, load_pretrain_corpus
 from wearseizure.utils.env import bootstrap_env
@@ -91,6 +94,21 @@ def main(cfg: DictConfig) -> None:
         _run_one_seed(cfg, seed, records, manifest_df, folds, threshold_grid, force_retrain)
 
 
+def _teacher_cfg(cfg, teacher_model_name: str):
+    """`cfg` with its model group swapped for the lever-L8 teacher's.
+
+    `build_model` reads the whole config, not a name, so the teacher's
+    architecture has to be composed the same way Hydra composed the student's --
+    from `configs/model/<name>.yaml` -- rather than guessed at.
+    """
+    teacher = OmegaConf.merge(cfg, {})
+    model_yaml = Path(__file__).resolve().parents[1] / "configs" / "model" / f"{teacher_model_name}.yaml"
+    if not model_yaml.exists():
+        raise FileNotFoundError(f"lever L8: no model config at {model_yaml}")
+    teacher.model = OmegaConf.load(model_yaml)
+    return teacher
+
+
 def _run_one_seed(cfg, seed, records, manifest_df, folds, threshold_grid, force_retrain) -> None:
     seed_everything(seed)
 
@@ -142,11 +160,18 @@ def _run_one_seed(cfg, seed, records, manifest_df, folds, threshold_grid, force_
     # from isolating the student.
     distill_cfg = cfg.train.get("distill", {})
     use_distill = bool(distill_cfg.get("enabled", False))
+    l8_teacher_model = distill_cfg.get("teacher_model") or ""
+    teacher_run_tag = str(distill_cfg.get("teacher_run_tag") or "")
+    teacher_seed = distill_cfg.get("teacher_seed")
+    teacher_seed = seed if teacher_seed is None else int(teacher_seed)
     teacher_dir = (
         Path(cfg.profile.artifacts_dir) / "teacher" / cfg.window.name
         / (run_tag_from_cfg(cfg) or "base")
     )
-    if use_distill:
+    if use_distill and not l8_teacher_model:
+        # Only the L3 teacher needs a multi-channel montage. L8's teacher is a
+        # finished single-channel run, so it works on any dataset the student
+        # works on -- and that is what makes it smoke-testable off the server.
         if cfg.data.name == "synthetic":
             raise ValueError(
                 "train.distill.enabled=true needs real multi-channel EDFs; the synthetic "
@@ -213,7 +238,34 @@ def _run_one_seed(cfg, seed, records, manifest_df, folds, threshold_grid, force_
             pretrained_from = subject_id
 
         teacher_logits = None
-        if use_distill:
+        teacher_logits_fn = None
+        if use_distill and l8_teacher_model:
+            # Lever L8. The teacher is a finished run, not a newly trained
+            # model: it has to be the checkpoint that produced the number being
+            # distilled, because 0.9726 depends on cohort pre-training that a
+            # freshly trained per-fold teacher would not have.
+            teacher_logits_fn = pretrained_teacher_logits_fn(
+                artifacts_dir=cfg.profile.artifacts_dir,
+                teacher_model_name=l8_teacher_model,
+                build_teacher_model=lambda: build_model(_teacher_cfg(cfg, l8_teacher_model)),
+                split_name=cfg.split.name,
+                window_name=cfg.window.name,
+                seed=teacher_seed,
+                run_tag=teacher_run_tag,
+                fold_id=fold.fold_id,
+                batch_size=cfg.train.batch_size,
+                device=cfg.profile.device,
+                num_workers=cfg.profile.get("num_workers", 0),
+            )
+            if teacher_logits_fn is None:
+                # Falling back to no distillation would make this arm a mixture
+                # of two experiments, with nothing in the metrics to say so.
+                raise FileNotFoundError(
+                    f"lever L8: no {l8_teacher_model} checkpoint for fold {fold.fold_id} "
+                    f"(seed {teacher_seed}, tag {teacher_run_tag or '<none>'}). "
+                    "Run that arm to completion before distilling from it."
+                )
+        elif use_distill:
             teacher_logits = get_or_train_fold_teacher_logits(
                 records=records,
                 manifest_df=manifest_df,
@@ -261,6 +313,7 @@ def _run_one_seed(cfg, seed, records, manifest_df, folds, threshold_grid, force_
             compile_mode=cfg.train.get("compile_mode"),
             model_selection=cfg.train.get("model_selection", "val_loss"),
             teacher_logits=teacher_logits,
+            teacher_logits_fn=teacher_logits_fn,
             distill_alpha=float(distill_cfg.get("alpha", 0.0)) if use_distill else 0.0,
             distill_temperature=float(distill_cfg.get("temperature", 2.0)),
         )

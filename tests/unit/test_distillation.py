@@ -382,3 +382,105 @@ def test_a_silently_dropped_channel_is_caught(fake_edfs, monkeypatch):
     monkeypatch.setattr(io_edf, "load_edf_multichannel", lossy)
     with pytest.raises(ValueError, match="asked for .* but got"):
         load_multichannel_for_fold(_montage_manifest(fake_edfs), "/raw", frozenset(fake_edfs))
+
+
+# ---------------------------------------------------------------------------
+# Lever L8 -- distilling a finished single-channel run
+# ---------------------------------------------------------------------------
+
+
+def test_l8_scoring_preserves_dataset_order(synthetic_cohort):
+    """Row order is the alignment, exactly as for the L3 teacher, so the
+    scoring loader must never shuffle."""
+    from wearseizure.training.distill import score_dataset_logits
+
+    manifest_df, records = synthetic_cohort
+    fold = make_patient_specific_loso_edf(manifest_df, seed=0)[0]
+    train_ds = build_fold_datasets(records, fold, 4.0, 1.0)[0]["train"]
+
+    class _FirstSample(nn.Module):
+        def forward(self, x):
+            first = x[:, 0, 0].unsqueeze(1)
+            return torch.cat([first, -first], dim=1)
+
+    out = score_dataset_logits(_FirstSample(), train_ds, batch_size=7, device="cpu")
+    assert out.shape == (len(train_ds), 2)
+    expected = [float(train_ds[i][0][0, 0]) for i in (0, 1, len(train_ds) - 1)]
+    assert np.allclose([out[0, 0], out[1, 0], out[-1, 0]], expected, atol=1e-5)
+
+
+def test_l8_logits_can_be_attached_after_the_dataset_is_built(synthetic_cohort):
+    """L8's teacher reads the student's filtered, normalised signal, so unlike
+    L3's it cannot be scored before the dataset exists."""
+    manifest_df, records = synthetic_cohort
+    fold = make_patient_specific_loso_edf(manifest_df, seed=0)[0]
+    ds = build_fold_datasets(records, fold, 4.0, 1.0)[0]["train"]
+    assert ds.teacher_logits is None
+
+    logits = np.arange(len(ds) * 2, dtype=np.float32).reshape(len(ds), 2)
+    ds.attach_teacher_logits(logits)
+    assert len(ds[0]) == 3 and torch.allclose(ds[0][2], torch.from_numpy(logits[0]))
+    with pytest.raises(ValueError, match="teacher_logits has"):
+        ds.attach_teacher_logits(logits[:-1])
+
+
+def test_l8_refuses_to_run_when_the_teacher_checkpoint_is_missing(tmp_path):
+    """Returning None rather than training without a teacher: a silently
+    undistilled fold would make the arm a mixture of two experiments."""
+    from wearseizure.training.distill import pretrained_teacher_logits_fn
+
+    assert pretrained_teacher_logits_fn(
+        artifacts_dir=str(tmp_path), teacher_model_name="baseline_frontiers2d",
+        build_teacher_model=lambda: nn.Identity(), split_name="loso", window_name="w4s",
+        seed=0, run_tag="", fold_id="chb01__chb01_03", batch_size=8, device="cpu",
+    ) is None
+
+
+def test_l8_loads_the_checkpoint_strictly(tmp_path, synthetic_cohort):
+    """A checkpoint from another architecture must fail loudly. Loading it
+    partially would distil from half-random weights and still produce numbers."""
+    from wearseizure.utils.paths import fold_run_dir
+    from wearseizure.training.distill import pretrained_teacher_logits_fn
+
+    manifest_df, records = synthetic_cohort
+    fold = make_patient_specific_loso_edf(manifest_df, seed=0)[0]
+    train_ds = build_fold_datasets(records, fold, 4.0, 1.0)[0]["train"]
+    n_samples = train_ds.windows[0].end_idx - train_ds.windows[0].start_idx
+
+    def _teacher():
+        return nn.Sequential(nn.Flatten(), nn.Linear(n_samples, 2))
+
+    run_dir = fold_run_dir(str(tmp_path), "baseline_frontiers2d", "loso", "w4s", 0, "")
+    run_dir.mkdir(parents=True)
+    torch.save(_teacher().state_dict(), run_dir / f"{fold.fold_id}.pt")
+
+    common = dict(
+        artifacts_dir=str(tmp_path), teacher_model_name="baseline_frontiers2d",
+        split_name="loso", window_name="w4s", seed=0, run_tag="",
+        fold_id=fold.fold_id, batch_size=16, device="cpu",
+    )
+    logits = pretrained_teacher_logits_fn(build_teacher_model=_teacher, **common)(train_ds)
+    assert logits.shape == (len(train_ds), 2)
+
+    wrong = pretrained_teacher_logits_fn(
+        build_teacher_model=lambda: nn.Sequential(nn.Flatten(), nn.Linear(n_samples, 3)), **common
+    )
+    with pytest.raises(RuntimeError, match="size mismatch|Error"):
+        wrong(train_ds)
+
+
+def test_l3_and_l8_teachers_cannot_both_be_used(synthetic_cohort):
+    """They test different hypotheses -- missing information versus missing
+    capacity -- so an arm running both would answer neither."""
+    from wearseizure.training.engine_baseline import run_fold
+
+    manifest_df, records = synthetic_cohort
+    fold = make_patient_specific_loso_edf(manifest_df, seed=0)[0]
+    with pytest.raises(ValueError, match="not both"):
+        run_fold(
+            model=nn.Identity(), records=records, fold=fold, window_s=4.0, stride_s=1.0,
+            postprocess_method="ema", postprocess_ema_alpha=0.125, postprocess_run_length=1,
+            postprocess_event_merge_gap_s=0.0, threshold_on_grid=[0.5], threshold_off_grid=[0.4],
+            epochs=1, lr=1e-3, weight_decay=0.0, batch_size=8,
+            teacher_logits=np.zeros((3, 2), np.float32), teacher_logits_fn=lambda ds: None,
+        )

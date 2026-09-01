@@ -157,3 +157,14 @@ distill:
   # capacity" -- this isolates the channels. Cached separately from the
   # multi-channel teacher, so the two never overwrite each other.
   single_channel_teacher: false
+  # Lever L8: distil a finished SINGLE-channel run instead of a multi-channel
+  # teacher. Set to a model name (e.g. baseline_frontiers2d) and the fold's
+  # checkpoint from that run becomes the teacher -- it is not retrained, because
+  # the number worth distilling (0.9726) depends on cohort pre-training that the
+  # saved checkpoints already carry. null keeps the L3 behaviour.
+  teacher_model: null
+  # Which run those checkpoints came from. Empty means the untagged control.
+  teacher_run_tag: ""
+  # Which seed's teacher to use. null means the student's own seed, which keeps
+  # teacher and student paired rather than distilling every seed from one.
+  teacher_seed: null

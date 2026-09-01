@@ -385,3 +385,87 @@ def get_or_train_fold_teacher_logits(
     )
     log.info(f"teacher: {len(logits)} logits for {fold.fold_id} -> {ckpt}")
     return logits
+
+
+# ---------------------------------------------------------------------------
+# Lever L8: distil an already-trained SINGLE-channel model
+# ---------------------------------------------------------------------------
+#
+# L3 attacks the hypothesis that one channel is short of INFORMATION, using a
+# teacher that reads 18-26 channels of the same recording. L8 attacks a
+# different one, and it is the gap that actually blocks the paper: two
+# single-channel models, identical inputs, identical recipe, 3.7pp apart --
+# `baseline_frontiers2d` at 0.9726 +/- 0.0037 against `wearseizure1d_k5only` at
+# 0.9358 +/- 0.0304 (rows 32-33). The only difference between them is capacity,
+# 2 523 328 MACs against 585 920.
+#
+# So the teacher here is not trained: it IS row 33, loaded from the checkpoints
+# that produced that number. Re-training a frontiers2d teacher per fold would
+# reach ~0.88, not 0.9726 -- the measured figure depends on cohort pre-training
+# (lever L1), and the finished checkpoints already carry it.
+#
+# The teacher must see exactly what the student sees. Its checkpoint was fitted
+# on the filtered, per-fold-normalised signal, so scoring raw EDF with it would
+# apply a model to data on a different scale and yield confident nonsense. That
+# is why this path takes the built dataset rather than the records.
+
+
+def score_dataset_logits(
+    model, dataset, *, batch_size: int, device: str, num_workers: int = 0
+) -> np.ndarray:
+    """Logits for every window of `dataset`, in the dataset's own order.
+
+    `shuffle=False` is the whole contract: the row order IS the alignment to
+    `dataset.windows`, exactly as for the L3 teacher.
+    """
+    from torch.utils.data import DataLoader
+
+    model = model.to(device).eval()
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    out: list[np.ndarray] = []
+    with torch.no_grad():
+        for batch in loader:
+            x = batch[0].to(device)
+            out.append(model(x).detach().float().cpu().numpy())
+    return np.concatenate(out, axis=0).astype(np.float32)
+
+
+def pretrained_teacher_logits_fn(
+    *,
+    artifacts_dir: str,
+    teacher_model_name: str,
+    build_teacher_model,
+    split_name: str,
+    window_name: str,
+    seed: int,
+    run_tag: str,
+    fold_id: str,
+    batch_size: int,
+    device: str,
+    num_workers: int = 0,
+):
+    """A callable that scores a fold's train dataset with a finished checkpoint.
+
+    Returns None when no checkpoint exists for this fold, so a partially
+    completed teacher run fails loudly at the call site rather than silently
+    training some folds with distillation and some without -- which would make
+    the arm a mixture of two experiments.
+    """
+    from wearseizure.utils.paths import fold_run_dir
+
+    ckpt = fold_run_dir(artifacts_dir, teacher_model_name, split_name, window_name, seed, run_tag) / f"{fold_id}.pt"
+    if not ckpt.exists():
+        return None
+
+    def _score(train_dataset) -> np.ndarray:
+        model = build_teacher_model()
+        # strict=True: a checkpoint from a different architecture must fail here
+        # rather than load partially and distil from half-random weights.
+        model.load_state_dict(torch.load(ckpt, map_location="cpu"), strict=True)
+        logits = score_dataset_logits(
+            model, train_dataset, batch_size=batch_size, device=device, num_workers=num_workers
+        )
+        log.info(f"L8 teacher {teacher_model_name} scored {len(logits)} windows for {fold_id} from {ckpt}")
+        return logits
+
+    return _score
