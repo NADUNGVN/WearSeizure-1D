@@ -35,7 +35,20 @@
 # three runs stay three independent replicates rather than three students of one
 # teacher.
 #
-#   nohup bash scripts/run_phase6_l8.sh > phase6.out 2>&1 &
+# Running this alongside Phase 5
+# -----------------------------
+# L8 allocates no pre-training corpus: `load_pretrain_corpus` returns empty
+# unless `use_wider_corpus` is on, which is lever L5's flag and the source of
+# the 72.6 GiB/process OOM that killed Phase 3. L8's footprint is the ordinary
+# per-fold one, so it is safe beside a running Phase 5.
+#
+# What is NOT safe is leaving num_workers at the profile default of 14 while
+# another run also has 14: workers are divided between processes on this box,
+# never multiplied. The documented rule is 7 each for two concurrent runs, so
+# set WORKERS=7 when Phase 5 is still going. Leave it unset when the machine is
+# yours alone.
+#
+#   WORKERS=7 nohup bash scripts/run_phase6_l8.sh > phase6.out 2>&1 &
 set -uo pipefail
 
 : "${CHBMIT_RAW_DIR:?set CHBMIT_RAW_DIR first}"
@@ -60,11 +73,14 @@ STUDENT=wearseizure1d_k5only
 TAG="${TAG:-L8}"
 SEEDS=(0 1 2)
 ALPHA="${ALPHA:-0.5}"
+WORKERS="${WORKERS:-}"
+WORKER_ARG=()
+[ -n "$WORKERS" ] && WORKER_ARG=(profile.num_workers="$WORKERS")
 
 say() { printf '\n=== [%s] %s ===\n' "$(date '+%F %T')" "$*" | tee -a "$LOG"; }
 run() { echo "+ $*" | tee -a "$LOG"; "$@" 2>&1 | tee -a "$LOG"; return "${PIPESTATUS[0]}"; }
 
-say "Phase 6 start. commit=$(git rev-parse --short HEAD) ulimit -n=$(ulimit -n) tag=$TAG alpha=$ALPHA"
+say "Phase 6 start. commit=$(git rev-parse --short HEAD) ulimit -n=$(ulimit -n) tag=$TAG alpha=$ALPHA workers=${WORKERS:-<profile default>}"
 
 # Every teacher checkpoint must exist BEFORE anything trains. train.py refuses a
 # fold whose teacher is missing rather than quietly training it undistilled, but
@@ -81,7 +97,7 @@ for seed in "${SEEDS[@]}"; do
     model="$STUDENT" seed="$seed" \
     train.pretrain.enabled=true train.pretrain.share_cache_with_control=true \
     train.distill.enabled=true train.distill.teacher_model="$TEACHER" \
-    train.distill.alpha="$ALPHA" train.run_tag="$TAG"
+    train.distill.alpha="$ALPHA" train.run_tag="$TAG" "${WORKER_ARG[@]}"
 
   n=$(ls "$ART/$STUDENT/$SPLIT/${WINDOW}__${TAG}/seed$seed"/*.metrics.json 2>/dev/null | wc -l)
   say "folds $STUDENT seed=$seed: $n/66"
