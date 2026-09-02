@@ -37,10 +37,18 @@ banner() {  # log-path phase-name
   echo
   echo "=== $2 ==="
   if [ ! -f "$1" ]; then echo "  no log at $1 -- this phase never started"; bad=1; return; fi
-  if grep -q "ABORT" "$1"; then
-    echo "  ABORTED. The abort lines:"
-    grep -n "ABORT" "$1" | sed 's/^/    /'
+  # Only aborts from the CURRENT attempt count. Logs are appended across
+  # restarts, so a fixed-and-rerun phase still carries the abort line that made
+  # it get fixed -- reporting that as a failure is how this script called a
+  # healthy Phase 5 "ABORTED" on its first use.
+  local start; start=$(grep -n "Phase .* start\." "$1" | tail -1 | cut -d: -f1)
+  local aborts; aborts=$(tail -n "+${start:-1}" "$1" | grep -n "ABORT")
+  if [ -n "$aborts" ]; then
+    echo "  ABORTED since the last start (line $start):"
+    echo "$aborts" | sed 's/^/    /'
     bad=1
+  elif grep -q "ABORT" "$1"; then
+    echo "  note: aborts exist from an EARLIER attempt, before line $start -- not counted"
   fi
   echo "  last line: $(tail -1 "$1")"
 }
