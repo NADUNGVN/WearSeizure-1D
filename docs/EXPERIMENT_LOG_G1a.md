@@ -474,6 +474,91 @@ Cohort mean segment AUROC: compact1d_7k 0.922, frontiers2d 0.937, wearseizure1d 
 
 `worst_patient_sensitivity` in the aggregate report has repeatedly resolved to **chb17** (compact1d_7k) landing on exactly 1/3 = 0.3333333... across two different training runs (30-epoch and 60-epoch) — flagged in the transcript as strong evidence this is a fixed data/pipeline characteristic of that specific patient/event, not something more training fixes.
 
+## 2g. Rows 41-43 -- two distillation levers that disagree (09-01 to 09-02)
+
+Both arms ask whether the single-channel student can be taught by a stronger
+model. They differ in ONE respect -- what the teacher reads -- and they come out
+with opposite signs, which is the finding.
+
+| # | student | teacher | teacher reads | sens macro | sens micro | FAR/h |
+|---|---|---|---|---:|---:|---:|
+| 32 | `k5only` | -- (control) | -- | 0.9358 | 0.9351 | 0.2216 |
+| 41 | `k5only` | multi-channel (L3) | 18-26 channels | **0.9160** | 0.9221 | 0.2306 |
+| 43 | `k5only` | `frontiers2d` (L8) | **the student's channel** | **0.9489** | **0.9567** | 0.2937 |
+| 33 | `frontiers2d` | -- (control) | -- | 0.9726 | 0.9740 | 0.2793 |
+| 42 | `frontiers2d` | multi-channel (L3) | 18-26 channels | **0.9513** | 0.9610 | **0.3658** |
+
+Three seeds each, `hysteresis_widegrid`, gates v2, cluster bootstrap over 13
+patients.
+
+### L3 is negative, and for `frontiers2d` significantly so
+
+- `k5only`: sens macro **-1.98pp** (CI [-6.03, +0.60], contains 0), FAR unchanged.
+- `frontiers2d`: sens macro **-2.14pp** (CI [-5.13, 0.00]), and FAR micro
+  **+0.0865/h**, CI [+0.037, +0.152], **excludes 0, favours the control**. The
+  paired sign test agrees and is not degenerate: the control is quieter in
+  **9 of 10** patients, exact two-sided **p = 0.021**.
+
+This is the first lever measured to make things *significantly worse* on a
+metric the paper reports, rather than merely failing to help.
+
+### L8 moves the right way but does not clear the bar
+
+- vs its own control: sens macro **+1.31pp** (CI [-2.52, +6.03]), micro
+  **+2.16pp** (CI [-1.54, +5.45], p = 0.139). **Not significant.**
+- vs the teacher it was distilled from: macro **-2.37pp**, CI
+  **[-4.60, -0.51]**, and micro -1.73pp, CI [-3.86, -0.37]. **Both exclude 0 --
+  the student is still significantly behind `frontiers2d`.**
+
+The gap to the teacher narrowed from 3.68pp to 2.37pp, about a third of it, but
+the part that closed does not clear the noise and the part that remains does.
+
+### The mechanism the two arms establish together
+
+The teacher that helped reads exactly what the student reads. The teacher that
+hurt reads 18-26 channels the student does not have.
+
+A soft target is only imitable if the student can, in principle, compute it. A
+multi-channel teacher's confidence on a window depends on channels the student
+cannot see, so on those windows the student is being trained toward a number it
+has no way to derive -- and the KL term pulls it away from the hard labels for
+nothing. That is consistent with lever L5, where extra pre-training data at the
+WRONG electrode position was also worse than none.
+
+So: **distillation helps when the teacher's advantage is capacity, and hurts
+when it is information.** This is a methodological result that stands on its
+own, and it is worth a subsection whichever way the remaining runs go.
+
+### What L8 transferred that was not wanted
+
+Per-patient, L8 is not a uniform lift:
+
+| patient | control sens | L8 sens | control FAR | L8 FAR | teacher FAR |
+|---|---:|---:|---:|---:|---:|
+| chb04 | 0.5833 | **0.8333** | 0.103 | 0.000 | 0.118 |
+| chb15 | 0.9000 | **0.9500** | 0.143 | 0.083 | 0.143 |
+| chb07 | 0.8889 | **0.7778** | 0.095 | 0.111 | 0.016 |
+| chb08 | 1.0000 | **0.9333** | 0.200 | 0.200 | 0.100 |
+| chb23 | 0.9524 | 1.0000 | **0.778** | **2.106** | **2.221** |
+
+chb04 -- `k5only`'s worst patient -- gains 25pp. But chb23's false-alarm rate
+triples, landing within 5 % of the teacher's own 2.221. The student converged
+onto the teacher's FAILURE MODE more completely than onto its successes, and
+chb23 is the same patient that carried `k5only`'s entire apparent FAR advantage
+in Phase 2 (section 15.2 of the reality check, where that advantage was shown to
+be one patient and not significant).
+
+### Provenance
+
+Rows 41-42: `run_phase5_l3.sh` at commit 705fad3 (montage fix), arm `L3`.
+The `L3single` control arm was still running when these were read; without it,
+"more channels" and "more teacher capacity" are not yet separated for L3 --
+though L8 already supplies a same-input, higher-capacity teacher and points the
+same way.
+Row 43: `run_phase6_l8.sh` at commit abd0511, `alpha=0.5`, `WORKERS=7`,
+teacher = row 33 checkpoints, paired by seed.
+
+
 ## 3b. The teacher montage each L3 fold actually gets (01-09)
 
 Phase 5 aborted at fold 17 of 66: `chb04` has EDFs with either 23 or 24 channels
