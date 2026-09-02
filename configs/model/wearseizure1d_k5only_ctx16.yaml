@@ -1,0 +1,29 @@
+# Rung 1 of the capacity ladder: k5only with the context block narrowed 64 -> 16.
+#
+# Why this block and not another. `context` is two depthwise-separable k5 convs
+# at dilation 8 and 16, and by the time the signal reaches them the sequence is
+# 32 samples long (1024 -> stem/2 -> b1..b4 /2 each). A k5 at dilation 16 spans
+# (5-1)*16+1 = 65 samples, so on a 32-sample sequence MOST of its taps read
+# padding. Measured: dropping context 64 -> 16 removes 218,256 of 585,920 MACs,
+# 37% of the whole model, from the layer least able to use them. It is also the
+# largest streaming line buffer in the design, so the hardware saving is real
+# and not only a MAC count.
+#
+# This arm changes ONLY context_channels, so any difference against
+# `wearseizure1d_k5only` is attributable to it alone. A null here is a result in
+# its own right: 367,664 MACs is 6.9x fewer than `baseline_frontiers2d`'s
+# 2,523,328, against 4.3x for the current k5only.
+name: wearseizure1d_k5only_ctx16
+in_channels: 1
+input_len: 1024  # NOT read directly -- models/factory.py derives it from window_s * data.fs_hz
+stem_out_channels: 8
+stage_out_channels: [16, 24, 32, 48]
+context_channels: 16
+kernels: [5]
+dilations: [1, 2, 4]
+kernel_mode: k5_only
+num_classes: 2
+param_budget_max: 32000
+mac_budget_max: 2000000
+mac_measured: 367664    # thop, input_len=1024
+param_measured: 5114

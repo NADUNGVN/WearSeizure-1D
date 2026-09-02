@@ -1,0 +1,38 @@
+# Rung 2 of the capacity ladder: the narrowed context of
+# `wearseizure1d_k5only_ctx16`, with the MACs it frees spent on 50% wider
+# stages.
+#
+# The hypothesis being tested. Lever L8 showed the small student CAN be taught
+# by a stronger single-channel teacher (+1.3pp macro, +2.2pp micro) but not
+# enough to reach it, which points at capacity rather than optimisation. Levers
+# L3, L4 and L5 all failed to move sensitivity, and none of them touched
+# capacity. This is the first arm that does.
+#
+# It stays inside the gate. 626,736 MACs against the M10/A2 ceiling of 630,832
+# (a quarter of `baseline_frontiers2d`'s 2,523,328) -- 0.7% of margin, so this
+# is the widest the stages can go without giving up the computational-advantage
+# claim that is one of the paper's two axes. Note it also uses FEWER parameters
+# than the model it widens: 9,414 against 11,786, because the context block was
+# where the parameters were.
+#
+# Read it as a ladder, one variable per step:
+#   k5only        ctx 64, stages (16,24,32,48)   585,920 MACs   11,786 params
+#   k5only_ctx16  ctx 16, stages (16,24,32,48)   367,664 MACs    5,114 params
+#   k5only_wide   ctx 16, stages (24,36,48,72)   626,736 MACs    9,414 params
+# ctx16 - k5only isolates the context width; wide - ctx16 isolates the stage
+# width. Comparing `wide` straight to `k5only` changes two things at once, which
+# is exactly the confound that invalidated the row-15 architecture claim.
+name: wearseizure1d_k5only_wide
+in_channels: 1
+input_len: 1024  # NOT read directly -- models/factory.py derives it from window_s * data.fs_hz
+stem_out_channels: 8
+stage_out_channels: [24, 36, 48, 72]
+context_channels: 16
+kernels: [5]
+dilations: [1, 2, 4]
+kernel_mode: k5_only
+num_classes: 2
+param_budget_max: 32000
+mac_budget_max: 2000000
+mac_measured: 626736    # thop, input_len=1024
+param_measured: 9414

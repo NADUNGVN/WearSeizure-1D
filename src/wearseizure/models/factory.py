@@ -39,6 +39,9 @@ MODEL_FACTORIES = {
     "wearseizure1d": _build_wearseizure1d,
     "wearseizure1d_k3only": _build_wearseizure1d,
     "wearseizure1d_k5only": _build_wearseizure1d,
+    # The capacity ladder: same builder, only context/stage widths differ.
+    "wearseizure1d_k5only_ctx16": _build_wearseizure1d,
+    "wearseizure1d_k5only_wide": _build_wearseizure1d,
     "wearseizure1d_nodilation": _build_wearseizure1d,
     "baseline_frontiers2d": lambda cfg: FrontiersBaseline2D(
         in_channels=cfg.model.in_channels,
