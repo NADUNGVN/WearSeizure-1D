@@ -1218,6 +1218,70 @@ khi chốt sizing PE array** — nếu 585 920 MACs thật sự không đủ, bi
 biết sau khi đã có RTL.
 
 
+## 17. Phase 5-6 và thang dung lượng (02-09)
+
+### 17.1 Hai đòn bẩy chưng cất, ngược dấu nhau
+
+| student | teacher đọc gì | sens macro | FAR/h |
+|---|---|---:|---:|
+| `k5only` control | — | 0.9358 | 0.2216 |
+| `k5only` + L3 | 18–26 kênh | **0.9160** | 0.2306 |
+| `k5only` + L8 | **đúng kênh của student** | **0.9489** | 0.2937 |
+| `frontiers2d` control | — | 0.9726 | 0.2793 |
+| `frontiers2d` + L3 | 18–26 kênh | 0.9513 | **0.3658** |
+
+L3 với `frontiers2d` xấu đi **có ý nghĩa** về FAR: CI [+0.037, +0.152] loại trừ 0, sign test control
+yên hơn ở 9/10 bệnh nhân, p = 0.021. Đây là đòn bẩy đầu tiên làm xấu đi có ý nghĩa một chỉ số bài
+báo báo cáo, chứ không chỉ là không giúp được.
+
+**Cơ chế:** một soft target chỉ bắt chước được nếu student về nguyên tắc **tính được** nó. Độ tự tin
+của teacher đa kênh phụ thuộc vào những kênh student không thấy, nên số hạng KL kéo student rời nhãn
+cứng để đổi lấy một mục tiêu nó không có đường nào suy ra. Khớp với L5, nơi dữ liệu tiền huấn luyện
+thêm ở **sai vị trí điện cực** cũng tệ hơn là không có.
+
+> **Chưng cất giúp khi ưu thế của teacher là dung lượng, và làm hại khi ưu thế đó là thông tin.**
+
+Kết quả phương pháp này đứng độc lập với việc phần còn lại của dự án đi tới đâu.
+
+### 17.2 Vì sao bước tiếp theo là dung lượng
+
+L8 vs control: +1.31pp macro, +2.16pp micro, **không có ý nghĩa**. L8 vs chính teacher của nó:
+−2.37pp macro, CI **[−4.60, −0.51]**, **có ý nghĩa**. Student *đẩy được* về phía đích nhưng *không
+tới nơi* — đúng hình dạng của một giới hạn dung lượng. Năm đòn bẩy đã đo, **không cái nào động tới
+kích thước model**.
+
+### 17.3 Ngân sách lấy từ đâu — và một đính chính
+
+Cổng M10/A2 là **630 832 MACs** (¼ của `frontiers2d` 2 523 328). Ở một phiên trước tôi nói nhầm cổng
+này là 700 000; con số đúng thu hẹp không gian thiết kế đáng kể, và mọi thứ dưới đây dùng 630 832.
+
+`context` là hai depthwise-separable k5 ở dilation 8 và 16, chạy trên chuỗi dài **32** mẫu. Một k5
+dilation 16 trải **65** mẫu — phần lớn tap đọc padding. Đo được: hạ context 64 → 16 bỏ **218 256
+MACs, 37% cả model**, từ đúng layer ít dùng được chúng nhất. Nó cũng là **line buffer lớn nhất** khi
+stream, nên tiết kiệm là thật chứ không chỉ trên giấy.
+
+### 17.4 Thang dung lượng — một biến mỗi bậc
+
+| bậc | context | stages | MACs | params |
+|---|---:|---|---:|---:|
+| `k5only` (control, row 32) | 64 | (16,24,32,48) | 585 920 | 11 786 |
+| `k5only_ctx16` | **16** | (16,24,32,48) | **367 664** | 5 114 |
+| `k5only_wide` | 16 | **(24,36,48,72)** | **626 736** | **9 414** |
+
+`ctx16` − control tách riêng **độ rộng context**; `wide` − `ctx16` tách riêng **độ rộng stage**. So
+thẳng `wide` với control là đổi hai biến cùng lúc — đúng kiểu confound đã làm hỏng luận điểm kiến
+trúc ở row #15 — nên bậc rẻ tiền `ctx16` **không phải tuỳ chọn**.
+
+Hai điều đáng nêu:
+
+- `wide` nới **mọi stage thêm 50%** mà vẫn **ít param hơn** model nó nới (9 414 so với 11 786), vì
+  param vốn nằm ở context.
+- **Null ở bậc 1 tự nó là một kết quả**: 367 664 MACs là **6.9×** ít hơn `frontiers2d`, so với 4.3×
+  của `k5only` hiện tại. Trục "ưu thế tính toán" của bài mạnh lên mà không phải đổi gì khác.
+
+---
+
+
 ## Nguồn
 
 - Chung Y-G, Cho A, Kim H, Kim KJ. *Single-channel seizure detection with clinical confirmation of seizure locations using CHB-MIT dataset.* Front. Neurol. 15:1389731 (2024). <https://pmc.ncbi.nlm.nih.gov/articles/PMC11148866/>
