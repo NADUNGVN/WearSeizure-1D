@@ -22,6 +22,7 @@ import os
 import statistics
 import sys
 import time
+from collections import defaultdict
 from pathlib import Path
 
 SPLIT = "patient_specific_loso_edf"
@@ -92,6 +93,34 @@ def rate_from(ts: list[float]) -> float | None:
     return statistics.median(gaps) if len(gaps) >= 2 else None
 
 
+
+def host_for_work(art: Path, keys: tuple[str, ...]) -> str:
+    """Which host most recently ran a job matching every string in `keys`.
+
+    Hydra names its run directory `<host>_<timestamp>` and records the exact
+    overrides in `.hydra/overrides.yaml`, so the shared artifacts tree already
+    knows who runs what. Without this the estimate can only report a serial sum,
+    which stopped being the answer the moment work was spread over three hosts.
+    """
+    best_host, best_mtime = "?", 0.0
+    runs = art / "runs"
+    if not runs.is_dir():
+        return best_host
+    for d in runs.iterdir():
+        f = d / ".hydra" / "overrides.yaml"
+        if not (d.is_dir() and f.is_file()):
+            continue
+        try:
+            text = f.read_text(encoding="utf-8")
+            m = max(x.stat().st_mtime for x in d.rglob("*"))
+        except (OSError, ValueError):
+            continue
+        if all(k in text for k in keys) and m > best_mtime:
+            host = d.name.split("_", 1)[0]
+            best_host, best_mtime = (host if not host[0].isdigit() else "?"), m
+    return best_host
+
+
 def human(seconds: float) -> str:
     if seconds < 90:
         return f"{seconds:.0f}s"
@@ -112,6 +141,7 @@ def main() -> int:
     all_rates: list[float] = []
     total_remaining = 0.0
     unknown: list[str] = []
+    by_host: dict[str, float] = defaultdict(float)
 
     # Pass 1: every rate we can measure. A combination that has not started has
     # no rate of its own, and dropping it from the total is how the first
@@ -152,6 +182,8 @@ def main() -> int:
                     continue
                 eta = left * rate
                 phase_remaining += eta
+                host = host_for_work(art, (f'model={model}', f'seed={seed}') + ((f'run_tag={tag}',) if tag else ()))
+                by_host[host] += eta
                 live = " <- running now" if done and now - ts[-1] < 1800 else ""
                 print(f"  todo   {label:<42} {done}/{FOLDS}  {human(rate)}/fold  ~{human(eta)}{live}{estimated}")
 
@@ -216,19 +248,32 @@ def main() -> int:
                 continue
             eta = left * rate
             etas.append(eta)
+            leaky_host = host_for_work(art, (f'model={model}', f'+rung={rung}'))
             live = " <- running now" if done and now - ts[-1] < 1800 else ""
             print(f"  todo   {label:<48} {done}/{FOLDS}  {human(rate)}/fold  ~{human(eta)}{live}{note}")
         if etas:
             # Both are printed: the wall clock is what you wait, and a large gap
             # between it and the sum means the shard is badly unbalanced.
             print(f"  --> shard wall clock ~{human(max(etas))}  (sum of jobs {human(sum(etas))})")
+            by_host[leaky_host] = max(by_host.get(leaky_host, 0.0), max(etas))
 
 
-    print(f"\nTOTAL REMAINING (if run one after another): ~{human(total_remaining)}")
+    print()
+    print("=== per host, which is what you actually wait ===")
+    for host in sorted(by_host):
+        who = host if host != "?" else "(host unknown -- run dir predates host naming)"
+        print(f"  {who:<52} ~{human(by_host[host])}")
+    if by_host:
+        # The three hosts work at the same time, so the wait is the busiest one,
+        # not the sum. Reporting only the sum is how a five-hour job looked like
+        # a twelve-hour one.
+        print()
+    print()
+    print(f"serial sum of all remaining work: ~{human(total_remaining)}"
+          " (not the wait -- see the per-host section above)")
     if all_rates:
         print(f"observed per-fold time across everything: median {human(statistics.median(all_rates))}, "
               f"range {human(min(all_rates))}-{human(max(all_rates))}")
-    print("Two runs in parallel finish sooner than this sum; the GPU is not the bottleneck.")
     if unknown:
         print(f"no estimate yet for: {', '.join(unknown)}")
     return 0
