@@ -95,7 +95,11 @@ LOG="$ART/leaky_repro_${SHARD}_$(hostname).log"
 #   - A bigger batch is nearly free: 4x the work per launch, same launch cost.
 #   - Running jobs CONCURRENTLY on one GPU multiplies throughput, because each
 #     process issues its own launches. Same finding that made Phase 2b parallel.
-WORKERS="${WORKERS:-2}"
+# Zero, not two. The workers were measured idle, so they buy nothing -- and
+# with none, there are no worker processes, no shared-memory manager, and no
+# torch_shm_manager socket directory to fail at creating, which is what killed
+# every SERVER-04 job. Set WORKERS=2 to put them back if a host ever needs them.
+WORKERS="${WORKERS:-0}"
 BATCH="${BATCH:-1024}"
 POOL="${POOL:-4}"
 TUNING=(profile.num_workers="$WORKERS" train.batch_size="$BATCH")

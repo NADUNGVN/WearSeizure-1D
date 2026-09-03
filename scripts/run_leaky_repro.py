@@ -56,7 +56,15 @@ from wearseizure.utils.seeding import seed_everything
 
 log = get_logger(__name__)
 bootstrap_env(sys.argv)
-torch.multiprocessing.set_sharing_strategy("file_system")
+# NOT set_sharing_strategy("file_system") here, unlike scripts/train.py.
+#
+# That strategy spawns torch_shm_manager, which needs to create a socket
+# directory under the system temp dir. On SERVER-04 it cannot, and every job
+# died with "could not generate a random directory for manager socket" -- a
+# host difference, nothing to do with the data or the model. train.py needs the
+# strategy because it opens DataLoaders across 66 folds and exhausts file
+# descriptors otherwise; this script does not, because the workload is
+# kernel-launch bound and runs with few workers or none at all.
 
 RUNGS = {c.name: c for c in LADDER}
 
