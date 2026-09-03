@@ -93,9 +93,15 @@ def main() -> int:
                              capture_output=True, text=True, check=False).stdout
     except OSError:
         out = ""
+    # Every long-running script, not just train.py. A phase spends real time in
+    # rethreshold.py -- 66 folds of threshold search -- and matching only
+    # train.py made a busy SERVER-02 look idle, which I then misread as the
+    # phase having stopped.
+    OURS = ("scripts/train.py", "run_leaky_repro.py", "rethreshold.py",
+            "rethreshold_pooled.py", "evaluate.py", "paired_bootstrap.py")
     procs = []
     for row in out.splitlines():
-        if ("scripts/train.py" not in row and "run_leaky_repro.py" not in row) or "grep" in row:
+        if not any(name in row for name in OURS) or "grep" in row:
             continue
         pid, ppid, etime, cmd = row.split(None, 3)
         procs.append((pid, ppid, etime, cmd))
