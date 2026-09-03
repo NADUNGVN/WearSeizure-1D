@@ -559,6 +559,61 @@ Row 43: `run_phase6_l8.sh` at commit abd0511, `alpha=0.5`, `WORKERS=7`,
 teacher = row 33 checkpoints, paired by seed.
 
 
+## 2h. Row 44 -- narrowing the context block is NOT free (09-02)
+
+Rung 1 of the capacity ladder: `context_channels` 64 -> 16, nothing else
+changed. 367,664 MACs against the control's 585,920, a 37% cut.
+
+| | ctx16 (row 44) | control (row 32) | delta, 95% CI |
+|---|---:|---:|---|
+| sens macro | 0.9126 | 0.9358 | **-2.33pp** [-6.60, +0.60] |
+| sens micro | 0.9221 | 0.9351 | **-1.30pp** [-4.09, +0.58] |
+| FAR/h | 0.2378 | 0.2216 | +0.0162 [-0.036, +0.069] |
+| delay mean | 18.10 | 18.83 | -0.73 [-1.98, +0.28] |
+
+Three seeds, 66 folds each, `hysteresis_widegrid`, cluster bootstrap over 13
+patients. Paired sign tests: FAR p = 1.0000, sensitivity p = 0.6250.
+
+### What this does and does not establish
+
+Nothing reaches significance. But the sensitivity point estimate is down on
+BOTH aggregations, and the interval is about 7pp wide -- this cohort cannot
+resolve a 2.3pp difference either way. So the honest statement is **neither
+"free" nor "costly": undetermined at this sample size**, with the point
+estimate pointing down.
+
+The prediction that motivated this rung was that the context block is mostly
+wasted computation -- its second conv is a k5 at dilation 16 spanning 65 samples
+of a 32-sample sequence, so most taps read padding. That reasoning is sound
+about the ARITHMETIC and is not supported as a claim about ACCURACY: whatever
+those taps compute, removing three quarters of the block's width did not come
+for nothing.
+
+### One number in the output that must not be reported as a finding
+
+`worst_patient_far_per_hour` came back "B better", CI [+0.019, +0.253],
+excluding zero. That is the max over 13 clusters -- the statistic section 15.2
+of the reality check already established gives degenerate intervals and is not
+testable. The testable version, the paired per-patient sign test, is **p =
+1.0000**. The apparent effect is one patient, chb23 (0.985 vs 0.778), which is
+the same patient that carried k5only's apparent FAR advantage in Phase 2 and
+the same one L8 damaged. chb23 dominates any max-based false-alarm statistic in
+this cohort and should be named whenever one is quoted.
+
+### What it means for rung 2
+
+`k5only_wide` is built on ctx=16, so it starts about 2.3pp down and has to
+recover that before any widening shows up as a gain against the control. This
+makes `wide_vs_ctx16` -- which isolates the stage width -- the comparison to
+read first, and `wide_vs_control` meaningless without it.
+
+If `wide` lands below the control, "wider stages do not help" is NOT the only
+reading available; "wider stages helped but did not pay for the context" fits
+equally. The rung that would separate them is ctx=32 with stages (20,32,40,60)
+at 562,912 MACs -- half the context kept, stages 25% wider, and still fewer
+MACs than the control. Measured with thop, not yet run.
+
+
 ## 3b. The teacher montage each L3 fold actually gets (01-09)
 
 Phase 5 aborted at fold 17 of 66: `chb04` has EDFs with either 23 or 24 channels
