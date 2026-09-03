@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -80,6 +81,32 @@ def main() -> int:
         print(f"nothing has written under {runs} in the last {args.minutes} minutes.")
         print("Either everything finished, or everything died. Check the phase logs.")
         return 1
+
+    # Local processes first. A run directory only shows that SOMETHING is
+    # writing; it cannot show that two processes on this host write to the same
+    # place. `pkill -f run_phase7_capacity` kills the bash script and leaves its
+    # `python train.py` child running -- an orphan that keeps training, and that
+    # anything reading only the artifacts tree cannot see.
+    print("=== processes on this host ===")
+    try:
+        out = subprocess.run(["ps", "-eo", "pid,etime,args"],
+                             capture_output=True, text=True, check=False).stdout
+    except OSError:
+        out = ""
+    mine = [x for x in out.splitlines()
+            if ("scripts/train.py" in x or "run_leaky_repro.py" in x) and "grep" not in x]
+    if not mine:
+        print("  no training process here (this host may simply not be the one running it)")
+    for line in mine:
+        pid, etime, args = line.split(None, 2)
+        keep = " ".join(a for a in args.split()
+                        if a.startswith(("model=", "seed=", "+rung=", "train.run_tag=")))
+        print(f"  pid {pid:<8} up {etime:<12} {keep or args[:70]}")
+    if len(mine) > 1:
+        print(f"  -> {len(mine)} training processes on this host. If a phase script was")
+        print("     pkill'd, its python child survives -- pkill matches the script name,")
+        print("     not the child, and the orphan keeps writing.")
+    print()
 
     print(f"live runs (touched in the last {args.minutes} min), newest first:\n")
     for host, m, ov, d in sorted(live, key=lambda r: -r[1]):
