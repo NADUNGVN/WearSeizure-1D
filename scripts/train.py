@@ -41,15 +41,6 @@ from wearseizure.utils.seeding import seed_everything
 # ${oc.env:...} into hydra.run.dir, which Hydra resolves before main().
 bootstrap_env(sys.argv)
 
-# DataLoader(num_workers>0) on Linux defaults to PyTorch's "file_descriptor"
-# strategy for passing tensors between worker processes, which consumes an
-# open file descriptor per shared tensor. Across ~66 folds x several
-# DataLoaders each, cleanup of the previous fold's workers can lag behind
-# creation of the next fold's (DataLoader iterators hold reference cycles
-# that rely on a full GC pass, not just refcounting), eventually exceeding
-# the OS's open-file limit ("OSError: Too many open files"). "file_system"
-# uses temp files instead and doesn't have this failure mode.
-torch.multiprocessing.set_sharing_strategy("file_system")
 
 log = get_logger(__name__)
 
@@ -57,6 +48,26 @@ log = get_logger(__name__)
 @hydra.main(version_base=None, config_path="../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
     check_profile_data_pairing(cfg)
+
+    # DataLoader(num_workers>0) on Linux defaults to PyTorch's "file_descriptor"
+    # strategy for passing tensors between worker processes, which consumes an
+    # open file descriptor per shared tensor. Across ~66 folds x several
+    # DataLoaders each, cleanup of the previous fold's workers can lag behind
+    # creation of the next fold's (DataLoader iterators hold reference cycles
+    # that rely on a full GC pass, not just refcounting), eventually exceeding
+    # the OS's open-file limit ("OSError: Too many open files"). "file_system"
+    # uses temp files instead and doesn't have this failure mode.
+    #
+    # Only with workers, and this is not a tidiness point. "file_system" spawns
+    # torch_shm_manager, which must create a socket directory under the system
+    # temp dir; on SERVER-04 it cannot, and every job there died with "could not
+    # generate a random directory for manager socket". With num_workers=0 no
+    # tensor is ever shared between processes, so the strategy is pure liability.
+    # Set here rather than at import because it depends on cfg, and it still runs
+    # before any DataLoader exists.
+    if cfg.profile.get("num_workers", 0) > 0:
+        torch.multiprocessing.set_sharing_strategy("file_system")
+
 
     manifest_df = load_manifest(str(Path(cfg.data.manifest_path)))
     data_dir = cfg.data.generated_dir if cfg.data.name == "synthetic" else None

@@ -74,6 +74,10 @@ MODELS=(wearseizure1d_k5only_ctx16 wearseizure1d_k5only_wide)
 SEEDS=(${SEEDS:-0 1 2})
 FULL_RUN=1
 [ "${SEEDS[*]}" = "0 1 2" ] || FULL_RUN=0
+# Empty means the profile default of 14. Set WORKERS=0 on a host where
+# torch_shm_manager cannot create its socket directory -- SERVER-04 is one,
+# and every job there died on it before the strategy was made conditional.
+# The workload is kernel-launch bound anyway, so workers cost nothing to drop.
 WORKERS="${WORKERS:-}"
 WORKER_ARG=()
 [ -n "$WORKERS" ] && WORKER_ARG=(profile.num_workers="$WORKERS")
