@@ -49,6 +49,20 @@ def mtimes(d: Path, pattern: str) -> list[float]:
     return sorted(f.stat().st_mtime for f in d.glob(pattern)) if d.is_dir() else []
 
 
+def fold_rate(d: Path) -> float | None:
+    """Observed seconds per fold, timed from the CHECKPOINTS.
+
+    Not from `*.metrics.json`: `rethreshold.py` rewrites every fold's metrics
+    file after training, so a finished combination's metrics mtimes describe
+    that sweep -- seconds apart -- and not the hours the training took. Timing
+    from those reported a median of 3s per fold for real 3-minute folds.
+
+    `*.pt` is written once, by train.py, at the moment the fold finishes, and
+    nothing later touches it.
+    """
+    return rate_from(mtimes(d, "*.pt")) or rate_from(mtimes(d, "*.metrics.json"))
+
+
 def rate_from(ts: list[float]) -> float | None:
     """Median seconds between consecutive artifacts.
 
@@ -83,6 +97,20 @@ def main() -> int:
     total_remaining = 0.0
     unknown: list[str] = []
 
+    # Pass 1: every rate we can measure. A combination that has not started has
+    # no rate of its own, and dropping it from the total is how the first
+    # version of this script reported 5.6h for about 11h of work.
+    per_model: dict[str, list[float]] = {}
+    for combos in PHASES.values():
+        for model, tag in combos:
+            for seed in SEEDS:
+                d = art / model / SPLIT / (WINDOW + (f"__{tag}" if tag else "")) / f"seed{seed}"
+                r = fold_rate(d)
+                if r:
+                    per_model.setdefault(model, []).append(r)
+                    all_rates.append(r)
+    fallback = statistics.median(all_rates) if all_rates else None
+
     for phase, combos in PHASES.items():
         print(f"\n=== {phase} ===")
         phase_remaining = 0.0
@@ -92,9 +120,12 @@ def main() -> int:
                 ts = mtimes(d, "*.metrics.json")
                 done = len(ts)
                 left = FOLDS - done
-                rate = rate_from(ts)
-                if rate:
-                    all_rates.append(rate)
+                rate = fold_rate(d)
+                estimated = ""
+                if rate is None and model in per_model:
+                    rate, estimated = statistics.median(per_model[model]), " (rate from its other seeds)"
+                elif rate is None and fallback:
+                    rate, estimated = fallback, " (rate from the run as a whole)"
                 label = f"{model.replace('wearseizure1d_', '').replace('baseline_', '')}/{tag or 'control'}/seed{seed}"
                 if left <= 0:
                     print(f"  done   {label:<42} {done}/{FOLDS}")
@@ -106,7 +137,7 @@ def main() -> int:
                 eta = left * rate
                 phase_remaining += eta
                 live = " <- running now" if done and now - ts[-1] < 1800 else ""
-                print(f"  todo   {label:<42} {done}/{FOLDS}  {human(rate)}/fold  ~{human(eta)}{live}")
+                print(f"  todo   {label:<42} {done}/{FOLDS}  {human(rate)}/fold  ~{human(eta)}{live}{estimated}")
 
         # Cohort initialisations, which only a new architecture has to build.
         for model, tag in combos:
