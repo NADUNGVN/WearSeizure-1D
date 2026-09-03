@@ -674,6 +674,118 @@ place to put the parameters. Recorded now so the limitation is not discovered
 after the result is interpreted.
 
 
+## 2j. Rows 45-51 -- A7, the protocol ladder measured (04-09)
+
+66 folds per cell, trained from scratch (no cohort pre-training, as the
+published work had none), 60 epochs, threshold grid 0.05-0.95.
+
+| rung | model | window sens | window spec | accuracy | bal acc | ictal prev | test/train overlap |
+|---|---|--:|--:|--:|--:|--:|--:|
+| A as published | `compact1d_7k` | 0.8905 | 0.9938 | **0.9931** | 0.9422 | 0.62% | **99.6%** |
+| A as published | `frontiers2d` | 0.8134 | 0.9901 | **0.9887** | 0.9018 | 0.62% | **99.6%** |
+| A as published | `k5only` | **0.9229** | 0.9973 | **0.9968** | 0.9601 | 0.62% | **99.6%** |
+| B recording split | `frontiers2d` | 0.6409 | 0.9919 | 0.9867 | 0.8164 | 1.42% | 0.0% |
+| B recording split | `k5only` | 0.6173 | 0.9939 | 0.9887 | 0.8056 | 1.42% | 0.0% |
+| C no fitting leak | `frontiers2d` | 0.6237 | 0.9908 | 0.9853 | 0.8072 | 1.42% | 0.0% |
+| C no fitting leak | `k5only` | 0.6033 | 0.9943 | 0.9888 | 0.7988 | 1.42% | 0.0% |
+
+### The finding, which is not the one that was planned
+
+**Accuracy is blind to the leak. Sensitivity is not.**
+
+| | across all seven cells |
+|---|---|
+| accuracy | 0.9853 - 0.9968, a spread of **1.15pp** |
+| window sensitivity | 0.6033 - 0.9229, a spread of **32pp** |
+
+The leak that puts a near-duplicate of 99.6% of test windows into training moves
+accuracy by about one point and sensitivity by thirty. Accuracy therefore
+**cannot distinguish a leaky protocol from a clean one on this data**, and a
+paper reporting it has published a number that would look the same either way.
+
+Why: at 0.62% ictal prevalence a model that never predicts a seizure scores
+**99.38% accuracy**. The best cell in this table, 99.68%, is **0.30pp above
+predicting nothing**. That is the entire dynamic range accuracy has here.
+
+This is a stronger and more defensible Figure 1 than the descending staircase
+that was planned, and unlike that one it does not depend on matching any
+particular published number.
+
+### Prediction scorecard (registered in section 2i before the data landed)
+
+| prediction | outcome |
+|---|---|
+| rung A reaches **0.97-0.995** window sensitivity | **WRONG.** 0.8134 - 0.9229; none reached 0.97 |
+| A to B is a large drop, to 0.60-0.85 | correct: 0.6173 - 0.6409, a 17-31pp fall |
+| B to C costs 0.02-0.05 | correct, at the low end: -0.014 and -0.017 |
+| C to D goes **UP** | correct: 0.60-0.62 window against 0.8756-0.9185 event |
+| all three architectures cluster at rung A | **half wrong.** Sensitivity spans 11pp (0.8134-0.9229); accuracy clusters tightly (0.9887-0.9968) |
+
+### Why rung A missed, and what would settle it
+
+The published protocol slides its window by **one sample**; this reproduction
+kept the project's **1-second** stride, 256 samples. One-sample striding
+produces 256x more windows and a correspondingly denser near-duplicate
+structure, and that is the most likely source of the gap between 0.9229 and the
+published 0.9962.
+
+Rung A is therefore a **partial** reproduction and must be labelled as one. The
+cheap test is a stride sweep on rung A -- 0.5s, 0.25s, 0.125s -- to see whether
+sensitivity climbs toward 0.99 as stride falls. If it does, the stride is the
+explanation; if it plateaus near 0.92, something else is.
+
+Skipping that sweep does not weaken the accuracy finding above, which stands on
+the seven cells already measured.
+
+### A confound in the table that must be stated
+
+Prevalence differs by rung: **0.62% at A, 1.42% at B and C**. Rung A's test set
+is a random 20% of all windows and so carries the corpus-wide ictal fraction;
+B and C hold out a seizure recording, which is denser in ictal windows. Accuracy
+is therefore not directly comparable across rungs -- sensitivity and specificity
+are. The accuracy finding survives this, because both trivial baselines (99.38%
+at A, 98.58% at B and C) sit just below every measured value.
+
+---
+
+## 2k. Rows 52-53 -- the capacity ladder is a null (04-09)
+
+| | sens macro | sens micro | FAR/h | delay | params | MACs |
+|---|---:|---:|---:|---:|---:|---:|
+| `k5only` control (row 32) | **0.9358** | 0.9351 | 0.2216 | 18.83 | 11,786 | 585,920 |
+| `k5only_ctx16` (row 44) | 0.9126 | 0.9221 | 0.2378 | 18.10 | 5,114 | 367,664 |
+| `k5only_wide` (row 52) | 0.9245 | 0.9351 | **0.2180** | **18.06** | 9,414 | 626,736 |
+
+**`wide` against `ctx16`** (isolates the stage width): sens macro +1.19pp, CI
+[-2.62, +5.96], indistinguishable. Widening the stages recovers about half of
+what narrowing the context cost, and the recovery does not clear the noise.
+
+**`wide` against the control** (the headline, two variables at once): sens macro
+-1.14pp, CI [-3.04, +0.51], indistinguishable. Micro sensitivity is **identical
+to sixteen decimal places** -- 0.9350649350649349 against 0.9350649350649353,
+the same 72 of 77 events. FAR and delay are marginally better and also
+indistinguishable.
+
+**Spending the MAC budget on wider stages buys nothing measurable.** The
+prediction registered in 2i said exactly this -- indistinguishable, 0.92-0.94,
+no 0.95 -- and it held.
+
+`worst_patient_far_per_hour` came back "favours A" against ctx16 with a CI
+excluding zero, and carries the DEGENERATE flag. It is the max over 13 clusters,
+which is not a testable statistic, and the paired sign test on the same data is
+p = 1.0000. Not a finding; see section 2h.
+
+### What is still worth taking from it
+
+`wide` matches the control on every metric while using **20% fewer parameters**
+(9,414 against 11,786) and giving slightly lower FAR and delay. That is a Pareto
+argument, not a quality one, and it should be reported as such.
+
+The confound registered in 2i before the run stands: `wide` carries more MACs
+but fewer parameters than the control, so this null cannot separate "capacity
+does not help" from "wide never delivered more capacity". Within the
+630,832-MAC gate the two cannot both be had.
+
 ## 3b. The teacher montage each L3 fold actually gets (01-09)
 
 Phase 5 aborted at fold 17 of 66: `chb04` has EDFs with either 23 or 24 channels
