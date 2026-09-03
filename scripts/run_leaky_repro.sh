@@ -42,15 +42,31 @@
 #   SHARD=repro nohup bash scripts/run_leaky_repro.sh > leaky_repro.out 2>&1 &
 set -uo pipefail
 
-: "${CHBMIT_RAW_DIR:?set CHBMIT_RAW_DIR first}"
-: "${WEARSEIZURE_ARTIFACTS_DIR:?set WEARSEIZURE_ARTIFACTS_DIR first}"
-[ -d "$CHBMIT_RAW_DIR" ] || { echo "CHBMIT_RAW_DIR does not exist: $CHBMIT_RAW_DIR"; exit 1; }
+# These two are what configs/profile/server.yaml interpolates. They live in
+# SERVER-02's ~/.bashrc, so moving to a fresh host is exactly where they go
+# missing -- and a terse "set it first" sends someone hunting through configs.
+missing=""
+[ -z "${CHBMIT_RAW_DIR:-}" ] && missing="$missing CHBMIT_RAW_DIR"
+[ -z "${WEARSEIZURE_ARTIFACTS_DIR:-}" ] && missing="$missing WEARSEIZURE_ARTIFACTS_DIR"
+if [ -n "$missing" ]; then
+  echo "ABORT: not set:$missing"
+  echo
+  echo "configs/profile/server.yaml interpolates both. On the shared NFS layout:"
+  echo "  export CHBMIT_RAW_DIR=~/Manh/datasets/CHB-MIT/1.0.0"
+  echo "  export WEARSEIZURE_ARTIFACTS_DIR=~/Manh/WearSeizure-1D-artifacts"
+  echo
+  echo "Note ART is not one of them -- exporting ART alone leaves both unset."
+  exit 1
+fi
+[ -d "$CHBMIT_RAW_DIR" ] || { echo "ABORT: CHBMIT_RAW_DIR does not exist: $CHBMIT_RAW_DIR"; exit 1; }
+[ -d "$WEARSEIZURE_ARTIFACTS_DIR" ] || { echo "ABORT: WEARSEIZURE_ARTIFACTS_DIR does not exist: $WEARSEIZURE_ARTIFACTS_DIR"; exit 1; }
 
-ulimit -n 65536
+ulimit -n 65536 2>/dev/null
 if [ "$(ulimit -n)" -lt 65536 ]; then
   echo "ABORT: could not raise the open-file limit past $(ulimit -n)."
   echo "This is what killed the first L4 attempt at the fourth cohort init of every"
   echo "combination. Raise the hard limit, or put 'ulimit -n 65536' in ~/.bashrc."
+  echo "Current hard limit: $(ulimit -Hn)"
   exit 1
 fi
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
