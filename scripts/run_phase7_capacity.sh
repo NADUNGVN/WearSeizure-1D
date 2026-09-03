@@ -63,10 +63,21 @@ SPLIT=patient_specific_loso_edf
 WINDOW=w4s_stride1s
 CONTROL=wearseizure1d_k5only
 MODELS=(wearseizure1d_k5only_ctx16 wearseizure1d_k5only_wide)
-SEEDS=(0 1 2)
+# Seeds are independent of one another, so a host with spare time can take some.
+# SEEDS="1" on one machine and SEEDS="2" on another halves the wall clock, and
+# each seed writes to its own seed<N> directory so there is nothing to collide
+# on even across the shared NFS artifacts tree.
+#
+# A host running a SUBSET must not run the evaluate/bootstrap tail: those pool
+# all three seeds and would report a two-seed result as if it were three.
+# The script detects that and stops after training, saying so.
+SEEDS=(${SEEDS:-0 1 2})
+FULL_RUN=1
+[ "${SEEDS[*]}" = "0 1 2" ] || FULL_RUN=0
 WORKERS="${WORKERS:-}"
 WORKER_ARG=()
 [ -n "$WORKERS" ] && WORKER_ARG=(profile.num_workers="$WORKERS")
+export WEARSEIZURE_RUN_HOST="$(hostname)"
 
 say() { printf '\n=== [%s] %s ===\n' "$(date '+%F %T')" "$*" | tee -a "$LOG"; }
 run() { echo "+ $*" | tee -a "$LOG"; "$@" 2>&1 | tee -a "$LOG"; return "${PIPESTATUS[0]}"; }
@@ -92,11 +103,22 @@ for model in "${MODELS[@]}"; do
       model="$model" seed="$seed" postprocess=hysteresis_widegrid
   done
 
+  if [ "$FULL_RUN" -eq 0 ]; then
+    say "SEEDS=${SEEDS[*]} is a subset -- skipping evaluate/bootstrap for $model."
+    say "Run this script with the default SEEDS on one host once every seed exists."
+    continue
+  fi
   say "evaluate: $model, 3 seeds, v2 gates"
   run python scripts/evaluate.py profile=server data=chbmit model="$model" \
     postprocess=hysteresis_widegrid 'train.seeds=[0,1,2]' \
     profile.enforce_gates=false eval.gates_path=configs/eval/gates_v2_proposed.yaml
 done
+
+if [ "$FULL_RUN" -eq 0 ]; then
+  say "subset run finished training. The comparisons need all three seeds:"
+  say "  bash scripts/run_phase7_capacity.sh   # with default SEEDS, once seeds 0-2 are on disk"
+  exit 0
+fi
 
 # Rung 1: does the context block's width earn its 37% of the MACs?
 say "paired bootstrap: ctx16 vs control (isolates the context width)"
