@@ -44,6 +44,22 @@ PHASES = {
 }
 SEEDS = (0, 1, 2)
 
+# Item A7 writes one JSON per fold under leaky_repro/<rung>/<model>/, a layout
+# different from the training phases, so it is projected separately.
+LEAKY_SHARDS = {
+    "A7 SERVER-03 -- shard 'repro'": [
+        ("A_as_published", "baseline_frontiers2d"),
+        ("A_as_published", "baseline_compact1d_7k"),
+        ("B_split_by_recording", "baseline_frontiers2d"),
+        ("C_no_fitting_leak", "baseline_frontiers2d"),
+    ],
+    "A7 SERVER-04 -- shard 'ours'": [
+        ("A_as_published", "wearseizure1d_k5only"),
+        ("B_split_by_recording", "wearseizure1d_k5only"),
+        ("C_no_fitting_leak", "wearseizure1d_k5only"),
+    ],
+}
+
 
 def mtimes(d: Path, pattern: str) -> list[float]:
     return sorted(f.stat().st_mtime for f in d.glob(pattern)) if d.is_dir() else []
@@ -173,6 +189,40 @@ def main() -> int:
         total_remaining += pre_cost
     elif missing_inits:
         print(f"\ncohort initialisations still to build: {missing_inits} (no timing data yet)")
+
+    # A7. Its jobs run POOL at a time on one GPU, so a shard finishes in about
+    # the time of its slowest job rather than the sum of them.
+    leaky_rates = []
+    for phase, combos in LEAKY_SHARDS.items():
+        print()
+        print(f"=== {phase} ===")
+        etas = []
+        for rung, model in combos:
+            ts = mtimes(art / "leaky_repro" / rung / model, "*.json")
+            done, left = len(ts), FOLDS - len(ts)
+            rate = rate_from(ts)
+            if rate:
+                leaky_rates.append(rate)
+            label = f"{rung}/{model.replace('wearseizure1d_', '').replace('baseline_', '')}"
+            if left <= 0:
+                print(f"  done   {label:<48} {done}/{FOLDS}")
+                continue
+            note = ""
+            if rate is None and leaky_rates:
+                rate, note = statistics.median(leaky_rates), " (rate from a sibling job)"
+            elif rate is None:
+                print(f"  ?      {label:<48} {done}/{FOLDS}  (nothing timed yet)")
+                unknown.append(label)
+                continue
+            eta = left * rate
+            etas.append(eta)
+            live = " <- running now" if done and now - ts[-1] < 1800 else ""
+            print(f"  todo   {label:<48} {done}/{FOLDS}  {human(rate)}/fold  ~{human(eta)}{live}{note}")
+        if etas:
+            # Both are printed: the wall clock is what you wait, and a large gap
+            # between it and the sum means the shard is badly unbalanced.
+            print(f"  --> shard wall clock ~{human(max(etas))}  (sum of jobs {human(sum(etas))})")
+
 
     print(f"\nTOTAL REMAINING (if run one after another): ~{human(total_remaining)}")
     if all_rates:
