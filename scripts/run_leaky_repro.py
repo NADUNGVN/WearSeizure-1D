@@ -124,8 +124,33 @@ def main(cfg: DictConfig) -> None:
     max_folds = cfg.train.get("max_folds")
     if max_folds:
         folds = folds[:max_folds]
+    if cfg.get("fold_subset") == "one_per_patient":
+        # For the stride sweep. train.max_folds takes the FIRST n folds, which
+        # are all chb01 -- useless for a cohort-level trend. This takes the
+        # first fold of each of the 13 patients instead, so a 13-fold sweep
+        # still spans every patient and its numbers are comparable in kind to
+        # the 66-fold table, just noisier.
+        seen, subset = set(), []
+        for f in folds:
+            subject = f.fold_id.split("__")[0]
+            if subject not in seen:
+                seen.add(subject)
+                subset.append(f)
+        folds = subset
+        log.info(f"fold_subset=one_per_patient: {len(folds)} folds, one per patient")
 
-    out_dir = ensure_dir(Path(cfg.profile.artifacts_dir) / "leaky_repro" / rung.name / cfg.model.name)
+    # The stride is part of the protocol being reproduced, not a detail: Chung
+    # 2024 slides by ONE SAMPLE (1/256 s), where this project slides by 1 s. A
+    # 57-second seizure therefore gives them ~14,600 ictal windows against our
+    # ~54 -- a 256x larger minority class, at 0.6% prevalence. Rung A reached
+    # 0.9229 sensitivity against their 0.9962, and the stride is the leading
+    # explanation for the rest, so a sweep has to be able to write its results
+    # side by side instead of overwriting them.
+    stride_tag = f"stride{cfg.window.stride_s:g}s".replace(".", "p")
+    out_dir = ensure_dir(
+        Path(cfg.profile.artifacts_dir) / "leaky_repro" / rung.name / cfg.model.name
+        / (stride_tag if cfg.window.stride_s != 1.0 else "")
+    )
     grid = [round(x, 2) for x in np.arange(0.05, 0.96, 0.05)]
     seed = int(cfg.seed)
 
