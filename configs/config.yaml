@@ -14,6 +14,11 @@ seed: 0
 
 hydra:
   run:
-    dir: ${profile.artifacts_dir}/runs/${now:%Y-%m-%d_%H-%M-%S}
+    # Host-qualified because SERVER-02/03/04 share ~/Manh over NFS: the
+    # timestamp resolves to the second, so two hosts starting a job in the
+    # same second would write their .hydra/ and logs into one directory.
+    # The phase scripts export WEARSEIZURE_RUN_HOST; anything run by hand
+    # falls back to "local", which is fine for a single-host invocation.
+    dir: ${profile.artifacts_dir}/runs/${oc.env:WEARSEIZURE_RUN_HOST,local}_${now:%Y-%m-%d_%H-%M-%S}
   job:
     chdir: false

@@ -39,7 +39,13 @@
 #
 #   SHARD=all runs everything on one host, for when only one is free.
 #
-#   SHARD=repro nohup bash scripts/run_leaky_repro.sh > leaky_repro.out 2>&1 &
+#   SHARD=repro nohup bash scripts/run_leaky_repro.sh > "leaky_$(hostname).out" 2>&1 &
+#
+# The output file MUST carry the hostname. ~/Manh is NFS: the checkout itself
+# is one shared directory, so plain `> leaky_repro.out` from two hosts has
+# each truncating the other's file -- which is how SERVER-04's startup error
+# was lost and its log showed SERVER-03's output instead. The script's own
+# tee log is already host-qualified; this is the nohup redirect.
 set -uo pipefail
 
 # These two are what configs/profile/server.yaml interpolates. They live in
@@ -70,6 +76,9 @@ if [ "$(ulimit -n)" -lt 65536 ]; then
   exit 1
 fi
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+# Hydra names its run directory by timestamp-to-the-second, and these hosts
+# share the artifacts tree, so the host has to be part of the name.
+export WEARSEIZURE_RUN_HOST="$(hostname)"
 
 ART="$WEARSEIZURE_ARTIFACTS_DIR"
 SHARD="${SHARD:-all}"
