@@ -83,9 +83,22 @@ export WEARSEIZURE_RUN_HOST="$(hostname)"
 ART="$WEARSEIZURE_ARTIFACTS_DIR"
 SHARD="${SHARD:-all}"
 LOG="$ART/leaky_repro_${SHARD}_$(hostname).log"
-WORKERS="${WORKERS:-}"
-WORKER_ARG=()
-[ -n "$WORKERS" ] && WORKER_ARG=(profile.num_workers="$WORKERS")
+# Measured on SERVER-03 mid-run: the training process sits under 100% CPU on 28
+# threads, GPU memory bandwidth drops to zero between kernels, and the card
+# draws 175-240W of 350W. The DataLoader workers are idle -- this workload is
+# bound by CUDA KERNEL-LAUNCH overhead, not by feeding data. At 5-15k parameters
+# each batch finishes faster than the next launch can be issued.
+#
+# Three consequences, all of which this script now acts on:
+#   - More workers do nothing, and fewer is better: 14 workers times several
+#     concurrent jobs would oversubscribe 28 threads for prefetch nobody waits on.
+#   - A bigger batch is nearly free: 4x the work per launch, same launch cost.
+#   - Running jobs CONCURRENTLY on one GPU multiplies throughput, because each
+#     process issues its own launches. Same finding that made Phase 2b parallel.
+WORKERS="${WORKERS:-2}"
+BATCH="${BATCH:-1024}"
+POOL="${POOL:-4}"
+TUNING=(profile.num_workers="$WORKERS" train.batch_size="$BATCH")
 
 say() { printf '\n=== [%s] %s ===\n' "$(date '+%F %T')" "$*" | tee -a "$LOG"; }
 run() { echo "+ $*" | tee -a "$LOG"; "$@" 2>&1 | tee -a "$LOG"; return "${PIPESTATUS[0]}"; }
@@ -119,19 +132,35 @@ esac
 
 say "A7 leaky reproduction. shard=$SHARD host=$(hostname) commit=$(git rev-parse --short HEAD) workers=${WORKERS:-<profile default>}"
 
+say "launching ${#JOBS[@]} job(s), $POOL at a time, workers=$WORKERS batch=$BATCH"
+
+launched=0
 for job in "${JOBS[@]}"; do
   set -- $job
   rung="$1"; model="$2"
-  say "rung=$rung model=$model"
-  run python scripts/run_leaky_repro.py profile=server data=chbmit \
-    model="$model" "+rung=$rung" "${WORKER_ARG[@]}"
+  joblog="$ART/leaky_${rung}_${model}.log"
+  say "start rung=$rung model=$model -> $joblog"
+  python scripts/run_leaky_repro.py profile=server data=chbmit     model="$model" "+rung=$rung" "${TUNING[@]}" > "$joblog" 2>&1 &
+  launched=$((launched + 1))
+  # Staggered: every process reads the whole corpus at startup, and starting
+  # them together would race four cold NFS reads of the same files. A minute
+  # apart lets the first one warm the page cache for the rest.
+  [ "$launched" -lt "${#JOBS[@]}" ] && sleep 60
+  [ "$((launched % POOL))" -eq 0 ] && wait
+done
+wait
 
+fail=0
+for job in "${JOBS[@]}"; do
+  set -- $job
+  rung="$1"; model="$2"
   n=$(ls "$ART/leaky_repro/$rung/$model"/*.json 2>/dev/null | wc -l)
   say "folds $rung/$model: $n/66"
   # Same rule as every other phase: a partial cohort is not a result. The first
   # L4 attempt reported sensitivity 1.0000 from 13 folds over 3 easy patients.
-  [ "$n" -eq 66 ] || { say "ABORT: $rung/$model has $n/66 folds"; exit 1; }
+  [ "$n" -eq 66 ] || { say "INCOMPLETE: $rung/$model has $n/66 -- see $joblog"; fail=1; }
 done
+[ "$fail" -eq 0 ] || { say "ABORT: at least one job did not finish its 66 folds"; exit 1; }
 
 say "shard $SHARD done. Summarise once BOTH shards have finished:"
 say "  python scripts/summarise_leaky_repro.py \$WEARSEIZURE_ARTIFACTS_DIR --markdown"
