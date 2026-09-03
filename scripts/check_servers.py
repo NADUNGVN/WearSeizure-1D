@@ -89,23 +89,40 @@ def main() -> int:
     # anything reading only the artifacts tree cannot see.
     print("=== processes on this host ===")
     try:
-        out = subprocess.run(["ps", "-eo", "pid,etime,args"],
+        out = subprocess.run(["ps", "-eo", "pid,ppid,etime,args"],
                              capture_output=True, text=True, check=False).stdout
     except OSError:
         out = ""
-    mine = [x for x in out.splitlines()
-            if ("scripts/train.py" in x or "run_leaky_repro.py" in x) and "grep" not in x]
-    if not mine:
+    procs = []
+    for row in out.splitlines():
+        if ("scripts/train.py" not in row and "run_leaky_repro.py" not in row) or "grep" in row:
+            continue
+        pid, ppid, etime, cmd = row.split(None, 3)
+        procs.append((pid, ppid, etime, cmd))
+
+    # Only ROOTS. A train.py with num_workers=14 forks 14 DataLoader workers
+    # that carry the identical command line, so counting every match reports 15
+    # trainings where there is one -- an earlier version of this check called 29
+    # workers "29 training processes" and raised a false alarm about orphans.
+    # A process is a root when its parent is not itself one of these.
+    pids = {pid for pid, *_ in procs}
+    roots = [p for p in procs if p[1] not in pids]
+    workers = len(procs) - len(roots)
+
+    if not roots:
         print("  no training process here (this host may simply not be the one running it)")
-    for line in mine:
-        pid, etime, args = line.split(None, 2)
-        keep = " ".join(a for a in args.split()
+    for pid, _ppid, etime, cmd in roots:
+        keep = " ".join(a for a in cmd.split()
                         if a.startswith(("model=", "seed=", "+rung=", "train.run_tag=")))
-        print(f"  pid {pid:<8} up {etime:<12} {keep or args[:70]}")
-    if len(mine) > 1:
-        print(f"  -> {len(mine)} training processes on this host. If a phase script was")
+        kids = sum(1 for p in procs if p[1] == pid)
+        note = f"  (+{kids} dataloader workers)" if kids else ""
+        print(f"  pid {pid:<8} up {etime:<12} {keep or cmd[:70]}{note}")
+    if workers:
+        print(f"  ({workers} worker process(es) not listed separately)")
+    if len(roots) > 1:
+        print(f"  -> {len(roots)} independent trainings on this host. If a phase script was")
         print("     pkill'd, its python child survives -- pkill matches the script name,")
-        print("     not the child, and the orphan keeps writing.")
+        print("     not the child -- so check whether one of these is an orphan.")
     print()
 
     print(f"live runs (touched in the last {args.minutes} min), newest first:\n")
