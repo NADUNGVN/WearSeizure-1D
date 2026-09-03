@@ -1,6 +1,6 @@
 # Bàn giao model cho nhóm thiết kế phần cứng
 
-Trạng thái: **kiến trúc chưa chốt** — xem §4. Tài liệu này ghi lại con số tốt nhất
+Trạng thái: **kiến trúc ĐÃ CHỐT là `wearseizure1d_k5only`** — xem §4. Tài liệu này ghi lại con số tốt nhất
 hiện có và mọi thứ nhóm accelerator cần, để phần việc không phụ thuộc lựa chọn
 cuối có thể bắt đầu ngay.
 
@@ -79,30 +79,78 @@ macro thấp hơn 2.33pp (CI [−6.60, +0.60], không có ý nghĩa thống kê,
 13 bệnh nhân không đủ mạnh để phân giải chênh lệch cỡ đó). Xem
 `EXPERIMENT_LOG_G1a.md` §2h.
 
-## 4. Vì sao chưa chốt được ngay hôm nay
+## 4. Kiến trúc đã CHỐT: `wearseizure1d_k5only`
 
-`k5only_wide` đang chạy trên SERVER-02, còn khoảng 11 giờ. Nó là **kiến trúc
-cuối cùng còn chưa biết kết quả**, và là thứ duy nhất còn lại có thể buộc làm lại
-RTL. Chốt bây giờ rồi phát hiện `wide` tốt hơn nghĩa là thiết kế lại datapath.
+Thang dung lượng đã chạy xong (rows 44, 52). Cả hai phương án thay thế đều
+**không** tốt hơn, nên không còn gì có thể buộc làm lại RTL.
 
-Sau khi có kết quả đó, kiến trúc chốt vĩnh viễn và mọi thay đổi còn lại chỉ là
-trọng số.
+| | sens macro | sens micro | FAR/h | MACs | params |
+|---|---:|---:|---:|---:|---:|
+| **`k5only`** (chốt) | **0.9358** | 0.9351 | 0.2216 | 585 920 | 11 786 |
+| `k5only_ctx16` | 0.9126 | 0.9221 | 0.2378 | 367 664 | 5 114 |
+| `k5only_wide` | 0.9245 | 0.9351 | **0.2180** | 626 736 | **9 414** |
 
-## 5. Chất lượng tốt nhất hiện có, ở kiến trúc `k5only`
+- `ctx16` (cắt context 64→16) **mất 2.33pp** sensitivity macro. Không lấy được
+  37% MACs miễn phí.
+- `wide` (ctx16 + stage rộng 50%) **ngang control**: Δ macro −1.14pp, CI
+  [−3.04, +0.51]; micro **trùng tới 16 chữ số thập phân** — đúng 72/77 cơn.
 
-3 seed, 66 fold, giao thức `patient_specific_loso_edf`, 185.0 h exposure.
+`wide` vẫn có một luận điểm Pareto: ngang chất lượng với **20% ít tham số hơn**,
+FAR và delay nhỉnh hơn chút. Nếu nhóm phần cứng muốn tiết kiệm bộ nhớ trọng số
+(9.2 KiB so với 11.5 KiB) thì đó là lựa chọn hợp lệ. Nhưng nó **không** tốt hơn
+về chất lượng, nên mặc định là `k5only`.
 
-| recipe | sens macro | sens micro | FAR/h | worst-patient FAR |
-|---|---:|---:|---:|---:|
-| L1 (tiền huấn luyện nhóm) — row 32 | 0.9358 | 0.9351 | 0.2261 | 0.7785 |
-| L1 + L4 (chọn theo AUPRC) — row 39 | 0.9380 | — | **0.1904** | 0.5701 |
-| **L1 + L8 (chưng cất)** — row 43 | **0.9489** | **0.9567** | 0.2937 | 2.1065 |
+---
 
-Không recipe nào trội toàn diện: L8 cho sensitivity cao nhất, L4 cho FAR thấp
-nhất. **Lựa chọn này không ảnh hưởng phần cứng** và có thể hoãn.
+## 5. Chất lượng tốt nhất hiện có
 
-Để tham chiếu, baseline nặng `baseline_frontiers2d` đạt 0.9726 ± 0.0037 ở
-2 523 328 MACs — **4.3× nhiều hơn**. Đó là trục đánh đổi của bài báo.
+Kiến trúc `k5only`, 3 seed, 66 fold, `patient_specific_loso_edf`, 185.0 h
+exposure. **Ba dòng này khác nhau ở TRỌNG SỐ, không ở mạng** — cùng layer, cùng
+MACs, cùng line buffer, nên lựa chọn giữa chúng **không ảnh hưởng phần cứng** và
+có thể hoãn tới sau khi có RTL.
+
+| recipe | sens macro | sens micro | FAR/h | delay | worst-pt sens | worst-pt FAR |
+|---|---:|---:|---:|---:|---:|---:|
+| L1 (row 32) | 0.9358 | 0.9351 | 0.2216 | 18.83 | 0.8714 | 0.7785 |
+| L1 + L4 (row 39) | 0.9380 | — | **0.1904** | 18.83 | — | **0.5701** |
+| **L1 + L8 (row 43)** | **0.9489** | **0.9567** | 0.2937 | **17.75** | **0.9333** | 2.1065 |
+
+**Tốt nhất về sensitivity: L1 + L8.** Tốt nhất về FAR: L1 + L4. Không recipe nào
+trội toàn diện.
+
+### Đối chiếu mốc
+
+| mốc | ngưỡng | L1+L8 | |
+|---|---|---:|---|
+| M2 sensitivity macro | ≥ 0.95 | 0.9489 | ❌ hụt 0.11pp |
+| M2 sensitivity micro | ≥ 0.95 | 0.9567 | ✅ |
+| M3 FAR/h | ≤ 0.20 | 0.2937 | ❌ (L4 đạt 0.1904) |
+| M4 worst-patient sens | ≥ 0.85 | 0.9333 | ✅ |
+| M5 worst-patient FAR | ≤ 0.50 | 2.1065 | ❌ |
+| M8 exposure | ≥ 185 h | 185.0 | ✅ |
+| M9 thanh sai số | 3 seed | 3 | ✅ |
+| M10 MACs | ≤ 630 832 | 585 920 | ✅ |
+
+Khoảng cách macro tới 0.95 là **0.11pp** — nhỏ hơn ảnh hưởng của một cơn duy
+nhất trên 77 (1.28pp), tức nằm trong nhiễu seed. Micro đã vượt.
+
+### Vì sao L1+L8 xấu ở worst-patient FAR
+
+L8 chưng cất từ `frontiers2d`, và student học luôn **chế độ hỏng** của teacher:
+chb23 FAR đi từ 0.778 lên **2.106**, trong khi teacher là 2.221. Nó hội tụ về
+lỗi của teacher triệt để hơn là về thành công. Nếu worst-patient FAR là ràng
+buộc lâm sàng cứng thì chọn L4 thay vì L8.
+
+### Thí nghiệm chưa ai chạy, và nó là bước tiếp theo rõ ràng
+
+**L4 + L8 chưa từng được kết hợp.** L4 cho FAR tốt nhất (0.1904), L8 cho
+sensitivity tốt nhất (0.9489). Hai đòn bẩy độc lập — L4 đổi tiêu chí chọn
+checkpoint, L8 đổi hàm mất mát — nên về nguyên tắc cộng dồn được. Đây là cơ hội
+duy nhất còn lại có thể đưa cả M2 và M3 qua cùng lúc, và nó chỉ tốn 198 fold
+(~3.3 h nếu chia ba máy).
+
+
+---
 
 ## 6. Rủi ro phải nêu: INT8 chưa từng được đo
 
