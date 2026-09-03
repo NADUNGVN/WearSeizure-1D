@@ -36,10 +36,11 @@ def main() -> int:
         rows[(d["rung"], d["model"])].append(d)
 
     if args.markdown:
-        print("| rung | model | folds | window sens | window spec | balanced acc | test/train overlap |")
-        print("|---|---|--:|--:|--:|--:|--:|")
+        print("| rung | model | folds | window sens | window spec | accuracy | balanced acc | ictal prevalence | test/train overlap |")
+        print("|---|---|--:|--:|--:|--:|--:|--:|--:|")
     else:
-        print(f"{'rung':<24}{'model':<26}{'n':>4}{'sens':>9}{'spec':>9}{'bal_acc':>9}{'overlap':>9}")
+        print(f"{'rung':<24}{'model':<26}{'n':>4}{'sens':>9}{'spec':>9}{'acc':>9}"
+              f"{'bal_acc':>9}{'prev':>8}{'overlap':>9}")
 
     def mean(vals):
         # NaN is dropped, not propagated: a fold whose test partition holds one
@@ -55,11 +56,18 @@ def main() -> int:
             sens = mean([d["segment"]["sensitivity"] for d in ds])
             spec = mean([d["segment"]["specificity"] for d in ds])
             bal = mean([d["segment"]["balanced_accuracy"] for d in ds])
+            # Accuracy never appears without prevalence next to it: at ~0.5%
+            # ictal windows, "never a seizure" scores 99.5% and the pair is the
+            # only thing that makes the first number readable.
+            acc = mean([d["segment"].get("accuracy", float("nan")) for d in ds])
+            prev = mean([d["segment"]["prevalence"] for d in ds])
             ov = mean([d["test_window_overlap_fraction"] for d in ds])
             if args.markdown:
-                print(f"| `{r}` | `{model}` | {len(ds)} | {sens:.4f} | {spec:.4f} | {bal:.4f} | {ov:.1%} |")
+                print(f"| `{r}` | `{model}` | {len(ds)} | {sens:.4f} | {spec:.4f} | {acc:.4f} | "
+                      f"{bal:.4f} | {prev:.2%} | {ov:.1%} |")
             else:
-                print(f"{r:<24}{model:<26}{len(ds):>4}{sens:>9.4f}{spec:>9.4f}{bal:>9.4f}{ov:>9.1%}")
+                print(f"{r:<24}{model:<26}{len(ds):>4}{sens:>9.4f}{spec:>9.4f}{acc:>9.4f}"
+                      f"{bal:>9.4f}{prev:>8.2%}{ov:>9.1%}")
 
     incomplete = [(k, len(v)) for k, v in sorted(rows.items()) if len(v) != 66]
     if incomplete:

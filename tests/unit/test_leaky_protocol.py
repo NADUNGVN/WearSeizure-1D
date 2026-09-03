@@ -178,3 +178,37 @@ def test_the_default_config_is_the_honest_one():
     plain = ProtocolConfig("x")
     assert not any((plain.random_window_split, plain.global_normalisation,
                     plain.threshold_on_test, plain.segment_metric))
+
+
+# ---------------------------------------------------------------------------
+# Accuracy: reported, but never on its own
+# ---------------------------------------------------------------------------
+
+
+def test_accuracy_is_reported_and_is_misleading_without_prevalence():
+    """The student thesis is measured against a literature that reports
+    accuracy, so the number has to exist. This test is the reason it always
+    travels with prevalence: at this project's class balance a model that never
+    predicts a seizure scores over 99%."""
+    from wearseizure.eval.metrics_segment import compute_segment_metrics
+
+    n = 10_000
+    labels = np.zeros(n, dtype=int)
+    labels[:50] = 1                      # 0.5% ictal, this cohort's real balance
+    never_a_seizure = np.zeros(n)        # constant "no" for every window
+
+    m = compute_segment_metrics(labels, never_a_seizure, threshold=0.5)
+    assert m.accuracy > 0.99, "the useless model must score above 99% -- that is the point"
+    assert m.sensitivity == 0.0
+    assert m.balanced_accuracy == 0.5
+    assert m.prevalence == pytest.approx(0.005)
+
+
+def test_accuracy_and_balanced_accuracy_agree_when_classes_are_balanced():
+    from wearseizure.eval.metrics_segment import compute_segment_metrics
+
+    labels = np.array([0, 0, 1, 1])
+    scores = np.array([0.1, 0.9, 0.2, 0.8])
+    m = compute_segment_metrics(labels, scores, threshold=0.5)
+    assert m.accuracy == pytest.approx(0.5)
+    assert m.balanced_accuracy == pytest.approx(0.5)

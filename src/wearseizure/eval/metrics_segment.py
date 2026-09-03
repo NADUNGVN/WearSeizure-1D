@@ -21,6 +21,7 @@ class SegmentMetrics:
     auprc: float
     auroc: float
     f1: float
+    accuracy: float
     balanced_accuracy: float
     sensitivity: float
     specificity: float
@@ -44,6 +45,12 @@ def compute_segment_metrics(labels: np.ndarray, scores: np.ndarray, threshold: f
         auprc=auprc,
         auroc=auroc,
         f1=float(f1_score(labels, preds, zero_division=0)),
+        # Plain accuracy is carried because the CHB-MIT literature the student
+        # thesis is measured against reports it, and a defence needs a row that
+        # lines up with prior work. It is never meaningful alone here: ictal
+        # windows are about 0.5% of the data, so "never a seizure" scores 99.5%.
+        # That is exactly why it always travels with `prevalence` beside it.
+        accuracy=float((tp + tn) / (tp + tn + fp + fn)) if (tp + tn + fp + fn) else float("nan"),
         balanced_accuracy=float(balanced_accuracy_score(labels, preds)),
         sensitivity=float(sensitivity),
         specificity=float(specificity),

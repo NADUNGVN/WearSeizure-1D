@@ -185,7 +185,7 @@ def main(cfg: DictConfig) -> None:
             "threshold_fitted_on": "test" if rung.threshold_on_test else "val",
             "segment": {
                 "sensitivity": m.sensitivity, "specificity": m.specificity,
-                "f1": m.f1, "balanced_accuracy": m.balanced_accuracy,
+                "f1": m.f1, "accuracy": m.accuracy, "balanced_accuracy": m.balanced_accuracy,
                 "auprc": m.auprc, "auroc": m.auroc, "prevalence": m.prevalence,
             },
         }
