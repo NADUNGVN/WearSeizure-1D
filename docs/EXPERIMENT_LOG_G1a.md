@@ -614,6 +614,66 @@ at 562,912 MACs -- half the context kept, stages 25% wider, and still fewer
 MACs than the control. Measured with thop, not yet run.
 
 
+## 2i. Predictions registered BEFORE the data landed (04-09)
+
+Written while A7 and Phase 7 were still running, so that "we expected that" can
+be checked rather than asserted. Wrong predictions stay here.
+
+### A7 -- the protocol ladder
+
+| rung | window sens | why |
+|---|---|---|
+| **A** as published | **0.97-0.995** | 99.6% of test windows share samples with a training window (measured on chb01, real data). Within-recording generalisation is a far easier problem than across-recording, so this needs no memorisation -- the small models will reach it too |
+| **B** recording split | **0.60-0.85**, a large drop | This step IS the leak. The size of A-B is the headline number |
+| **C** no fitting leak | **0.02-0.05 below B** | Fitting the threshold on test is worth much less than duplicating the data |
+| **D** event level | **ABOVE C** | Known: 0.8756-0.9185 |
+
+**The ladder is not monotonic, and that is the prediction most likely to be
+misread.** C to D goes UP, because an event counts as detected if ANY of its
+windows fires while window sensitivity needs most of them to. If the figure is
+drawn as a staircase descending from 0.99 to 0.88 it will be wrong.
+
+Falsification: if rung A does not clear ~0.97, the reproduction is genuinely
+weaker than the published work and the protocol claim fails. That outcome gets
+logged as it stands.
+
+Secondary: all three architectures should land within a couple of points of each
+other at rung A. If they do, the result is not "their architecture is good" but
+**"this protocol makes any model look good"**, which is the stronger claim.
+
+### Phase 7 -- `wide`
+
+| | prediction |
+|---|---|
+| `wide` vs `ctx16` | **improves, 1-3pp**, recovering most of ctx16's 2.33pp loss |
+| `wide` vs control | **indistinguishable**, point estimate 0.92-0.94 against 0.9358 |
+| clears 0.95 | **no** |
+
+Reasoning: four measured levers have moved nothing significantly, and a 13-patient
+cohort cannot resolve differences under about 3pp. Nothing about widening the
+stages suggests a larger effect than distillation produced.
+
+### A confound in `wide` I should have caught when proposing it
+
+`wide` has **more MACs but FEWER parameters** than the model it widens: 626,736
+vs 585,920 MACs, but **9,414 vs 11,786 parameters**. Widening the stages 50%
+adds parameters; narrowing context 64 to 16 removes more.
+
+So `wide` is not straightforwardly "higher capacity". If it comes out null there
+are two readings -- capacity does not help, or `wide` never delivered more
+capacity in the sense that matters -- and this experiment cannot separate them.
+
+Within the 630,832-MAC gate the two cannot both be had: keeping context at 64
+while widening the stages costs 881,856 MACs. The parameter ceiling (32,000) is
+nowhere near binding at 9-12k, but parameters in this architecture live where
+MACs do, because the late layers run on a 32-sample sequence where a pointwise
+conv costs `out x 32 x in` -- doubling channels quadruples its MACs.
+
+That means a clean capacity test needs either a relaxed MAC gate or a different
+place to put the parameters. Recorded now so the limitation is not discovered
+after the result is interpreted.
+
+
 ## 3b. The teacher montage each L3 fold actually gets (01-09)
 
 Phase 5 aborted at fold 17 of 66: `chb04` has EDFs with either 23 or 24 channels
