@@ -56,14 +56,15 @@ def spread(conv: nn.Conv1d) -> float:
 @hydra.main(version_base=None, config_path="../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
     check_profile_data_pairing(cfg)
-    tag = run_tag_from_cfg(cfg)
+    run_tag = run_tag_from_cfg(cfg)
     seeds = seeds_from_cfg(cfg)
 
     per_layer: dict[str, list[float]] = {}
     n_ckpt = 0
     for seed in seeds:
         run_dir = fold_run_dir(
-            cfg.profile.artifacts_dir, cfg.model.name, cfg.split.name, cfg.window.name, seed, tag
+            cfg.profile.artifacts_dir, cfg.model.name, cfg.split.name, cfg.window.name, seed,
+            run_tag=run_tag,
         )
         for ckpt in sorted(Path(run_dir).glob("*.pt")):
             model = build_model(cfg)
@@ -79,7 +80,7 @@ def main(cfg: DictConfig) -> None:
             "model shows a spread of about 2x, which answers nothing."
         )
 
-    log.info(f"{n_ckpt} checkpoints, {len(seeds)} seed(s), tag={tag or '<control>'}")
+    log.info(f"{n_ckpt} checkpoints, {len(seeds)} seed(s), tag={run_tag or '<control>'}")
     log.info(f"{'layer':<26}{'type':<11}{'out_ch':>7}{'median':>9}{'max':>9}")
     worst = 0.0
     for name, vals in per_layer.items():
