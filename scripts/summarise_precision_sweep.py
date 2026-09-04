@@ -9,6 +9,14 @@ answer: the question is what quantisation costs, not what the model scores.
 The selection rule is fixed in docs/PLAN_quantisation.md and applied here rather
 than left to judgement after the fact: take the CHEAPEST format still within
 0.5pp of FP32, cheapest meaning dfp8 < int8 < dfp16 < int16 < fp32.
+
+That rule needs a guard, because a threshold is more precise than the
+measurement behind it. Event sensitivity is a step function of the scores -- a
+tenth of a percentage point is a tenth of one seizure in 77 -- so a format can
+miss a 0.5pp gate by a hundredth of a point without being any worse. Each cell
+therefore gets a patient-clustered paired bootstrap against FP32, and when
+several intervals span zero the script refuses to rank them on accuracy and says
+to choose on hardware cost instead.
 """
 from __future__ import annotations
 
@@ -19,12 +27,45 @@ import statistics
 from collections import defaultdict
 from pathlib import Path
 
+import numpy as np
+
 # Cheapest first. Cheapness is a hardware statement: fewer bits is less memory
 # and a narrower multiplier, and a power-of-two scale removes the requantisation
 # multiply entirely.
 ORDER = ["dfp8", "int8", "dfp16", "int16", "fp32"]
 
 TARGET_PP, MINIMUM_PP = 0.5, 1.0
+N_BOOT, N_EVENTS = 10_000, 77
+
+
+def paired_delta_ci(cell_rows: list[dict], ref_rows: list[dict]) -> tuple[float, float, float]:
+    """Patient-clustered paired bootstrap of (cell - fp32) sensitivity, in pp.
+
+    Paired and clustered for the same reason as every other comparison here:
+    the two arms are the SAME model on the SAME folds, differing only in numeric
+    format, and folds from one patient are not independent of each other.
+    """
+    by_fold = {(r["seed"], r["fold_id"]): r["event"]["sensitivity"] for r in ref_rows}
+    pairs: dict[str, list[tuple[float, float]]] = {}
+    for r in cell_rows:
+        key = (r["seed"], r["fold_id"])
+        if key in by_fold:
+            patient = r["fold_id"].split("__")[0]
+            pairs.setdefault(patient, []).append((r["event"]["sensitivity"], by_fold[key]))
+
+    patients = sorted(pairs)
+    if not patients:
+        return float("nan"), float("nan"), float("nan")
+
+    def delta(sample: list[str]) -> float:
+        a = [x for p in sample for x, _ in pairs[p]]
+        b = [y for p in sample for _, y in pairs[p]]
+        return (statistics.mean(a) - statistics.mean(b)) * 100
+
+    rng = np.random.default_rng(0)
+    boots = [delta([patients[i] for i in rng.integers(0, len(patients), len(patients))])
+             for _ in range(N_BOOT)]
+    return delta(patients), float(np.percentile(boots, 2.5)), float(np.percentile(boots, 97.5))
 
 
 def mean(vals: list[float]) -> float:
@@ -83,28 +124,48 @@ def main() -> int:
             "d_far": far - ref_far,
         })
 
+    ref_rows = [r for rows in cells["fp32"].values() for r in rows]
+    for r in rows:
+        if r["cell"] == "fp32":
+            r["ci"] = (0.0, 0.0, 0.0)
+            continue
+        r["ci"] = paired_delta_ci(
+            [x for rr in cells[r["cell"]].values() for x in rr], ref_rows
+        )
+
     if args.markdown:
-        print("| format | folds | seeds | event sens | Δ vs FP32 (pp) | FAR/h | Δ FAR/h | verdict |")
+        print("| format | folds | event sens | Δ vs FP32 (pp) | 95% CI (pp) | Δ in seizures | FAR/h | verdict |")
         print("|---|--:|--:|--:|--:|--:|--:|---|")
     else:
-        print(f"{'format':<8}{'folds':>7}{'seeds':>7}{'sens':>9}{'d_pp':>9}{'FAR/h':>9}{'d_FAR':>9}  verdict")
+        print(f"{'format':<8}{'folds':>7}{'sens':>9}{'d_pp':>9}{'95% CI (pp)':>20}"
+              f"{'seizures':>10}{'FAR/h':>9}  verdict")
 
     for r in rows:
-        loss = -r["d_sens_pp"]                      # positive = worse than FP32
+        _, lo, hi = r["ci"]
+        loss = -r["d_sens_pp"]
+        indistinguishable = r["cell"] != "fp32" and lo <= 0 <= hi
         if r["cell"] == "fp32":
             verdict = "reference"
+        elif indistinguishable:
+            # The interval spanning zero is the finding, not a footnote to the
+            # point estimate: it says this format is not measurably different
+            # from FP32 on this cohort.
+            verdict = "indistinguishable from FP32"
         elif loss <= TARGET_PP:
-            verdict = f"within target ({TARGET_PP}pp)"
+            verdict = f"worse, but within target ({TARGET_PP}pp)"
         elif loss <= MINIMUM_PP:
-            verdict = f"within minimum ({MINIMUM_PP}pp), NOT target"
+            verdict = f"worse, within minimum ({MINIMUM_PP}pp)"
         else:
             verdict = "FAILS both gates"
+        r["indistinguishable"] = indistinguishable
+        seizures = r["d_sens_pp"] / 100 * N_EVENTS
+        ci = f"[{lo:+.2f}, {hi:+.2f}]" if r["cell"] != "fp32" else ""
         if args.markdown:
-            print(f"| `{r['cell']}` | {r['n']} | {r['seeds']} | {r['sens']:.4f} | "
-                  f"{r['d_sens_pp']:+.2f} | {r['far']:.4f} | {r['d_far']:+.4f} | {verdict} |")
+            print(f"| `{r['cell']}` | {r['n']} | {r['sens']:.4f} | {r['d_sens_pp']:+.2f} | "
+                  f"{ci} | {seizures:+.2f} | {r['far']:.4f} | {verdict} |")
         else:
-            print(f"{r['cell']:<8}{r['n']:>7}{r['seeds']:>7}{r['sens']:>9.4f}"
-                  f"{r['d_sens_pp']:>+9.2f}{r['far']:>9.4f}{r['d_far']:>+9.4f}  {verdict}")
+            print(f"{r['cell']:<8}{r['n']:>7}{r['sens']:>9.4f}{r['d_sens_pp']:>+9.2f}"
+                  f"{ci:>20}{seizures:>+10.2f}{r['far']:>9.4f}  {verdict}")
 
     # The two axes, read off the grid rather than eyeballed.
     have = {r["cell"]: r["d_sens_pp"] for r in rows}
@@ -119,9 +180,25 @@ def main() -> int:
     print("  A power-of-two row costing much less than a width row means the format is")
     print("  nearly free and the bits are what matter -- or the reverse. Read both.")
 
+    # If several formats are indistinguishable from FP32, accuracy cannot choose
+    # between them and the point estimates are noise. Ranking them by a
+    # hundredth of a percentage point would be picking noise, so say so instead.
+    tied = [r["cell"] for r in rows if r.get("indistinguishable")]
+    print()
+    if len(tied) > 1:
+        print(f"NO ACCURACY-BASED CHOICE: {', '.join(tied)} are all indistinguishable from FP32")
+        print(f"  (every CI spans zero). The whole spread is "
+              f"{max(r['d_sens_pp'] for r in rows) - min(r['d_sens_pp'] for r in rows):.2f} pp = "
+              f"{(max(r['d_sens_pp'] for r in rows) - min(r['d_sens_pp'] for r in rows)) / 100 * N_EVENTS:.2f} "
+              f"of one seizure.")
+        cheapest = next(c for c in ORDER if c in tied)
+        print(f"  Choose on HARDWARE COST instead: {cheapest}, the cheapest of the tied formats.")
+        print("  Recording the tie matters as much as the choice -- a later reader must not")
+        print("  think the format was selected because it scored better.")
+        return 0
+
     chosen = next((r["cell"] for r in rows
                    if r["cell"] != "fp32" and -r["d_sens_pp"] <= TARGET_PP), None)
-    print()
     if chosen:
         print(f"SELECTED: {chosen} -- the cheapest format within {TARGET_PP}pp of FP32.")
     else:
