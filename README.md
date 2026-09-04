@@ -77,16 +77,17 @@ than a stored file. The two are not interchangeable, and comparing 18.2 KB again
 
 The rows that actually built something. Useful reference points for the accelerator work.
 
-| Work | Platform | Params | Ops | Latency | Power |
-|---|---|--:|--:|--:|--:|
-| Lee 2024, *IEEE TBioCAS* (RVDLAHA) | Xilinx **PYNQ-Z2** | 356 | 3 909 | 2.1 ms | 107 mW @ 1 MHz |
-| Zhu 2021, IEEE ASICON | Xilinx Zynq **ZC706** | 7 010 | 6.32 MOP | 170 µs @ 200 MHz | 24.96 GOP/s/kLUT |
-| Li 2022, *IEEE TBioCAS* | ASIC, 22 nm RRAM crossbar | 10 778 | — | 1.13 µs | 7.21 W |
-| **WearSeizure-1D** (target) | PYNQ-Z2 / Zynq-7020 | **11 786** | **489 600 MAC** | ≤ 2 ms budget | not yet measured |
+| Work | Platform | Params | Memory | Ops | Latency | Power |
+|---|---|--:|--:|--:|--:|--:|
+| Lee 2024, *IEEE TBioCAS* (RVDLAHA) | Xilinx **PYNQ-Z2** | 356 | *est.* 0.4 KB | 3 909 | 2.1 ms | 107 mW @ 1 MHz |
+| Zhu 2021, IEEE ASICON | Xilinx Zynq **ZC706** | 7 010 | *est.* 7 KB | 6.32 MOP | 170 µs @ 200 MHz | 24.96 GOP/s/kLUT |
+| Li 2022, *IEEE TBioCAS* | ASIC, 22 nm RRAM crossbar | 10 778 | in RRAM crossbar | — | 1.13 µs | 7.21 W |
+| **WearSeizure-1D** (target) | PYNQ-Z2 / Zynq-7020 | **11 786** | **18.2 KB** (W+A) | **489 600 MAC** | ≤ 2 ms budget | not yet measured |
 
 Sizing, derived in the model card: 489 600 MACs inside a 2 ms budget is **245 MMAC/s**, which at
 100 MHz is 2.45 MACs/cycle — a **4–8 MAC array**. Total on-chip SRAM is **18.2 KiB** (11.5 KiB
-INT8 weights + 6.7 KiB line buffers), under 1 % of the XC7Z020's BRAM.
+INT8 weights + 6.7 KiB line buffers) — about **3.6 %** of the XC7Z020's BRAM by block count,
+not by bytes; see below for why the distinction matters.
 
 One consequence that is easy to get backwards: a decision every second at ~1 ms of compute is a
 **0.1 % duty cycle**, so energy per hour is dominated by **static** power. Minimising MACs is not
@@ -157,6 +158,32 @@ sequence and is padded 32 each side — 64 padded samples around 32 real ones.
 **Cutting it was tried and is not free.** Narrowing `context` from 64 to 16 channels saves 37 % of
 the MACs and 47 % of the line buffer, and costs **2.33 pp of sensitivity**
 (`docs/EXPERIMENT_LOG_G1a.md` §2h).
+
+### How much is enough
+
+The XC7Z020 has **140 BRAM36 blocks**, about 4 KiB of data each. What is consumed is **blocks, not
+bytes** — a 544-byte buffer still occupies a whole block if it is allocated one, so fragmentation
+matters more than the total. Small buffers belong in LUTRAM, not BRAM.
+
+| Format | Total SRAM | BRAM36 blocks | % of 140 | Gate H4 (< 10 %) |
+|---|--:|--:|--:|:--:|
+| **INT8 / DFP8** | 18.2 KiB | ~5 | **3.6 %** | ✅ |
+| **INT16 / DFP16** | 36.3 KiB | ~10 | **7.1 %** | ✅ |
+| FP32, uncompressed | 72.7 KiB | ~19 | **13.6 %** | ❌ |
+
+So: **FP32 fits the device but breaks the project's own 10 % resource gate; INT16 and INT8 both
+clear it comfortably.** Since both clear it, footprint is *not* the criterion for choosing between
+them — accuracy loss is, which is what `docs/PLAN_quantisation.md` measures.
+
+The threshold that would really matter is one this design is nowhere near: **if weights did not fit
+on chip**, every inference would stream them from DDR, and a DRAM access costs roughly 100× an SRAM
+access and 1000× a MAC (Horowitz, ISSCC 2014). Staying on-chip is worth far more than any saving
+available *within* on-chip.
+
+And the part that is easy to get backwards here: at a **0.1 % duty cycle** the energy per hour is
+dominated by **leakage of the memory that stays powered**, not by the energy of the accesses. So the
+useful reading is *smaller footprint → fewer BRAM blocks powered → longer battery*, and **power-gating
+the BRAMs between inferences is worth more than shrinking 36 KiB to 18 KiB**.
 
 ---
 
