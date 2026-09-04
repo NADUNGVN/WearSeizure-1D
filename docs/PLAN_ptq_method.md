@@ -54,6 +54,40 @@ Cách đọc, và nó **quyết định toàn bộ phần còn lại**:
 Không đo cái này mà đi cài CLE ngay là làm thừa; mà bỏ qua nó rồi kết luận "8
 bit không dùng được" thì lại là kết luận sai.
 
+### ĐÃ ĐO (04-09) — kết quả: UNIFORM, 3.4×
+
+198 checkpoint, 3 seed, tag `L8`, trên SERVER-02:
+
+| layer | kiểu | out_ch | trung vị | max |
+|---|---|--:|--:|--:|
+| `stem.0` | conv | 8 | 1.8× | 4.4× |
+| `b1.depthwise` | depthwise | 8 | 1.7× | 2.2× |
+| `b2.branch_k5` | depthwise | 16 | 1.9× | 2.8× |
+| `b3.branch_k5` | depthwise | 24 | 2.0× | 3.4× |
+| `b4.branch_k5` | depthwise | 32 | 2.4× | 3.8× |
+| `context.0.depthwise` | depthwise | 48 | 2.2× | 3.7× |
+| **`context.1.depthwise`** | depthwise | 64 | **3.4×** | **7.4×** |
+| các pointwise | conv | 16–64 | 1.9–2.2× | 2.6–3.1× |
+
+**Tản tối đa 3.4× — dưới ngưỡng 4×. Bệnh MobileNet KHÔNG xảy ra ở model này.**
+
+Hệ quả trực tiếp, và nó cắt bỏ phần đắt nhất của kế hoạch:
+
+- **Bỏ P4 (Cross-Layer Equalisation).** Xây CLE cho các kênh đã đều thế này là
+  làm thừa. Đây là lý do phép đo này phải chạy trước, và nó vừa tiết kiệm phần
+  công lớn nhất trong toàn bộ thang.
+- **Bỏ P2 (bias correction)** khỏi đường chính — nó tồn tại chủ yếu để cứu các
+  trường hợp lệch nặng.
+- **P1 (per-channel) giữ lại như bảo hiểm rẻ tiền**, không phải như thứ bắt
+  buộc. Ở 3.4×, per-tensor mất khoảng `log2(3.4) ≈ 1.8` bit trên kênh nhỏ nhất —
+  còn ~6 bit ở INT8, đủ dùng. Nhưng cột `max` cho thấy vài fold lên tới **7.4×**,
+  và per-channel đã cài xong nên chi phí giữ nó bằng không.
+
+Một chi tiết đáng chú ý: layer tản nhiều nhất là **`context.1.depthwise`** —
+đúng layer k5 dilation 16 đọc phần lớn padding. Các kênh ở đó nhận tín hiệu
+gradient kém nhất quán nhất, nên trôi xa nhau nhất. Điều này khớp với mọi thứ
+khác đã biết về layer đó.
+
 ---
 
 ## 3. Các phương pháp PTQ, xếp theo mức phù hợp với model này
@@ -137,11 +171,15 @@ trường hợp khó nhất — cái gì sống được ở INT8 thì sống đ
 | bậc | thêm gì | công phải làm |
 |---|---|---|
 | **P0** | per-tensor absmax (hiện tại) | không, đã có |
-| **P1** | + **per-channel weights** | nhỏ, sửa `scales.py` |
-| **P2** | + **bias correction** | nhỏ |
-| **P3** | + **hiệu chuẩn kích hoạt MSE** | vừa |
-| **P4** | + **CLE** | vừa, và chỉ làm nếu §2 cho tỉ lệ > 4× |
-| **P5** | AdaRound *hoặc* chuyển sang QAT | lớn |
+| **P1** | + **per-channel weights** | **đã cài** (`991bc82`) |
+| ~~P2~~ | ~~bias correction~~ | **bỏ** — §2 đo được kênh đều |
+| **P3** | + **hiệu chuẩn kích hoạt MSE** | vừa — **đây là bậc còn lại đáng làm** |
+| ~~P4~~ | ~~CLE~~ | **bỏ** — §2 đo được 3.4× < 4× |
+| **P5** | AdaRound *hoặc* chuyển sang QAT | lớn, chỉ nếu P3 không đủ |
+
+Sau phép đo ở §2, thang rút xuống còn **P0 → P1 → P3**. Trọng số đã đều, nên
+rủi ro còn lại nằm ở **kích hoạt**, không phải trọng số — và EEG có ngoại lai
+thật (nhiễu điện cực, cử động), đúng thứ mà absmax xử lý tệ nhất.
 
 **Chỉ khi đã chốt được bậc PTQ** mới chạy lưới định dạng ở
 `PLAN_quantisation.md` §2 — bốn ô `{8, 16 bit} × {scale thực, luỹ thừa 2}`.
