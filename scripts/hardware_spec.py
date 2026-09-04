@@ -143,6 +143,23 @@ def main() -> int:
     print(f"  {'  largest single line buffer, anywhere':<56}"
           f"{biggest['buffer_elems']:>8,} B")
     print(f"  {'  (loose bound if those coincided -- they do not)':<56}{loose:>8,} B")
+    # The same structure at every width. INT8 is the target, but the FP32
+    # figure is what the model costs before any quantisation at all, and it is
+    # the honest starting point for "how much does compression buy".
+    print()
+    print("footprint by numeric format (bytes; the network is identical, only the width changes):")
+    print(f"  {'format':<14}{'weights':>12}{'streaming act':>16}{'seq act':>12}"
+          f"{'TOTAL stream':>15}{'TOTAL seq':>13}")
+    for label, width in (("FP32", 4), ("INT16 / DFP16", 2), ("INT8 / DFP8", 1)):
+        w, sa, qa = total_params * width, streaming * width, sequential * width
+        print(f"  {label:<14}{w:>10,} B{sa:>14,} B{qa:>10,} B"
+              f"{w + sa:>13,} B{w + qa:>11,} B")
+    print("  (as KiB)")
+    for label, width in (("FP32", 4), ("INT16 / DFP16", 2), ("INT8 / DFP8", 1)):
+        w, sa, qa = total_params * width, streaming * width, sequential * width
+        print(f"  {label:<14}{w/1024:>10.1f}  {sa/1024:>13.1f}  {qa/1024:>9.1f}  "
+              f"{(w+sa)/1024:>12.1f}  {(w+qa)/1024:>10.1f}")
+
     print()
     print("feature map after each layer (INT8 bytes):")
     for r in rows:
