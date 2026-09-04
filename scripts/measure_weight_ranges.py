@@ -64,7 +64,7 @@ def main(cfg: DictConfig) -> None:
     for seed in seeds:
         run_dir = fold_run_dir(
             cfg.profile.artifacts_dir, cfg.model.name, cfg.split.name, cfg.window.name, seed,
-            run_tag=run_tag,
+            tag=run_tag,
         )
         for ckpt in sorted(Path(run_dir).glob("*.pt")):
             model = build_model(cfg)

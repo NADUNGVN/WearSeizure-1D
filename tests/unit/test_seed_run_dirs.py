@@ -132,16 +132,28 @@ def test_every_fold_run_dir_call_in_the_scripts_passes_a_tag():
     its own numbers. Nothing errored; the control simply changed underneath a
     comparison table.
     """
-    import re
+    import ast
+    import inspect
+
+    from wearseizure.utils import paths
+
+    # Parsed, not grepped. The first version searched the call text for the
+    # string "run_tag", which a call can satisfy while being wrong:
+    # fold_run_dir(..., run_tag=run_tag) contains the string but raises at
+    # runtime, because the parameter is named `tag`. A guard that a broken call
+    # can satisfy is worse than no guard, because it is trusted.
+    tag_index = list(inspect.signature(paths.fold_run_dir).parameters).index("tag")
 
     scripts = Path(__file__).resolve().parents[2] / "scripts"
     offenders = []
     for path in scripts.glob("*.py"):
-        text = path.read_text(encoding="utf-8")
-        for call in re.findall(r"fold_run_dir\((?:[^()]|\([^()]*\))*\)", text, re.DOTALL):
-            if "run_tag" not in call:
-                offenders.append(f"{path.name}: {' '.join(call.split())[:90]}")
-    assert not offenders, "fold_run_dir called without a run tag:\n  " + "\n  ".join(offenders)
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and getattr(node.func, "id", "") == "fold_run_dir"):
+                continue
+            if not (len(node.args) > tag_index or any(k.arg == "tag" for k in node.keywords)):
+                offenders.append(f"{path.name}:{node.lineno}")
+    assert not offenders, "fold_run_dir called without its tag argument at: " + ", ".join(offenders)
 
 
 def test_pretrain_cache_sharing_is_opt_in_and_lives_under_pretrain():
