@@ -57,6 +57,8 @@ def spec_for(model_name: str, window_s: float = 4.0, fs_hz: int = 256):
                 "in_len": inp[0].shape[-1], "out_len": out_len,
                 "taps": taps,
                 "buffer_elems": taps * mod.in_channels,
+                "in_fmap": mod.in_channels * inp[0].shape[-1],
+                "out_fmap": mod.out_channels * out_len,
                 "macs": macs,
                 "weights": sum(p.numel() for p in mod.parameters()),
             })
@@ -105,6 +107,37 @@ def main() -> int:
                   f"{r['buffer_elems']:>8,}{r['macs']:>10,}{r['weights']:>8,}")
 
     biggest = max(rows, key=lambda r: r["buffer_elems"])
+
+    # Two accelerator styles need two DIFFERENT memory numbers, and quoting only
+    # one of them under-specifies the design.
+    #
+    #   fully streaming / pipelined -- every layer runs concurrently on the
+    #     sample stream, so every line buffer is live at once and NO feature map
+    #     is ever materialised. Memory = sum of line buffers.
+    #
+    #   layer sequential -- one layer at a time, so only that layer's line
+    #     buffer is live, but the whole input AND output feature map must be
+    #     stored. Memory = largest single line buffer + the largest adjacent
+    #     feature-map pair.
+    #
+    # For this network the second is roughly twice the first, and neither is
+    # obvious from the per-layer table alone.
+    streaming = total_buf
+    pair_peak = max(r["in_fmap"] + r["out_fmap"] for r in rows)
+    sequential = biggest["buffer_elems"] + pair_peak
+    print()
+    print("activation memory, by accelerator style (INT8 bytes):")
+    print(f"  {'fully streaming (all line buffers live, no feature maps)':<56}"
+          f"{streaming:>8,} B  ({streaming/1024:.1f} KiB)")
+    print(f"  {'layer sequential (one buffer + widest feature-map pair)':<56}"
+          f"{sequential:>8,} B  ({sequential/1024:.1f} KiB)")
+    print(f"  {'  of which the feature-map pair':<56}{pair_peak:>8,} B")
+    print(f"  {'  of which the largest single line buffer':<56}"
+          f"{biggest['buffer_elems']:>8,} B")
+    print()
+    print("feature map after each layer (INT8 bytes):")
+    for r in rows:
+        print(f"  {r['layer']:<24}{r['out_ch']:>4} x {r['out_len']:<6}{r['out_fmap']:>8,} B")
     print()
     try:
         from thop import profile

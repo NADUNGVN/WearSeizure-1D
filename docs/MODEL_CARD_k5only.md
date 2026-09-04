@@ -110,29 +110,143 @@ thành scale/bias mỗi kênh — datapath **không cần khối BN riêng**.
 
 ---
 
-## 4. Tổng kết tài nguyên
+## 4. Tham số cho thiết kế phần cứng
+
+Toàn bộ mục này sinh bằng `python scripts/hardware_spec.py wearseizure1d_k5only`,
+đọc trực tiếp từ model bằng forward hook. Không con số nào chép tay.
+
+### 4.1 Trọng số
 
 | | |
 |---|---:|
-| Tham số = bộ nhớ trọng số INT8 | **11 786 B ≈ 11.5 KiB** |
-| MACs `thop` (số dùng cho bài báo) | 585 920 |
-| **MACs conv+fc (số accelerator phải phát)** | **489 600** |
-| Line buffer INT8 | **6 823 B ≈ 6.7 KiB** |
-| **Tổng SRAM on-chip** | **≈ 18.2 KiB** |
+| tham số | **11 786** |
+| bộ nhớ trọng số INT8 | **11 786 B = 11.5 KiB** |
+| bias | không có — mọi conv đặt `bias=False` |
+| BatchNorm | **gấp vào conv khi suy luận** → scale + bias mỗi kênh, không cần khối riêng |
 
-Hai quy ước MAC lệch nhau vì `thop` tính cả BatchNorm và phép elementwise. Nêu
-cả hai trong luận văn để không ai đọc nhầm.
+Trọng số nằm **hoàn toàn on-chip** (mục tiêu H2), không cần truy cập DRAM.
 
-### Ba điều về bộ nhớ mà thiết kế phần cứng phải biết
+### 4.2 Bộ nhớ kích hoạt — hai kiểu kiến trúc, hai con số
 
-1. **Line buffer = `(k−1)·dilation + 1` mẫu × in_channels.** **Dilation**, không
-   phải kernel size, quyết định chi phí. Cùng k5: dilation 1 cần 5 tap, dilation
-   16 cần **65**.
-2. **`context.1.depthwise` chiếm 61 % toàn bộ line buffer** (4 160 / 6 823). Nó
-   là k5 dilation 16 trải **65 mẫu trên chuỗi dài 32** — phần lớn tap đọc
-   padding. Layer kém hiệu quả nhất thiết kế.
-3. Đã thử cắt nó (`ctx16`) và **mất 2.33pp sensitivity**. Không phải tiết kiệm
-   miễn phí. Xem `EXPERIMENT_LOG_G1a.md` §2h.
+Đây là chỗ dễ báo cáo thiếu nhất. **Không có một con số "activation memory" duy
+nhất**; nó phụ thuộc kiểu accelerator:
+
+| kiểu | cần giữ gì | bộ nhớ |
+|---|---|---:|
+| **Fully streaming** (pipeline, mọi layer chạy đồng thời trên dòng mẫu) | mọi line buffer sống cùng lúc, **không bao giờ vật chất hoá feature map** | **6 823 B = 6.7 KiB** |
+| **Layer sequential** (một layer một lượt) | một line buffer + **cả feature map vào và ra** | **10 304 B = 10.1 KiB** |
+
+Phân rã của kiểu layer-sequential: cặp feature map rộng nhất **6 144 B** + line
+buffer lớn nhất **4 160 B**.
+
+**Tổng SRAM on-chip:**
+
+| kiểu | trọng số | kích hoạt | **tổng** |
+|---|---:|---:|---:|
+| fully streaming | 11.5 KiB | 6.7 KiB | **18.2 KiB** |
+| layer sequential | 11.5 KiB | 10.1 KiB | **21.6 KiB** |
+
+Cả hai đều **dưới 1 %** BRAM của XC7Z020 (140 × 36 Kb ≈ 630 KiB), nên mục tiêu
+H4 (< 10 % tài nguyên) không bị bộ nhớ chặn.
+
+### 4.3 Line buffer từng layer
+
+Công thức: `(kernel_size − 1) × dilation + 1` mẫu, nhân `in_channels`.
+**Dilation, không phải kernel size, quyết định chi phí.**
+
+| layer | k | dilation | taps | in_ch | buffer (B) | padding mỗi bên |
+|---|--:|--:|--:|--:|--:|--:|
+| `stem.0` | 7 | 1 | 7 | 1 | 7 | 3 |
+| `b1.depthwise` | 5 | 1 | 5 | 8 | 40 | 2 |
+| `b2.branch_k5` | 5 | 1 | 5 | 16 | 80 | 2 |
+| `b3.branch_k5` | 5 | 2 | 9 | 24 | 216 | 4 |
+| `b4.branch_k5` | 5 | 4 | 17 | 32 | 544 | 8 |
+| `context.0.depthwise` | 5 | 8 | 33 | 48 | 1 584 | 16 |
+| **`context.1.depthwise`** | 5 | **16** | **65** | 64 | **4 160** | **32** |
+| các conv 1×1 | 1 | 1 | 1 | — | 8–64 | 0 |
+
+`context.1.depthwise` một mình chiếm **61 %** tổng line buffer. Nó là k5 dilation
+16 chạy trên chuỗi dài **32 mẫu** với padding **32 mỗi bên** — tức 64 mẫu padding
+bao quanh 32 mẫu thật, phần lớn tap đọc số 0.
+
+> **Đã thử cắt và không miễn phí.** Biến thể `ctx16` (context 64→16) tiết kiệm
+> 37 % MACs nhưng **mất 2.33 pp sensitivity macro**. Xem `EXPERIMENT_LOG_G1a.md`
+> §2h. Đừng "tối ưu" lại chỗ này mà không đọc.
+
+### 4.4 Feature map sau mỗi layer
+
+| sau layer | hình dạng | INT8 bytes |
+|---|---|--:|
+| đầu vào | 1 × 1024 | 1 024 |
+| `stem` | 8 × 512 | 4 096 |
+| `b1` | 16 × 256 | 4 096 |
+| `b2` | 24 × 128 | 3 072 |
+| `b3` | 32 × 64 | 2 048 |
+| `b4` | 48 × 32 | 1 536 |
+| `context.0` | 64 × 32 | 2 048 |
+| `context.1` | 64 × 32 | 2 048 |
+| GAP | 64 | 64 |
+
+Cặp liền kề lớn nhất là `stem → b1`: 4 096 + 4 096 = **8 192 B** ở mức layer, và
+6 144 B ở mức conv riêng lẻ (con số dùng ở §4.2, vì mỗi conv trong một block là
+một bước tính riêng).
+
+### 4.5 Tính toán và định cỡ PE array
+
+| | |
+|---|---:|
+| MACs `thop` (số dùng trong bài báo) | 585 920 |
+| **MACs conv+fc — số accelerator thật sự phải phát** | **489 600** |
+| tần suất suy luận | **1 lần / giây** (cửa sổ 4 s, trượt 1 s) |
+| ngân sách độ trễ (H3) | ≤ **2 ms** |
+
+Hai quy ước MAC lệch nhau vì `thop` tính cả BatchNorm và phép elementwise; BN
+gấp vào conv khi suy luận nên accelerator không phát chúng. **Nêu cả hai trong
+luận văn** để không ai đọc nhầm.
+
+Suy ra yêu cầu thông lượng: 489 600 MAC / 2 ms = **245 MMAC/s**.
+
+| clock | MAC/chu kỳ cần | thời gian mỗi suy luận | duty cycle |
+|---:|---:|---:|---:|
+| 100 MHz | **2.45** → chọn **4** | 1.22 ms | **0.12 %** |
+| 100 MHz | 8 | 0.61 ms | 0.06 % |
+| 50 MHz | **4.9** → chọn **8** | 1.22 ms | 0.12 % |
+
+Một PE array **4–8 MAC** là đủ. Đây không phải bài toán bị chặn bởi compute.
+
+### 4.6 Hệ quả năng lượng — dễ kết luận ngược
+
+Duty cycle **~0.1 %** nghĩa là accelerator ngủ hơn 99.9 % thời gian. **Năng lượng
+mỗi giờ bị chi phối bởi công suất tĩnh, không phải động.**
+
+Hệ quả: **tối ưu MACs không phải đòn bẩy năng lượng chính.** Clock gating,
+power gating và dòng rò khi nhàn rỗi mới là thứ quyết định thời lượng pin. Một
+luận văn accelerator rất dễ dành toàn bộ công sức vào việc giảm MACs và không
+thu được gì về năng lượng.
+
+### 4.7 Giao diện
+
+| | |
+|---|---|
+| đầu vào | 1 kênh, 256 Hz, một mẫu mỗi 3.906 ms |
+| cửa sổ | 1024 mẫu (4 s) |
+| bước trượt | 256 mẫu (1 s) → một quyết định mỗi giây |
+| tiền xử lý | bandpass **nhân quả** 1–30 Hz + chuẩn hoá affine |
+| đầu ra | 2 logits → hậu xử lý EMA + ngưỡng trễ |
+
+Tiền xử lý phải **nhân quả** (`lfilter` một chiều, reset trạng thái mỗi bản ghi),
+không phải `filtfilt`. Thiết bị đeo không nhìn được về tương lai. Nếu bộ lọc được
+làm cứng thì nó cũng nằm trong ngân sách tài nguyên và phải tính vào.
+
+### 4.8 Chưa đo: mất mát INT8
+
+Mọi con số bộ nhớ ở trên đã tính theo INT8, nên **thiết kế datapath và bộ nhớ
+tiến hành được ngay**. Nhưng **mất mát độ chính xác do lượng tử hoá chưa từng
+được đo** (mục tiêu A4, ngưỡng ≤ 0.5 pp). Ở mức 0.9489 so với mục tiêu 0.95, một
+mất mát 0.5 pp đưa xuống 0.944.
+
+Việc này **không chặn** thiết kế, nhưng **chặn con số độ chính xác cuối cùng** mà
+luận văn công bố.
 
 ---
 
@@ -182,9 +296,3 @@ trở thành ràng buộc thì đổi sang L4.
 buffer — chỉ khác giá trị trong bộ nhớ trọng số.
 
 ---
-
-## 7. Việc chưa đo, phải nêu trong luận văn
-
-**Mất mát do lượng tử hoá INT8 chưa từng được đo.** Mọi con số tài nguyên ở §4
-đã tính theo INT8, nên thiết kế datapath và bộ nhớ tiến hành được. Nhưng con số
-độ chính xác cuối cùng mà luận văn công bố **phải chờ** phép đo đó.
