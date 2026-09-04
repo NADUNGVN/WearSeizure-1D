@@ -33,7 +33,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 HEADERS = [
     "Method", "Dataset", "Model", "Protocol / test exposure",
     "ACC (%)", "SEN (%)", "Parameters", "Precision",
-    "Weight memory", "Total on-chip (W+A)", "Other efficiency",
+    "Weight memory", "Other efficiency",
 ]
 
 # (higher_is_better) per ranked column key
@@ -53,10 +53,7 @@ ROWS = [
                      "<font size=5.4>format not yet fixed; being chosen by measured loss</font>",
         "footprint": "<b>11.5 KB</b> at INT8 or DFP8<br/><b>23.0 KB</b> at INT16 or DFP16",
         "footprint_kb": 11.5,
-        "onchip": "<b>18.2 KB</b> at INT8/DFP8<br/><b>36.3 KB</b> at INT16/DFP16<br/>"
-                  "72.7 KB at FP32<br/>"
-                  "<font size=5.4>weights + line buffers, peak measured per layer</font>",
-        "other": "585,920 MACs (thop) / 489,600 conv+fc; 6.7 KB line buffers; FAR 0.29/h; delay 17.8 s",
+        "other": "585,920 MACs (thop) / 489,600 conv+fc; FAR 0.29/h; delay 17.8 s<br/><b>weights + activations: 18.2 KB at INT8/DFP8, 36.3 KB at INT16/DFP16</b> = <b>3.6% of XC7Z020 BRAM</b>",
         "macs": 585920,
     },
     {
@@ -104,10 +101,7 @@ ROWS = [
         "footprint": "<b>454 KB</b> at FP32<br/><font size=5.4>rebuilt from the paper; "
                      "116 226 params vs 116 700 reported, +0.4%</font>",
         "footprint_kb": 454.0,
-        "onchip": "<b>510 KB</b> at FP32 = <b>91% of XC7Z020 BRAM</b><br/>"
-                  "128 KB at INT8 (23%)<br/>"
-                  "<font size=5.4>peak 14 464 values at stage 2, both branches live</font>",
-        "other": "FAR 0.22/h; detection delay 3.3 s; specificity 98.19%",
+        "other": "FAR 0.22/h; detection delay 3.3 s; specificity 98.19%<br/><b>weights + activations: 510 KB at FP32 = 91% of XC7Z020 BRAM</b> <font size=5.4>(rebuilt from the paper, peak 14 464 values)</font>",
         "macs": None,
     },
     {
@@ -125,7 +119,6 @@ ROWS = [
         "protocol": "80/10/10 split; normal class down-sampled 200:1",
         "acc": 97.35, "sen": 94.32, "sen_note": "", "params": 7010, "precision": "fixed-point",
         "footprint": "NR; <i>est.</i> 28 KB at FP32, 7 KB at 8-bit", "footprint_kb": 7.0, "footprint_estimated": True,
-        "onchip": "NR",
         "other": "6.32 MOPs; 170 us/inference @ 200 MHz; FPGA Xilinx Zynq ZC706", "macs": 6320000,
     },
     {
@@ -134,7 +127,6 @@ ROWS = [
         "protocol": "80/20 + 5-fold CV; GAN-synthesised preictal segments",
         "acc": 99.01, "sen": 99.24, "sen_note": "", "params": 10778, "precision": "analog RRAM",
         "footprint": "NR; <i>est.</i> 43 KB at FP32", "footprint_kb": 43.0, "footprint_estimated": True,
-        "onchip": "weights held in RRAM crossbar, not SRAM",
         "other": "1.13 us parallelised; 7.21 W; ASIC 22 nm FDSOI + RRAM crossbar", "macs": None,
     },
     {
@@ -279,11 +271,10 @@ def main() -> int:
             Paragraph(emphasise(params, marks["params"].get(i)), body),
             Paragraph(r["precision"], body),
             Paragraph(foot, body),
-            Paragraph(r.get("onchip", "NR"), body),
             Paragraph(other, body),
         ])
 
-    widths = [36, 26, 54, 54, 15, 23, 21, 19, 42, 44, 56]
+    widths = [36, 27, 56, 56, 15, 23, 21, 19, 44, 62]
     total = sum(widths)
     page_w = landscape(A3)[0] - 16 * mm
     table = Table(data, colWidths=[w / total * page_w for w in widths], repeatRows=1)
