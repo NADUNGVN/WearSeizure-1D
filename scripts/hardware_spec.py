@@ -160,6 +160,24 @@ def main() -> int:
         print(f"  {label:<14}{w/1024:>10.1f}  {sa/1024:>13.1f}  {qa/1024:>9.1f}  "
               f"{(w+sa)/1024:>12.1f}  {(w+qa)/1024:>10.1f}")
 
+    # Quantisation metadata. The data footprint of dynamic fixed point is
+    # IDENTICAL to plain integer at the same width -- the scale is per tensor (or
+    # per channel), never per value. What differs is how the scale is stored: an
+    # arbitrary scale needs a float, a power-of-two scale needs only its integer
+    # exponent. That is the one place DFP is smaller, and per channel it is not
+    # negligible.
+    n_tensors = len(rows) + len(fc)          # one weight scale per conv and per FC
+    n_act = n_tensors + 1                    # one activation scale per output, plus the input
+    n_channels = sum(r["out_ch"] for r in rows) + sum(m.out_features for m in fc)
+    print()
+    print("quantisation metadata (the only place DFP differs from plain integer):")
+    print(f"  {'granularity':<16}{'scales':>9}{'float32 scale':>16}{'pow2 exponent':>16}{'saved':>10}")
+    for label, n in (("per tensor", n_tensors + n_act), ("per channel", n_channels + n_act)):
+        print(f"  {label:<16}{n:>9,}{n * 4:>14,} B{n:>14,} B{n * 3:>8,} B")
+    print(f"  per-channel saving is {n_channels + n_act:,} x 3 B = "
+          f"{(n_channels + n_act) * 3 / 1024:.1f} KiB, "
+          f"{100 * (n_channels + n_act) * 3 / total_params:.0f}% of the INT8 weight memory")
+
     print()
     print("feature map after each layer (INT8 bytes):")
     for r in rows:

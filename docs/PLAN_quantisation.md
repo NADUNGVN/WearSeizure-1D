@@ -109,6 +109,27 @@ khi DSP khan hiếm. Thiết kế này cần **4–8 MAC**, board có **220 DSP*
 > Nhiều người mặc định INT8 rẻ hơn INT16 về phần cứng. Trên thiết bị này, với
 > số MAC nhỏ thế này, **không**.
 
+## 6b. Footprint của dynamic fixed point
+
+**Footprint dữ liệu của DFP giống hệt số nguyên cùng độ rộng** — DFP16 = INT16 =
+36.3 KiB, DFP8 = INT8 = 18.2 KiB. Scale là siêu dữ liệu **mỗi tensor** (hoặc mỗi
+kênh), không phải mỗi giá trị, nên nó không nhân lên theo số trọng số.
+
+Chỗ **duy nhất** DFP nhỏ hơn là cách lưu scale: scale số thực cần một `float32`,
+scale luỹ thừa 2 chỉ cần **số mũ nguyên**, 1 byte.
+
+| độ mịn | số scale | scale float32 | số mũ luỹ thừa 2 | tiết kiệm |
+|---|---:|---:|---:|---:|
+| mỗi tensor | 29 | 116 B | 29 B | 87 B |
+| **mỗi kênh** | 465 | 1 860 B | 465 B | **1 395 B** |
+
+Ở mức mỗi tensor thì không đáng kể. Ở mức **mỗi kênh** — độ mịn mà lượng tử hoá
+hiện đại thường dùng vì nó chính xác hơn hẳn — DFP tiết kiệm **1.4 KiB, tức 12 %
+bộ nhớ trọng số INT8**. Không lớn, nhưng không phải không có.
+
+Kết luận cho việc chọn: **đừng chọn DFP vì footprint.** Chênh lệch là 87 B tới
+1.4 KiB trên tổng 18.2 KiB, và bộ nhớ vốn không phải ràng buộc. Chọn nó vì §7.
+
 ## 7. Vậy lợi ích thật của dynamic fixed point là gì
 
 Không phải bộ nhớ, không phải DSP. Là **bộ nhân bị bỏ khỏi đường requantise**.
