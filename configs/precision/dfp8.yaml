@@ -1,0 +1,17 @@
+# Dynamic fixed point, 8-bit: per-tensor power-of-two scale.
+#
+# The cheap end of the sweep. Same shift-only requantisation as dfp16 but at
+# half the width, so it is strictly less accurate than int8_ptq at the same
+# bit width -- the power-of-two scale rounds up and gives away up to 2x of
+# range. Included so the sweep separates the two changes that "use dynamic fixed
+# point instead of INT8" actually bundles together: the bit width, and the
+# power-of-two constraint on the scale.
+name: dfp8
+mode: dfp
+weight_bits: 8
+act_bits: 8
+accumulator_bits: 32
+power_of_two_scale: true
+max_loss_vs_fp32_pp:
+  minimum: 1.0
+  target: 0.5

@@ -1,0 +1,32 @@
+# Dynamic fixed point, 16-bit: per-tensor power-of-two scale.
+#
+# Why this rather than INT8, for a model this small:
+#
+#   Memory is not the constraint. 11,786 parameters is 11.5 KiB at 8 bits and
+#   23 KiB at 16; total on-chip SRAM goes from 18.2 KiB to about 30 KiB, still
+#   under 5% of the XC7Z020's BRAM. The usual reason to force 8 bits does not
+#   apply here.
+#
+#   Neither are multipliers. A DSP48E1 is a 25x18 multiplier, so a 16x16 product
+#   fits in ONE DSP -- the same one an 8x8 product would use. Going to 16 bits
+#   costs no extra DSPs on this device unless two INT8 MACs were being packed
+#   into one, which only pays when DSPs are scarce. This design needs 4 to 8 and
+#   the device has 220.
+#
+#   And small networks quantise worse: fewer parameters means less redundancy to
+#   absorb the noise. EpiSepNet-5K, a 5,010-parameter model on the same dataset,
+#   went to INT16 rather than INT8 and reported 99.97% agreement with FP32.
+#
+# The power-of-two scale is the "fixed point" part: requantising between layers
+# becomes a shift instead of a multiply-and-shift, which removes a multiplier
+# from every layer boundary. It costs up to 2x of range at equal width -- paid
+# for here by the extra bits.
+name: dfp16
+mode: dfp
+weight_bits: 16
+act_bits: 16
+accumulator_bits: 48
+power_of_two_scale: true
+max_loss_vs_fp32_pp:
+  minimum: 1.0
+  target: 0.5
