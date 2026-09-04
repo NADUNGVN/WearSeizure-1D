@@ -32,18 +32,28 @@ Frozen model and hardware footprint: **[`docs/MODEL_CARD_k5only.md`](docs/MODEL_
 Protocols differ between rows, so these are not like-for-like — section 3 is what makes them
 comparable. Sensitivity is **event-level** where the paper reports one, segment-level otherwise.
 
-| Work | Ch | Acc | Sens | Params | MACs |
-|---|--:|--:|--:|--:|--:|
-| Chung 2024, *Front. Neurol.* | **1** | 98.18 % | **99.62 %** (event) / 96.76 % (segment) | 116 700 | — |
-| Cao 2025, *BMC Med. Inform. Decis. Mak.* | multi | 98.43 % | 97.84 % | ~5 100 | — |
-| Hasan 2024, IEEE RAAICON (CNN+GAN) | multi | 98.93 % | 98.60 % | ~4 080 000 | — |
-| Li 2022, *IEEE TBioCAS* (memristive) | multi | 99.01 % | 99.24 % | 10 778 | — |
-| Alharthi 2022, *Sensors* | 18 | 96.87 % | 96.85 % | ~83 300 | — |
-| Zhu 2021, IEEE ASICON | 23 | 97.35 % | 94.32 % | 7 010 | 6 320 000 |
-| Sagga 2020, IEEE STA | 23 | 97.60 % | — | — | — |
-| Kashefi Amiri 2025, *Sci. Rep.* | multi | 96.94 % | 92.21 % | 765 000 | 1 670 000 |
-| Ali 2024, *R. Soc. Open Sci.* (cross-subject) | 18 | — | 75.34 % | — | — |
-| **WearSeizure-1D** | **1** | 98.88 % | **94.89 %** (event) / 60.33 % (segment) | **11 786** | **585 920** |
+`W` is weight memory — the number most papers report. `W+A` adds activations, which almost none do.
+Footprints marked *est.* are derived as `params x bytes-per-value`, not reported by the paper.
+
+| Work | Ch | Acc | Sens | Params | Precision | W | W+A | MACs |
+|---|--:|--:|--:|--:|---|--:|--:|--:|
+| Chung 2024, *Front. Neurol.* | **1** | 98.18 % | **99.62 %** (event) / 96.76 % (seg) | 116 700 | FP32 | *est.* 467 KB | — | — |
+| Cao 2025, *BMC MIDM* | multi | 98.43 % | 97.84 % | ~5 100 | FP32 | *est.* 20 KB | — | — |
+| Hasan 2024, IEEE RAAICON | multi | 98.93 % | 98.60 % | ~4 080 000 | FP32 | *est.* 16.3 MB | — | — |
+| Li 2022, *IEEE TBioCAS* | multi | 99.01 % | 99.24 % | 10 778 | RRAM | *est.* 43 KB | in crossbar | — |
+| Alharthi 2022, *Sensors* | 18 | 96.87 % | 96.85 % | ~83 300 | FP32 | *est.* 333 KB | — | — |
+| Zhu 2021, IEEE ASICON | 23 | 97.35 % | 94.32 % | 7 010 | fixed-pt | *est.* 7 KB | — | 6 320 000 |
+| Kashefi Amiri 2025, *Sci. Rep.* | multi | 96.94 % | 92.21 % | 765 000 | FP32 | *est.* 3.06 MB | — | 1 670 000 |
+| EpiSepNet-5K | 17 | 90.07 % | 90.76 % | 5 010 | FP32 | 20.0 KB | — | — |
+| EpiSepNet-5K | 17 | 90.04 % | 90.76 % | 4 900 | INT16 | **9.8 KB** | — | — |
+| Werner et al. (TC-ResNet4) | 16 | 95.28 % | 92.34 % | 9 840 | 4-bit | **4.92 KB** | — | 337 968 |
+| Ferrara et al. | 2 | 99.0 % | 67.0 % | ~9 500 | — | 51 KB | — | — |
+| SlimSeiz | 8 | 94.8 % | 95.5 % | 21 200 | — | *est.* 84.8 KB | — | — |
+| Wang et al. (MSCA) | multi | 98.70 % | 98.30 % | 88 000 | — | *est.* 352 KB | — | 2 680 000 |
+| Ahlawat | multi | — | — | — | INT8 | 440 KB | — | — |
+| Ali 2024, *R. Soc. Open Sci.* | 18 | — | 75.34 % | — | — | — | — | — |
+| **WearSeizure-1D** | **1** | 98.88 % | **94.89 %** (event) / 60.33 % (seg) | **11 786** | INT8 | **11.5 KB** | **18.2 KB** | **585 920** |
+| **WearSeizure-1D** | **1** | — | — | **11 786** | DFP16 | 23.0 KB | 36.3 KB | **585 920** |
 
 Two claims this table does **not** support, and which should never be made:
 
@@ -54,6 +64,12 @@ Two claims this table does **not** support, and which should never be made:
 
 What the table *does* support: **one channel, 9.9× fewer parameters than the single-channel
 work it is compared against, and the only row evaluated on 185 h without leakage.**
+
+On footprint specifically: 11.5 KB of weights is third behind Werner's 4.92 KB (at 4 bits) and
+EpiSepNet's 9.8 KB (at INT16, on a 4 900-parameter model). This work is the only row that reports
+**weights + activations**, because it is the only one that had to size an on-chip memory rather
+than a stored file. The two are not interchangeable, and comparing 18.2 KB against another paper's
+20 KB would be comparing different quantities.
 
 ---
 

@@ -33,7 +33,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 HEADERS = [
     "Method", "Data", "Model", "Protocol / test exposure",
     "ACC (%)", "SEN (%)", "Parameters", "Precision",
-    "Stored model footprint", "Other efficiency",
+    "Weight memory", "Total on-chip (W+A)", "Other efficiency",
 ]
 
 # (higher_is_better) per ranked column key
@@ -49,8 +49,9 @@ ROWS = [
         "acc": 98.88, "sen": 94.89,
         "sen_note": "event level; 60.33 segment level",
         "params": 11786, "precision": "INT8 (target)",
-        "footprint": "11.5 KB INT8 weights; 18.2 KB total on-chip SRAM (weights + line buffers)",
+        "footprint": "<b>11.5 KB</b> at INT8; 23.0 KB at INT16",
         "footprint_kb": 11.5,
+        "onchip": "<b>18.2 KB</b> INT8 / 36.3 KB INT16 / 72.7 KB FP32<br/><font size=5.4>weights + line buffers, measured per layer</font>",
         "other": "585,920 MACs (thop) / 489,600 conv+fc; 6.7 KB line buffers; FAR 0.29/h; delay 17.8 s",
         "macs": 585920,
     },
@@ -68,7 +69,7 @@ ROWS = [
                     "near-duplicate in training",
         "acc": 99.68, "sen": 92.29, "sen_note": "segment level",
         "params": 11786, "precision": "FP32 (measured)",
-        "footprint": "as above", "footprint_kb": None,
+        "footprint": "as above", "footprint_kb": None, "onchip": "as above",
         "other": "Same network; only the split rule differs from the row above",
         "macs": None,
     },
@@ -79,7 +80,7 @@ ROWS = [
         "protocol": "Segment-level 70/20/10 split per patient; ~91 h",
         "acc": 98.18, "sen": 99.62, "sen_note": "event level; 96.76 segment level",
         "params": 116700, "precision": "FP32",
-        "footprint": "NR; approximately 467 KB if all weights are FP32", "footprint_kb": 467.0,
+        "footprint": "NR; <i>est.</i> 467 KB at FP32", "footprint_kb": 467.0, "footprint_estimated": True, "onchip": "NR",
         "other": "FAR 0.22/h; detection delay 3.3 s; specificity 98.19%",
         "macs": None,
     },
@@ -88,16 +89,16 @@ ROWS = [
         "data": "CHB-MIT", "model": "Separable 1D-CNN; 17-channel raw EEG; 2-s windows",
         "protocol": "NR",
         "acc": 90.07, "sen": 90.76, "sen_note": "", "params": 5010, "precision": "FP32",
-        "footprint": "28.1 KB checkpoint; approximately 20.0 KB raw FP32 weights",
-        "footprint_kb": 20.0, "other": "Reference model", "macs": None,
+        "footprint": "28.1 KB checkpoint; ~20.0 KB raw FP32",
+        "footprint_kb": 20.0, "onchip": "NR", "other": "Reference model", "macs": None,
     },
     {
         "method": "EpiSepNet-5K (INT16)",
         "data": "CHB-MIT", "model": "BatchNorm-folded separable 1D-CNN",
         "protocol": "NR",
         "acc": 90.04, "sen": 90.76, "sen_note": "", "params": 4900, "precision": "INT16",
-        "footprint": "10.0 KB package; approximately 9.8 KB raw INT16 values",
-        "footprint_kb": 9.8,
+        "footprint": "10.0 KB package; ~9.8 KB raw INT16",
+        "footprint_kb": 9.8, "onchip": "NR",
         "other": "99.9743% agreement with FP32; 2.81x smaller package", "macs": None,
     },
     {
@@ -105,8 +106,8 @@ ROWS = [
         "data": "CHB-MIT", "model": "16-channel TC-ResNet4 with fixed-point inference",
         "protocol": "NR",
         "acc": 95.28, "sen": 92.34, "sen_note": "", "params": 9840, "precision": "4-bit",
-        "footprint": "Approximately 4.92 KB weight-only storage; packaged size NR",
-        "footprint_kb": 4.92,
+        "footprint": "~4.92 KB weight-only (4-bit)",
+        "footprint_kb": 4.92, "onchip": "NR",
         "other": "337,968 MACs; 495 nW average power", "macs": 337968,
     },
     {
@@ -114,7 +115,8 @@ ROWS = [
         "data": "CHB-MIT (23 channels)", "model": "7-layer 1D-CNN, 5x1 conv, shift-register PE array",
         "protocol": "80/10/10 split; normal class down-sampled 200:1",
         "acc": 97.35, "sen": 94.32, "sen_note": "", "params": 7010, "precision": "fixed-point",
-        "footprint": "NR", "footprint_kb": None,
+        "footprint": "NR; <i>est.</i> 28 KB at FP32, 7 KB at 8-bit", "footprint_kb": 7.0, "footprint_estimated": True,
+        "onchip": "NR",
         "other": "6.32 MOPs; 170 us/inference @ 200 MHz; FPGA Xilinx Zynq ZC706", "macs": 6320000,
     },
     {
@@ -122,7 +124,8 @@ ROWS = [
         "data": "CHB-MIT + Bonn + SWEC-ETHZ", "model": "1D-CNN with parallel convolutional layers",
         "protocol": "80/20 + 5-fold CV; GAN-synthesised preictal segments",
         "acc": 99.01, "sen": 99.24, "sen_note": "", "params": 10778, "precision": "analog RRAM",
-        "footprint": "NR", "footprint_kb": None,
+        "footprint": "NR; <i>est.</i> 43 KB at FP32", "footprint_kb": 43.0, "footprint_estimated": True,
+        "onchip": "weights held in RRAM crossbar, not SRAM",
         "other": "1.13 us parallelised; 7.21 W; ASIC 22 nm FDSOI + RRAM crossbar", "macs": None,
     },
     {
@@ -130,7 +133,7 @@ ROWS = [
         "data": "CHB-MIT", "model": "Patient-specific two-channel lightweight CNN",
         "protocol": "NR",
         "acc": 99.0, "sen": 67.0, "sen_note": "", "params": 9500, "precision": "NR",
-        "footprint": "51 KB model", "footprint_kb": 51.0,
+        "footprint": "51 KB model", "footprint_kb": 51.0, "onchip": "NR",
         "other": "Balanced accuracy 83.0%; 0.10 FP/h", "macs": None,
     },
     {
@@ -138,7 +141,7 @@ ROWS = [
         "data": "CHB-MIT", "model": "Graph-based residual state-update model",
         "protocol": "NR",
         "acc": None, "sen": None, "sen_note": "", "params": 9300, "precision": "NR",
-        "footprint": "0.037 MB, approximately 37 KB", "footprint_kb": 37.0,
+        "footprint": "0.037 MB, ~37 KB", "footprint_kb": 37.0, "onchip": "NR",
         "other": "AUROC up to 93.5%; 1.314 ms inference", "macs": None,
     },
     {
@@ -146,7 +149,7 @@ ROWS = [
         "data": "CHB-MIT", "model": "Eight-channel convolution and Mamba network (prediction task)",
         "protocol": "NR",
         "acc": 94.8, "sen": 95.5, "sen_note": "", "params": 21200, "precision": "NR",
-        "footprint": "NR; approximately 84.8 KB if all weights are FP32", "footprint_kb": 84.8,
+        "footprint": "NR; <i>est.</i> 84.8 KB at FP32", "footprint_kb": 84.8, "footprint_estimated": True, "onchip": "NR",
         "other": "Specificity 94.0%", "macs": None,
     },
     {
@@ -154,7 +157,7 @@ ROWS = [
         "data": "CHB-MIT", "model": "Multi-teacher knowledge-distillation model",
         "protocol": "NR",
         "acc": 98.92, "sen": 98.54, "sen_note": "", "params": 82000, "precision": "FP32",
-        "footprint": "0.33 MB", "footprint_kb": 330.0,
+        "footprint": "0.33 MB (330 KB)", "footprint_kb": 330.0, "onchip": "NR",
         "other": "Specificity 99.11%; AUC 98.96%", "macs": None,
     },
     {
@@ -162,7 +165,7 @@ ROWS = [
         "data": "CHB-MIT", "model": "Inverted residual CNN with multi-scale channel attention",
         "protocol": "NR",
         "acc": 98.70, "sen": 98.30, "sen_note": "", "params": 88000, "precision": "NR",
-        "footprint": "NR; approximately 352 KB if all weights are FP32", "footprint_kb": 352.0,
+        "footprint": "NR; <i>est.</i> 352 KB at FP32", "footprint_kb": 352.0, "footprint_estimated": True, "onchip": "NR",
         "other": "2.68M MACs; specificity 99.10%", "macs": 2680000,
     },
     {
@@ -170,7 +173,7 @@ ROWS = [
         "data": "CHB-MIT", "model": "Quantized common-channel 1D-CNN with operator fusion",
         "protocol": "NR",
         "acc": None, "sen": None, "sen_note": "", "params": None, "precision": "INT8",
-        "footprint": "0.44 MB model", "footprint_kb": 440.0,
+        "footprint": "0.44 MB (440 KB) at INT8; 1.63 MB at FP32", "footprint_kb": 440.0, "onchip": "NR",
         "other": "Up to 2.8x speedup; up to 64% estimated energy reduction", "macs": None,
     },
     {
@@ -178,7 +181,8 @@ ROWS = [
         "data": "<i>Rat skull EEG (not CHB-MIT)</i>", "model": "1D-CNN with RISC-V DLA; on-device personalisation",
         "protocol": "64/16/20 split",
         "acc": 99.0, "sen": 99.0, "sen_note": "", "params": 356, "precision": "fixed-point",
-        "footprint": "NR", "footprint_kb": None,
+        "footprint": "NR; <i>est.</i> 0.4 KB at 8-bit", "footprint_kb": 0.4, "footprint_estimated": True,
+        "onchip": "NR",
         "other": "2.1 ms; 107 mW @ 1 MHz; FPGA Xilinx PYNQ-Z2", "macs": None,
         "off_dataset": True,
     },
@@ -221,7 +225,10 @@ def rank_marks(rows: list[dict], key: str, higher_is_better: bool) -> dict[int, 
     is not winning it.
     """
     scored = [(i, r[key]) for i, r in enumerate(rows)
-              if r.get(key) is not None and not r.get("off_dataset")]
+              if r.get(key) is not None and not r.get("off_dataset")
+              # A footprint derived from a parameter count is not a reported
+              # number. Bolding one would claim a precision nobody measured.
+              and not (key == "footprint_kb" and r.get("footprint_estimated"))]
     scored.sort(key=lambda t: t[1], reverse=higher_is_better)
     marks = {}
     if scored:
@@ -277,10 +284,11 @@ def main() -> int:
             Paragraph(emphasise(params, marks["params"].get(i)), body),
             Paragraph(r["precision"], body),
             Paragraph(foot, body),
+            Paragraph(r.get("onchip", "NR"), body),
             Paragraph(other, body),
         ])
 
-    widths = [38, 30, 62, 62, 16, 24, 22, 20, 62, 66]
+    widths = [36, 26, 54, 54, 15, 23, 21, 19, 42, 44, 56]
     total = sum(widths)
     page_w = landscape(A3)[0] - 16 * mm
     table = Table(data, colWidths=[w / total * page_w for w in widths], repeatRows=1)
@@ -308,7 +316,10 @@ def main() -> int:
             (
                 "<b>Bold</b> = best in column. <u>Underlined</u> = second best. "
                 "Higher is better for ACC and SEN; lower is better for parameters, stored footprint and MACs. "
-                "Rows on a dataset other than CHB-MIT are shown for reference and excluded from the ranking."
+                "Rows on a dataset other than CHB-MIT are shown for reference and excluded from the ranking, "
+                "as are footprints marked <i>est.</i>, which are derived from a parameter count rather than "
+                "reported. Weight memory and total on-chip memory are different quantities: most papers "
+                "report only the first."
             ),
             note),
         Spacer(1, 4),
