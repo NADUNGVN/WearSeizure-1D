@@ -253,15 +253,30 @@ Tiền xử lý phải **nhân quả** (`lfilter` một chiều, reset trạng t
 không phải `filtfilt`. Thiết bị đeo không nhìn được về tương lai. Nếu bộ lọc được
 làm cứng thì nó cũng nằm trong ngân sách tài nguyên và phải tính vào.
 
-### 4.8 Chưa đo: mất mát INT8
+### 4.8 ĐÃ ĐO: định dạng số đã chốt là **DFP16**
 
-Mọi con số bộ nhớ ở trên đã tính theo INT8, nên **thiết kế datapath và bộ nhớ
-tiến hành được ngay**. Nhưng **mất mát độ chính xác do lượng tử hoá chưa từng
-được đo** (mục tiêu A4, ngưỡng ≤ 0.5 pp). Ở mức 0.9489 so với mục tiêu 0.95, một
-mất mát 0.5 pp đưa xuống 0.944.
+Đã quét 5 định dạng trên 66 fold × 3 seed (`EXPERIMENT_LOG_G1a.md` §2m).
 
-Việc này **không chặn** thiết kế, nhưng **chặn con số độ chính xác cuối cùng** mà
-luận văn công bố.
+**Chốt: `dfp16` — dynamic fixed point 16 bit, scale per-channel.**
+
+| | mất so với FP32 | CI 95% | mất tối đa dữ liệu cho phép |
+|---|---:|---|---:|
+| **`dfp16`** | **−0.10 pp** | **[−0.25, 0.00]** | **0.25 pp — trong cổng 0.5** |
+| `dfp8` | −0.51 pp | [−1.92, 0.00] | 1.92 pp — vượt cổng |
+| `int8` | −0.64 pp | [−2.06, +1.31] | 2.06 pp — vượt cổng |
+| `int16` | −0.89 pp | [−1.90, 0.00] | 1.90 pp — vượt cổng |
+
+**Điểm ước lượng của cả bốn đều nằm trong nhiễu** — `int16` còn "tệ hơn" `int8`,
+điều không thể là hiệu ứng thật. Cái quyết định là **độ rộng khoảng**: `dfp16` là
+định dạng duy nhất mà **trường hợp xấu nhất dữ liệu còn cho phép** vẫn nằm trong
+cổng 0.5 pp.
+
+Giá phải trả cho khoảng chặt hơn: **18 KiB SRAM** (18.2 → 36.3 KiB, tức 3.2% →
+6.5% BRAM) và **không thêm DSP nào** — DSP48E1 là bộ nhân 25×18 nên phép 16×16
+vừa đúng một DSP như phép 8×8.
+
+Bộ nhớ ở §4.2 vì thế phải đọc ở cột **INT16/DFP16**: **36.3 KiB** streaming,
+39.1 KiB layer-sequential.
 
 ---
 

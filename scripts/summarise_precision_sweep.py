@@ -180,21 +180,47 @@ def main() -> int:
     print("  A power-of-two row costing much less than a width row means the format is")
     print("  nearly free and the bits are what matter -- or the reverse. Read both.")
 
-    # If several formats are indistinguishable from FP32, accuracy cannot choose
-    # between them and the point estimates are noise. Ranking them by a
-    # hundredth of a percentage point would be picking noise, so say so instead.
+    # Point estimates being indistinguishable does NOT make the formats
+    # equivalent: the intervals differ in WIDTH, and the width is the decision.
+    # A format whose interval reaches -1.9pp could be four times worse than the
+    # gate allows; one bounded at -0.25pp cannot. Picking the cheapest of the
+    # "tied" formats ignores that, which is how the first version of this rule
+    # would have shipped a format whose worst supported case fails the gate.
     tied = [r["cell"] for r in rows if r.get("indistinguishable")]
     print()
     if len(tied) > 1:
-        print(f"NO ACCURACY-BASED CHOICE: {', '.join(tied)} are all indistinguishable from FP32")
-        print(f"  (every CI spans zero). The whole spread is "
-              f"{max(r['d_sens_pp'] for r in rows) - min(r['d_sens_pp'] for r in rows):.2f} pp = "
-              f"{(max(r['d_sens_pp'] for r in rows) - min(r['d_sens_pp'] for r in rows)) / 100 * N_EVENTS:.2f} "
-              f"of one seizure.")
-        cheapest = next(c for c in ORDER if c in tied)
-        print(f"  Choose on HARDWARE COST instead: {cheapest}, the cheapest of the tied formats.")
-        print("  Recording the tie matters as much as the choice -- a later reader must not")
-        print("  think the format was selected because it scored better.")
+        spread = max(r["d_sens_pp"] for r in rows) - min(r["d_sens_pp"] for r in rows)
+        print(f"POINT ESTIMATES ARE NOISE: {', '.join(tied)} all have CIs spanning zero,")
+        print(f"  and the whole spread is {spread:.2f} pp = {spread / 100 * N_EVENTS:.2f} of one seizure.")
+        print("  Three of the four grid edges below carry physically impossible signs")
+        print("  (a power-of-two scale beating an arbitrary one, or fewer bits beating more),")
+        print("  which is the same conclusion arrived at from a different direction.")
+        print()
+        print("  So rank by the WORST CASE THE DATA STILL ALLOWS, not by the point estimate:")
+        safe = []
+        for r in rows:
+            if r["cell"] == "fp32":
+                continue
+            worst = -r["ci"][1]                 # lower CI bound, as a loss
+            gate = ("within target" if worst <= TARGET_PP
+                    else "within minimum" if worst <= MINIMUM_PP else "EXCEEDS both gates")
+            print(f"    {r['cell']:<8}loses up to {worst:5.2f} pp   {gate}")
+            if worst <= TARGET_PP:
+                safe.append(r["cell"])
+        print()
+        if safe:
+            pick = next(c for c in ORDER if c in safe)
+            print(f"  SELECTED: {pick} -- the cheapest format whose worst supported case stays")
+            print(f"  within {TARGET_PP}pp. The others are not worse on the evidence, but the")
+            print("  evidence does not rule out their being much worse, and here the memory")
+            print("  that buys the tighter bound is a few KiB on a device with hundreds.")
+        else:
+            print(f"  No format's worst supported case stays within {TARGET_PP}pp. Either accept")
+            print(f"  the {MINIMUM_PP}pp gate and record that decision, or improve the PTQ method")
+            print("  (docs/PLAN_ptq_method.md step P3) before choosing.")
+        print()
+        print("  Record the tie as well as the choice: a later reader must not think the")
+        print("  format was selected because it scored better. It was not.")
         return 0
 
     chosen = next((r["cell"] for r in rows

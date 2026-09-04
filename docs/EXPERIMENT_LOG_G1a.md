@@ -842,6 +842,95 @@ README claims over Chung rests on their number, not on ours.
 Checking this needs nothing but the paper: count the parameters of the published
 configuration and compare against `configs/model/baseline_frontiers2d.yaml`.
 
+## 2m. Rows 54-57 -- the numeric format, decided by interval width not point estimate (04-09)
+
+Post-training quantisation of the L8 checkpoints, 66 folds x 3 seeds = 198
+per cell. Calibrated on each fold's VALIDATION partition; post-processing
+thresholds FROZEN from the FP32 run rather than re-fitted, so the measurement is
+quantisation loss and not "which format tolerates re-tuning best".
+
+| format | event sens | delta vs FP32 | 95% CI (pp) | in seizures | FAR/h |
+|---|---:|---:|---|---:|---:|
+| `fp32` | 0.9495 | — | — | — | 0.2500 |
+| `dfp16` | 0.9485 | **-0.10** | **[-0.25, 0.00]** | -0.08 | 0.2518 |
+| `dfp8` | 0.9444 | -0.51 | [-1.92, 0.00] | -0.39 | 0.2618 |
+| `int8` | 0.9431 | -0.64 | [-2.06, +1.31] | -0.49 | 0.2622 |
+| `int16` | 0.9406 | -0.89 | [-1.90, 0.00] | -0.69 | 0.2586 |
+
+### The point estimates are noise, and the table says so twice
+
+`int16` scores WORSE than `int8` and worse than `dfp8`. More bits cannot
+systematically hurt, so the ordering is not real. The whole spread across four
+formats is 0.89 pp = **0.69 of one seizure**.
+
+The grid edges say the same thing from another direction. Three of the four
+carry physically impossible signs:
+
+| edge | delta | sign |
+|---|---:|---|
+| power-of-two scale at 16 bit | +0.79 pp | power-of-two BEATS arbitrary |
+| power-of-two scale at 8 bit | +0.13 pp | power-of-two BEATS arbitrary |
+| narrowing 16 to 8 bit, arbitrary scale | +0.25 pp | FEWER bits beat more |
+| narrowing 16 to 8 bit, power-of-two | -0.40 pp | the only expected sign |
+
+Why the metric is this noisy: event sensitivity is a step function of the
+scores -- threshold, hysteresis, run length, then event matching. A fraction of
+a percent in the scores flips a whole event, and one event out of 77 is 1.3 pp.
+Every difference in this table is between zero and one seizure.
+
+### What decided it: the width of the interval, not its centre
+
+The first selection rule took the cheapest format within 0.5 pp of FP32 and
+chose `dfp16` over `dfp8` on a margin of **0.01 pp = 0.0077 of one seizure**.
+That rule was more precise than the measurement under it. Corrected, it now
+ranks by the worst case the data still allows:
+
+| format | loses up to | gate |
+|---|---:|---|
+| **`dfp16`** | **0.25 pp** | **within the 0.5 pp target** |
+| `int16` | 1.90 pp | exceeds both gates |
+| `dfp8` | 1.92 pp | exceeds both gates |
+| `int8` | 2.06 pp | exceeds both gates |
+
+**`dfp16` is the only format whose worst supported case stays inside the gate.**
+The others are not worse on the evidence -- but the evidence does not rule out
+their being four times worse than the gate allows, and that is not a thing to
+ship in a clinical device.
+
+Its interval is also **eight times tighter** than the others, and that has a
+physical explanation rather than being luck: at 16 bits the quantisation error
+is small enough that most folds do not change at all, so most paired deltas are
+exactly zero and the bootstrap distribution concentrates. At 8 bits more folds
+flip an event and the distribution spreads.
+
+### The cost of the tighter bound is nothing
+
+| | SRAM | % of XC7Z020 BRAM |
+|---|---:|---:|
+| `dfp8` | 18.2 KiB | 3.2 % |
+| **`dfp16`** | **36.3 KiB** | **6.5 %** |
+
+Both clear the 10 % H4 gate comfortably. The tighter accuracy bound costs
+**18 KiB on a device with 560**, and no DSPs at all -- a DSP48E1 is a 25x18
+multiplier, so a 16x16 product fits the same single DSP an 8x8 would use.
+
+So "choose the cheapest of the tied formats" was the wrong rule here, because
+the cost it optimises does not matter while the bound it gives up does.
+
+### Decision
+
+**`dfp16`** -- dynamic fixed point, 16-bit, per-channel weight scales.
+
+It matches what the supervisor suggested, and the two independent precedents
+already in the comparison table point the same way: Lee et al. 2024 chose 16-bit
+fixed point on the same PYNQ-Z2 board for the same task and reported a 0.2 pp
+loss, and EpiSepNet-5K -- this group's own earlier model -- chose INT16 over
+INT8 as well.
+
+The choice is on the interval and the precedent, **not** on the point estimate.
+A later reader must not conclude that `dfp16` scored better; on this cohort
+nothing scored better than anything else.
+
 ## 3b. The teacher montage each L3 fold actually gets (01-09)
 
 Phase 5 aborted at fold 17 of 66: `chb04` has EDFs with either 23 or 24 channels
