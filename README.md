@@ -44,8 +44,8 @@ Footprints marked *est.* are derived as `params x bytes-per-value`, not reported
 | Alharthi 2022, *Sensors* | 18 | 96.87 % | 96.85 % | ~83 300 | FP32 | *est.* 333 KB | — | — |
 | Zhu 2021, IEEE ASICON | 23 | 97.35 % | 94.32 % | 7 010 | fixed-pt | *est.* 7 KB | — | 6 320 000 |
 | Kashefi Amiri 2025, *Sci. Rep.* | multi | 96.94 % | 92.21 % | 765 000 | FP32 | *est.* 3.06 MB | — | 1 670 000 |
-| EpiSepNet-5K | 17 | 90.07 % | 90.76 % | 5 010 | FP32 | 20.0 KB | — | — |
-| EpiSepNet-5K | 17 | 90.04 % | 90.76 % | 4 900 | INT16 | **9.8 KB** | — | — |
+| **EpiSepNet-5K** *(earlier model, same group)* | 17 | 90.07 % | 90.76 % | 5 010 | FP32 | 20.0 KB | — | — |
+| **EpiSepNet-5K** *(earlier model, same group)* | 17 | 90.04 % | 90.76 % | 4 900 | **INT16** | **9.8 KB** | — | — |
 | Werner et al. (TC-ResNet4) | 16 | 95.28 % | 92.34 % | 9 840 | 4-bit | **4.92 KB** | — | 337 968 |
 | Ferrara et al. | 2 | 99.0 % | 67.0 % | ~9 500 | — | 51 KB | — | — |
 | SlimSeiz | 8 | 94.8 % | 95.5 % | 21 200 | — | *est.* 84.8 KB | — | — |
@@ -64,6 +64,10 @@ Two claims this table does **not** support, and which should never be made:
 
 What the table *does* support: **one channel, 9.9× fewer parameters than the single-channel
 work it is compared against, and the only row evaluated on 185 h without leakage.**
+
+**EpiSepNet-5K is this group's own earlier model**, kept in the table as the design WearSeizure-1D
+succeeds — 17 channels and 2-second windows, against one channel and four seconds here. It also
+sets the group's own precedent on numeric format: it went to **INT16, not INT8**.
 
 On footprint specifically: 11.5 KB of weights is third behind Werner's 4.92 KB (at 4 bits) and
 EpiSepNet's 9.8 KB (at INT16, on a 4 900-parameter model). This work is the only row that reports

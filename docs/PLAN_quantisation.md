@@ -106,8 +106,14 @@ lớn việc trích đặc trưng trước khi vào CNN. Dữ liệu là **EEG c
 CHB-MIT. Nên đây là bằng chứng về **lựa chọn định dạng số trên đúng thiết bị**,
 không phải điểm so sánh về độ khó bài toán.
 
-**2. EpiSepNet-5K**, 5 010 tham số trên cùng CHB-MIT, cũng chọn **INT16 chứ không
-phải INT8**, báo 99.97 % khớp với FP32. Cùng vùng kích thước với model này.
+**2. EpiSepNet-5K — đây là model trước của chính nhóm này.** 5 010 tham số trên
+cùng CHB-MIT, và nó cũng đã chọn **INT16 chứ không phải INT8**, báo **99.9743 %
+khớp với FP32** và gói nhỏ hơn **2.81×**.
+
+Điều này quan trọng hơn một dẫn chứng từ nhóm khác: đó là **tiền lệ của chính
+nhóm**. Nếu lần này chọn INT8 thì phải giải thích được vì sao đi ngược lại lựa
+chọn trước của mình trên một model **còn nhỏ hơn nữa** — 11 786 tham số nhưng
+chỉ **một kênh** thay vì 17, tức mỗi tham số phải gánh nhiều hơn.
 
 ## 6. Vì sao bit rộng hơn gần như miễn phí ở đây
 

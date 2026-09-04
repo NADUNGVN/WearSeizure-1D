@@ -78,6 +78,23 @@ ROWS = [
         "macs": None,
     },
     {
+        "method": "<b>EpiSepNet-5K</b> (INT16)<br/><font size=5.4>earlier model, same group</font>",
+        "data": "CHB-MIT", "model": "BatchNorm-folded separable 1D-CNN",
+        "protocol": "NR",
+        "acc": 90.04, "sen": 90.76, "sen_note": "", "params": 4900, "precision": "INT16",
+        "footprint": "10.0 KB package; ~9.8 KB raw INT16",
+        "footprint_kb": 9.8, "onchip": "NR",
+        "other": "99.9743% agreement with FP32; 2.81x smaller package", "macs": None,
+    },
+    {
+        "method": "<b>EpiSepNet-5K</b> (FP32)<br/><font size=5.4>earlier model, same group</font>",
+        "data": "CHB-MIT", "model": "Separable 1D-CNN; 17-channel raw EEG; 2-s windows",
+        "protocol": "NR",
+        "acc": 90.07, "sen": 90.76, "sen_note": "", "params": 5010, "precision": "FP32",
+        "footprint": "28.1 KB checkpoint; ~20.0 KB raw FP32",
+        "footprint_kb": 20.0, "onchip": "NR", "other": "Reference model", "macs": None,
+    },
+    {
         "method": "Chung et al. 2024 [1]",
         "data": "CHB-MIT (13 cases)",
         "model": "Stacked 2D-CNN, parallel 1x3 and 1x5 kernels; 1 clinician-selected channel",
@@ -87,23 +104,6 @@ ROWS = [
         "footprint": "NR; <i>est.</i> 467 KB at FP32", "footprint_kb": 467.0, "footprint_estimated": True, "onchip": "NR",
         "other": "FAR 0.22/h; detection delay 3.3 s; specificity 98.19%",
         "macs": None,
-    },
-    {
-        "method": "EpiSepNet-5K (FP32)",
-        "data": "CHB-MIT", "model": "Separable 1D-CNN; 17-channel raw EEG; 2-s windows",
-        "protocol": "NR",
-        "acc": 90.07, "sen": 90.76, "sen_note": "", "params": 5010, "precision": "FP32",
-        "footprint": "28.1 KB checkpoint; ~20.0 KB raw FP32",
-        "footprint_kb": 20.0, "onchip": "NR", "other": "Reference model", "macs": None,
-    },
-    {
-        "method": "EpiSepNet-5K (INT16)",
-        "data": "CHB-MIT", "model": "BatchNorm-folded separable 1D-CNN",
-        "protocol": "NR",
-        "acc": 90.04, "sen": 90.76, "sen_note": "", "params": 4900, "precision": "INT16",
-        "footprint": "10.0 KB package; ~9.8 KB raw INT16",
-        "footprint_kb": 9.8, "onchip": "NR",
-        "other": "99.9743% agreement with FP32; 2.81x smaller package", "macs": None,
     },
     {
         "method": "Werner et al. (TC-ResNet4) [2]",
@@ -307,7 +307,8 @@ def main() -> int:
                 "<b>Bold</b> = best in column. <u>Underlined</u> = second best. "
                 "Higher is better for ACC and SEN; lower is better for parameters, stored footprint and MACs. "
                 "Every row is CHB-MIT. Footprints marked <i>est.</i> are derived from a parameter count rather "
-                "than reported by the paper, and are excluded from the ranking. Weight memory and total "
+                "than reported by the paper, and are excluded from the ranking. EpiSepNet-5K is this group’s "
+                "own earlier model, kept in the table as the design it succeeds. Weight memory and total "
                 "on-chip memory are different quantities: most papers report only the first. "
                 "<b>DFP</b> is dynamic fixed point, a power-of-two scale: its footprint EQUALS plain integer "
                 "at the same width, because the scale is per tensor rather than per value. What it changes is "
