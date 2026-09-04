@@ -175,8 +175,9 @@ quyết định tách rời, và lưới ở §2 đo chúng tách rời.
 |---|---|---|
 | 1 | Scale luỹ thừa 2 trong `QuantScale` | **xong** (`8d19c85`) |
 | 2 | Config `dfp8`, `dfp16` | **xong** |
-| 3 | Đường PTQ đọc `power_of_two_scale` từ config | chưa |
-| 4 | Script quét: 6 ô × 66 fold × 3 seed, báo Δ so với FP32 | chưa |
+| 3 | Đường PTQ nhận `power_of_two` và `weight_per_channel` | **xong** (`991bc82`) |
+| 4 | Script quét 5 ô × 66 fold × 3 seed, báo Δ so với FP32 | **xong** — `run_precision_sweep.py` |
+| 4b | Bộ tổng hợp, áp tiêu chí chọn | **xong** — `summarise_precision_sweep.py` |
 | 5 | Chạy, ghi vào `EXPERIMENT_LOG_G1a.md` | chưa |
 | 6 | Chốt định dạng, cập nhật `MODEL_CARD` và `HARDWARE_HANDOFF` | chưa |
 
