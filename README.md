@@ -79,7 +79,7 @@ The rows that actually built something. Useful reference points for the accelera
 
 | Work | Platform | Params | Memory | Ops | Latency | Power |
 |---|---|--:|--:|--:|--:|--:|
-| Lee 2024, *IEEE TBioCAS* (RVDLAHA) | Xilinx **PYNQ-Z2** | 356 | *est.* 0.4 KB | 3 909 | 2.1 ms | 107 mW @ 1 MHz |
+| Lee 2024, *IEEE TBioCAS* (RVDLAHA) | Xilinx **PYNQ-Z2** | 356 | **7 BRAMs** | 3 909 | 2.1 ms | 107 mW @ 1 MHz |
 | Zhu 2021, IEEE ASICON | Xilinx Zynq **ZC706** | 7 010 | *est.* 7 KB | 6.32 MOP | 170 µs @ 200 MHz | 24.96 GOP/s/kLUT |
 | Li 2022, *IEEE TBioCAS* | ASIC, 22 nm RRAM crossbar | 10 778 | in RRAM crossbar | — | 1.13 µs | 7.21 W |
 | **WearSeizure-1D** (target) | PYNQ-Z2 / Zynq-7020 | **11 786** | **18.2 KB** (W+A) | **489 600 MAC** | ≤ 2 ms budget | not yet measured |
@@ -92,6 +92,19 @@ not by bytes; see below for why the distinction matters.
 One consequence that is easy to get backwards: a decision every second at ~1 ms of compute is a
 **0.1 % duty cycle**, so energy per hour is dominated by **static** power. Minimising MACs is not
 the energy lever an accelerator project will assume it is.
+
+The closest comparable work is Lee 2024: same task family, **same PYNQ-Z2 board**, same target
+journal. Two things from it are worth carrying:
+
+- It uses **7 BRAM blocks**, about 5 % of the XC7Z020's 140 — which independently confirms the
+  block-count estimates in §2b are the right order.
+- It chose **16-bit fixed point**, not INT8, and reports the cost verbatim: quantising FP32 to
+  16-bit fixed *"not only saves 50 % of memory space but also maintains an accuracy rate of
+  99.3 %"* against 99.5 % in FP32 — a **0.2 pp** loss. It did not try 8 bits.
+
+Its 356 parameters are real (verified in the full text) but come from a network with **one kernel
+per conv layer** and a 2-level DWT front end doing the feature extraction, on **rat EEG**. It is
+evidence about numeric format on this device, not a like-for-like difficulty comparison.
 
 ---
 

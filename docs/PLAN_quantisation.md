@@ -83,9 +83,31 @@ phỏng lượng tử hoá thường lấy lại được phần lớn mất má
 11 786 tham số là rất nhỏ. Mạng nhỏ có **ít dư thừa để hấp thụ nhiễu lượng tử
 hoá**, nên PTQ thường tổn hại nhiều hơn so với mạng lớn.
 
-Bằng chứng trực tiếp trong chính bảng so sánh của dự án: **EpiSepNet-5K**, 5 010
-tham số trên cùng CHB-MIT, chọn **INT16 chứ không phải INT8**, báo 99.97 % khớp
-với FP32. Cùng vùng kích thước với model này.
+Hai bằng chứng trực tiếp, cả hai đều nằm trong bảng so sánh của dự án:
+
+**1. Lee et al. 2024, IEEE TBioCAS — đây là bằng chứng mạnh nhất.** Cùng bài
+toán phát hiện động kinh, **cùng board Xilinx PYNQ-Z2** mà dự án này nhắm tới,
+đăng cùng tạp chí đích. Họ chọn **fixed point 16 bit**, và trích nguyên văn:
+
+> *"quantizing the 32-bit floating-point numbers computed in software into
+> 16-bit fixed-point numbers on hardware not only saves 50% of memory space but
+> also maintains an accuracy rate of 99.3%"*
+
+FP32 của họ là 99.5 %, nên **16-bit fixed mất đúng 0.2 pp** — nằm gọn trong
+ngưỡng 0.5 pp của dự án. Họ **không** thử 8 bit.
+
+Thiết kế của họ dùng **7 khối BRAM** trên PYNQ-Z2, tức khoảng 5 % của 140 khối.
+Con số này xác nhận ước lượng ~5 khối cho bản INT8 và ~10 khối cho bản 16 bit ở
+§6 là đúng thang.
+
+Lưu ý khi trích dẫn: model của họ chỉ **356 tham số** vì mỗi lớp conv chỉ có
+**một kernel** `(k=6, stride=2, 1 kernel)`, và một khối **DWT 2 mức** làm phần
+lớn việc trích đặc trưng trước khi vào CNN. Dữ liệu là **EEG chuột**, không phải
+CHB-MIT. Nên đây là bằng chứng về **lựa chọn định dạng số trên đúng thiết bị**,
+không phải điểm so sánh về độ khó bài toán.
+
+**2. EpiSepNet-5K**, 5 010 tham số trên cùng CHB-MIT, cũng chọn **INT16 chứ không
+phải INT8**, báo 99.97 % khớp với FP32. Cùng vùng kích thước với model này.
 
 ## 6. Vì sao bit rộng hơn gần như miễn phí ở đây
 
