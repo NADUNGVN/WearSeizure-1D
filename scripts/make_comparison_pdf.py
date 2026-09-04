@@ -48,10 +48,14 @@ ROWS = [
                     "<b>185.0 h</b> continuous test; 66 folds x 3 seeds",
         "acc": 98.88, "sen": 94.89,
         "sen_note": "event level; 60.33 segment level",
-        "params": 11786, "precision": "INT8 (target)",
-        "footprint": "<b>11.5 KB</b> at INT8; 23.0 KB at INT16",
+        "params": 11786,
+        "precision": "INT8/DFP8 or<br/><b>INT16/DFP16</b><br/>"
+                     "<font size=5.4>format not yet fixed; being chosen by measured loss</font>",
+        "footprint": "<b>11.5 KB</b> at INT8 or DFP8<br/><b>23.0 KB</b> at INT16 or DFP16",
         "footprint_kb": 11.5,
-        "onchip": "<b>18.2 KB</b> INT8 / 36.3 KB INT16 / 72.7 KB FP32<br/><font size=5.4>weights + line buffers, measured per layer</font>",
+        "onchip": "<b>18.2 KB</b> at INT8/DFP8<br/><b>36.3 KB</b> at INT16/DFP16<br/>"
+                  "72.7 KB at FP32<br/>"
+                  "<font size=5.4>weights + line buffers, peak measured per layer</font>",
         "other": "585,920 MACs (thop) / 489,600 conv+fc; 6.7 KB line buffers; FAR 0.29/h; delay 17.8 s",
         "macs": 585920,
     },
@@ -304,7 +308,10 @@ def main() -> int:
                 "Higher is better for ACC and SEN; lower is better for parameters, stored footprint and MACs. "
                 "Every row is CHB-MIT. Footprints marked <i>est.</i> are derived from a parameter count rather "
                 "than reported by the paper, and are excluded from the ranking. Weight memory and total "
-                "on-chip memory are different quantities: most papers report only the first."
+                "on-chip memory are different quantities: most papers report only the first. "
+                "<b>DFP</b> is dynamic fixed point, a power-of-two scale: its footprint EQUALS plain integer "
+                "at the same width, because the scale is per tensor rather than per value. What it changes is "
+                "the datapath — requantising between layers becomes a shift instead of a multiply."
             ),
             note),
         Spacer(1, 4),
