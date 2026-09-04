@@ -124,16 +124,25 @@ def main() -> int:
     # obvious from the per-layer table alone.
     streaming = total_buf
     pair_peak = max(r["in_fmap"] + r["out_fmap"] for r in rows)
-    sequential = biggest["buffer_elems"] + pair_peak
+    # The TRUE peak is the largest (input + output + that layer's own buffer),
+    # taken layer by layer. Adding the largest buffer to the largest pair
+    # over-counts, because they occur at different layers: here the widest pair
+    # is at b1.depthwise, whose buffer is 40 B, while the largest buffer belongs
+    # to context.1.depthwise, whose feature maps are small.
+    peak_row = max(rows, key=lambda r: r["in_fmap"] + r["out_fmap"] + r["buffer_elems"])
+    sequential = peak_row["in_fmap"] + peak_row["out_fmap"] + peak_row["buffer_elems"]
+    loose = biggest["buffer_elems"] + pair_peak
     print()
     print("activation memory, by accelerator style (INT8 bytes):")
     print(f"  {'fully streaming (all line buffers live, no feature maps)':<56}"
           f"{streaming:>8,} B  ({streaming/1024:.1f} KiB)")
-    print(f"  {'layer sequential (one buffer + widest feature-map pair)':<56}"
+    print(f"  {'layer sequential (peak of in + out + own buffer)':<56}"
           f"{sequential:>8,} B  ({sequential/1024:.1f} KiB)")
-    print(f"  {'  of which the feature-map pair':<56}{pair_peak:>8,} B")
-    print(f"  {'  of which the largest single line buffer':<56}"
+    print(f"  {'  peak occurs at':<56}{peak_row['layer']:>8}")
+    print(f"  {'  widest adjacent feature-map pair, anywhere':<56}{pair_peak:>8,} B")
+    print(f"  {'  largest single line buffer, anywhere':<56}"
           f"{biggest['buffer_elems']:>8,} B")
+    print(f"  {'  (loose bound if those coincided -- they do not)':<56}{loose:>8,} B")
     print()
     print("feature map after each layer (INT8 bytes):")
     for r in rows:

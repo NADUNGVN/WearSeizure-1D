@@ -134,17 +134,32 @@ nhất**; nó phụ thuộc kiểu accelerator:
 | kiểu | cần giữ gì | bộ nhớ |
 |---|---|---:|
 | **Fully streaming** (pipeline, mọi layer chạy đồng thời trên dòng mẫu) | mọi line buffer sống cùng lúc, **không bao giờ vật chất hoá feature map** | **6 823 B = 6.7 KiB** |
-| **Layer sequential** (một layer một lượt) | một line buffer + **cả feature map vào và ra** | **10 304 B = 10.1 KiB** |
+| **Layer sequential** (một layer một lượt) | một line buffer + **cả feature map vào và ra** | **8 256 B = 8.1 KiB** |
 
-Phân rã của kiểu layer-sequential: cặp feature map rộng nhất **6 144 B** + line
-buffer lớn nhất **4 160 B**.
+Con số layer-sequential là **cực đại lấy theo từng layer**, không phải tổng của
+các trường hợp xấu nhất. Cặp feature map rộng nhất là **6 144 B** (ở
+`b1.depthwise`, buffer riêng chỉ 40 B) còn line buffer lớn nhất là **4 160 B**
+(ở `context.1.depthwise`, feature map nhỏ). Hai cái ở **hai layer khác nhau**,
+nên cộng chúng lại sẽ thừa 2 048 B. Cực đại thật là **8 256 B** tại
+`context.1.depthwise`: 2 048 vào + 2 048 ra + 4 160 buffer.
+
+**Mạng không có skip connection.** `WearSeizure1D.forward` và
+`DepthwiseSeparableConv1d.forward` thuần tuần tự, nên không có tensor nào phải
+sống qua ranh giới block. (`MultiScaleDilatedBlock` có `torch.cat` hai nhánh —
+nhưng chỉ ở chế độ `multi_scale`; biến thể `k5_only` đã chốt chỉ một nhánh. Thiết
+kế khả lập trình nếu phải chạy cả bản multi-scale thì cần thêm tối đa 4 096 B cho
+hai nhánh cùng sống.)
+
+Tách depthwise và pointwise thành hai lượt **làm giảm** đỉnh chứ không tăng: ở
+mức block, `stem → b1` cần 4 096 + 4 096 = 8 192 B, còn tách ra thì giải phóng
+được output của stem trước khi cấp phát output của b1, còn 6 144 B.
 
 **Tổng SRAM on-chip:**
 
 | kiểu | trọng số | kích hoạt | **tổng** |
 |---|---:|---:|---:|
 | fully streaming | 11.5 KiB | 6.7 KiB | **18.2 KiB** |
-| layer sequential | 11.5 KiB | 10.1 KiB | **21.6 KiB** |
+| layer sequential | 11.5 KiB | 8.1 KiB | **19.6 KiB** |
 
 Cả hai đều **dưới 1 %** BRAM của XC7Z020 (140 × 36 Kb ≈ 630 KiB), nên mục tiêu
 H4 (< 10 % tài nguyên) không bị bộ nhớ chặn.
