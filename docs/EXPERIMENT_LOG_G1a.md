@@ -786,6 +786,62 @@ but fewer parameters than the control, so this null cannot separate "capacity
 does not help" from "wide never delivered more capacity". Within the
 630,832-MAC gate the two cannot both be had.
 
+## 2l. Two corrections from reading the Chung 2024 numbers properly (04-09)
+
+A literature spreadsheet supplied by the user records Chung 2024's reported
+figures in more detail than this project had them. Two things change.
+
+### 1. 99.62 % is EVENT-level. Their segment-level figure is 96.76 %
+
+| Chung 2024 reports | value |
+|---|---:|
+| accuracy, segment level | 98.18 % |
+| **sensitivity, segment level** | **96.76 %** |
+| **sensitivity, event level** | **99.62 %** |
+| specificity, segment level | 98.19 % |
+
+Section 2j analysed the A7 ladder against 0.9962 as though it were a
+window-level number, and concluded rung A "missed" at 0.9229. That framing was
+wrong. The correct pairing:
+
+| | Chung 2024 | this project |
+|---|---:|---:|
+| segment sensitivity, leaky split | **96.76 %** | **92.29 %** (rung A) |
+| event sensitivity | **99.62 %** (leaky training) | **94.89 %** (leakage-safe) |
+
+The reproduction is much closer than section 2j implied -- **4.5pp** at segment
+level rather than a 7.3pp miss against the wrong quantity. The prediction
+registered in 2i was still wrong, but it was wrong about a target that was
+itself misidentified, and both errors are recorded rather than quietly merged.
+
+### 2. Their protocol is a segment-level split with event-level evaluation
+
+The spreadsheet records the split as "K-fold CV per patient, 70 % train / 20 %
+val / 10 % test (**segment-level**), balanced batch generator". So the training
+split is by segment -- which is A7's rung A -- while the 99.62 % is computed by
+running the trained model over continuous recordings and counting events.
+
+A7 rung A does the first half and stops: it evaluates segments on the randomly
+split test partition. To reproduce the event-level figure the harness would need
+to score whole recordings after training on a random segment split. That is a
+real and separable piece of work, and it is a **second** reason rung A is a
+partial reproduction, alongside the 1-sample stride noted in 2j.
+
+### 3. A discrepancy worth resolving before the paper cites either number
+
+Chung 2024 is recorded at **~116 700 parameters**. This project's reproduction
+of that architecture, `baseline_frontiers2d`, has **4 546** -- a factor of 25.
+
+Either the reproduction is a much smaller network than the one published, or the
+116 700 figure covers a different configuration (multi-channel, or counting
+something this project does not). Until that is settled, `baseline_frontiers2d`
+should be described as "the Chung 2024 **architecture family**" rather than a
+faithful parameter-level reproduction, and the 9.9x parameter advantage the
+README claims over Chung rests on their number, not on ours.
+
+Checking this needs nothing but the paper: count the parameters of the published
+configuration and compare against `configs/model/baseline_frontiers2d.yaml`.
+
 ## 3b. The teacher montage each L3 fold actually gets (01-09)
 
 Phase 5 aborted at fold 17 of 66: `chb04` has EDFs with either 23 or 24 channels

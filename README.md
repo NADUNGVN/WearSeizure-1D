@@ -3,190 +3,143 @@
 Single-channel EEG seizure **detection** under a leakage-safe protocol, sized for a streaming
 INT8 1D-CNN accelerator. Targets IEEE TBioCAS.
 
-**Dataset**: CHB-MIT, 13 single-channel-eligible cases, 77 seizures, 599.5 recording hours.
-**Evaluation**: `patient_specific_loso_edf`, 66 folds, **185.0 h** of continuous test exposure,
-3 seeds. Thresholds frozen on validation; splits taken by recording before any filtering,
-normalisation or windowing.
+CHB-MIT, 13 single-channel-eligible cases, 77 seizures. Evaluated on **185.0 hours** of
+continuous held-out recording across 66 folds and 3 seeds, with thresholds frozen on validation
+and every split taken **by recording** before any filtering, normalisation or windowing.
 
-Software pipeline only (gates G0-G2). RTL is deferred — the interface contract is in
-`docs/RTL_INTERFACE_SPEC.md`, and the frozen model's per-layer spec is in
-`docs/MODEL_CARD_k5only.md`.
+Setup and reproduction: **[`docs/RUNNING.md`](docs/RUNNING.md)**.
+Frozen model and hardware footprint: **[`docs/MODEL_CARD_k5only.md`](docs/MODEL_CARD_k5only.md)**.
 
 ---
 
-## Current result
+## Result
 
-`wearseizure1d_k5only`, cohort pre-training + distillation (L1 + L8), 3 seeds x 66 folds:
+`wearseizure1d_k5only` with cohort pre-training and distillation:
 
 | | |
 |---|---:|
-| event sensitivity (macro / micro) | **0.9489 / 0.9567** |
+| **event sensitivity** (macro / micro) | **0.9489 / 0.9567** |
 | false alarms per hour | 0.2937 |
 | mean detection delay | 17.75 s |
-| worst-patient sensitivity (>=5 seizures) | 0.9333 |
-| parameters / MACs | **11 786 / 585 920** |
+| worst-patient sensitivity | 0.9333 |
+| **parameters / MACs** | **11 786 / 585 920** |
 | on-chip SRAM, INT8 | **18.2 KiB** |
 
-Architecture is frozen; the weights are not. `L1 + L4` trades 1.1pp of sensitivity for a much
-better false-alarm rate (0.1904/h, worst-patient 0.5701 vs 2.1065). Swapping recipes costs no
-RTL — same layers, same MACs, same buffers.
+---
+
+## 1. Against published work on CHB-MIT
+
+Protocols differ between rows, so these are not like-for-like — section 3 is what makes them
+comparable. Sensitivity is **event-level** where the paper reports one, segment-level otherwise.
+
+| Work | Ch | Acc | Sens | Params | MACs |
+|---|--:|--:|--:|--:|--:|
+| Chung 2024, *Front. Neurol.* | **1** | 98.18 % | **99.62 %** (event) / 96.76 % (segment) | 116 700 | — |
+| Cao 2025, *BMC Med. Inform. Decis. Mak.* | multi | 98.43 % | 97.84 % | ~5 100 | — |
+| Hasan 2024, IEEE RAAICON (CNN+GAN) | multi | 98.93 % | 98.60 % | ~4 080 000 | — |
+| Li 2022, *IEEE TBioCAS* (memristive) | multi | 99.01 % | 99.24 % | 10 778 | — |
+| Alharthi 2022, *Sensors* | 18 | 96.87 % | 96.85 % | ~83 300 | — |
+| Zhu 2021, IEEE ASICON | 23 | 97.35 % | 94.32 % | 7 010 | 6 320 000 |
+| Sagga 2020, IEEE STA | 23 | 97.60 % | — | — | — |
+| Kashefi Amiri 2025, *Sci. Rep.* | multi | 96.94 % | 92.21 % | 765 000 | 1 670 000 |
+| Ali 2024, *R. Soc. Open Sci.* (cross-subject) | 18 | — | 75.34 % | — | — |
+| **WearSeizure-1D** | **1** | 98.88 % | **94.89 %** (event) / 60.33 % (segment) | **11 786** | **585 920** |
+
+Two claims this table does **not** support, and which should never be made:
+
+- **Not the smallest model.** 11 786 parameters is more than Cao's ~5 100 and Zhu's 7 010. The
+  computational claim is about **MACs**, not parameter count.
+- **Part of the advantage is the single channel**, not the architecture. That is the
+  contribution, but it has to be said rather than hidden.
+
+What the table *does* support: **one channel, 9.9× fewer parameters than the single-channel
+work it is compared against, and the only row evaluated on 185 h without leakage.**
 
 ---
 
-## Benchmarks
+## 2. Hardware comparison
 
-### A. Published numbers, each under its own protocol
+The rows that actually built something. Useful reference points for the accelerator work.
 
-These are **not** directly comparable to each other or to us — protocols, channel counts and
-test exposure all differ. The table exists to show what the literature reports, and section C
-explains the gap.
+| Work | Platform | Params | Ops | Latency | Power |
+|---|---|--:|--:|--:|--:|
+| Lee 2024, *IEEE TBioCAS* (RVDLAHA) | Xilinx **PYNQ-Z2** | 356 | 3 909 | 2.1 ms | 107 mW @ 1 MHz |
+| Zhu 2021, IEEE ASICON | Xilinx Zynq **ZC706** | 7 010 | 6.32 MOP | 170 µs @ 200 MHz | 24.96 GOP/s/kLUT |
+| Li 2022, *IEEE TBioCAS* | ASIC, 22 nm RRAM crossbar | 10 778 | — | 1.13 µs | 7.21 W |
+| **WearSeizure-1D** (target) | PYNQ-Z2 / Zynq-7020 | **11 786** | **489 600 MAC** | ≤ 2 ms budget | not yet measured |
 
-| Work | Ch | Protocol | Sens | FAR/h | Delay | Params | MACs |
-|---|---|---|--:|--:|--:|--:|--:|
-| Chung 2024, *Front. Neurol.* 15:1389731 | **1** | patient-specific; **1-sample** stride; thresholds tuned on eval data; ~91 h | 99.62 % | 0.22 | 3.3 s | — | — |
-| Ultra-light 3D-CNN, *BSPC* (2025) | multi | patient-specific | 99.24 % | 0.53 | 4.97 s | **6 540** | 2 390 000 |
-| Multi-scale channel attention (2023) | multi | segment-level | 98.3 % | — | — | 88 000 | 2 680 000 |
-| Ali 2024, *R. Soc. Open Sci.* 11:230601 | 18 | **cross-subject**, full corpus | 75.34 % | 4.79 | — | — | — |
-| **WearSeizure-1D (this work)** | **1** | **leakage-safe, 185 h, thresholds frozen on val** | **94.89 %** | 0.29 | 17.75 s | 11 786 | **585 920** |
+Sizing, derived in the model card: 489 600 MACs inside a 2 ms budget is **245 MMAC/s**, which at
+100 MHz is 2.45 MACs/cycle — a **4–8 MAC array**. Total on-chip SRAM is **18.2 KiB** (11.5 KiB
+INT8 weights + 6.7 KiB line buffers), under 1 % of the XC7Z020's BRAM.
 
-Two things this table does *not* license:
-
-- **Not the smallest model.** 11 786 parameters is 1.8x the 3D-CNN's 6 540. The computational
-  claim is about **MACs**, not parameter count.
-- **Part of the MAC advantage is the single channel**, not the architecture. That is the
-  contribution, but it should be said rather than hidden.
-
-### B. Same protocol, same code, same data — the comparison that is valid
-
-Every row: 3 seeds, 66 folds, 185.0 h, cohort pre-training, thresholds frozen on validation.
-
-| Architecture | Sens macro | FAR/h | Delay | Worst-pt sens | Params | MACs |
-|---|--:|--:|--:|--:|--:|--:|
-| `baseline_frontiers2d` (Chung 2024 architecture) | **0.9726** | 0.2922 | 17.22 | 0.9500 | 4 546 | 2 523 328 |
-| `baseline_compact1d_7k` | 0.9440 | 0.3353 | 16.97 | 0.9667 | 7 570 | 1 398 928 |
-| `wearseizure1d_k5only` | 0.9358 | **0.2261** | 18.83 | 0.8714 | 11 786 | **585 920** |
-| **`wearseizure1d_k5only` + L8** | **0.9489** | 0.2937 | 17.75 | 0.9333 | 11 786 | **585 920** |
-
-The Chung architecture reproduced honestly reaches **0.9726**, not 0.9962. On this cohort the
-architectures are **statistically indistinguishable** on sensitivity, FAR and delay (paired
-cluster bootstrap, 13 patients), so the remaining axis is cost — and `k5only` holds the operating
-point at **4.3x fewer MACs**.
-
-### C. Where 99.62 % comes from — the protocol ladder
-
-One body of code, one body of data, 66 folds. Only the partitioning rule changes.
-
-| Rung | Split | Normalised on | Threshold on | Window sens | Accuracy | Test/train overlap |
-|---|---|---|---|--:|--:|--:|
-| **A** as published | **random windows** | everything | test | **0.9229** | 0.9968 | **99.6 %** |
-| **B** | by recording | everything | test | 0.6173 | 0.9887 | 0.0 % |
-| **C** | by recording | train only | val | **0.6033** | 0.9888 | 0.0 % |
-
-(`wearseizure1d_k5only`; `baseline_frontiers2d` and `baseline_compact1d_7k` behave the same way —
-see `docs/EXPERIMENT_LOG_G1a.md` section 2j.)
-
-**Splitting windows at random inflates sensitivity by 31 points.** At a 4 s window and 1 s stride,
-adjacent windows share 75 % of their samples, so 99.6 % of test windows have a near-duplicate in
-training — measured, not asserted.
-
-**And accuracy cannot see any of it.** Across all seven measured cells accuracy spans **1.15pp**
-while sensitivity spans **32pp**. At 0.62 % ictal prevalence a model that never predicts a seizure
-scores **99.38 %**, so the best cell in the table sits 0.30pp above predicting nothing. Accuracy on
-this data has almost no dynamic range, which is why it is never reported here without prevalence
-beside it.
-
-Rung A is a **partial** reproduction: it kept this project's 1 s stride, while the published
-protocol slides by **one sample**. `scripts/run_stride_sweep.sh` tests whether that accounts for
-the rest of the gap to 99.62 %.
+One consequence that is easy to get backwards: a decision every second at ~1 ms of compute is a
+**0.1 % duty cycle**, so energy per hour is dominated by **static** power. Minimising MACs is not
+the energy lever an accelerator project will assume it is.
 
 ---
 
-## Quickstart (local, synthetic)
+## 3. Why the published numbers are higher
 
-This machine needs no CHB-MIT data and no GPU. A synthetic generator produces the same manifest
-schema as the real dataset, so the whole pipeline runs on CPU in minutes.
+The same code and the same data, 66 folds. Only the rule that partitions windows changes.
 
-Use a native Windows Python (python.org / Store / `py`), not an MSYS2/MinGW `python` — PyPI
-wheels for torch/scipy will not install on that ABI.
+| Split | Normalised on | Threshold on | Segment sens | Accuracy | Test/train overlap |
+|---|---|---|--:|--:|--:|
+| **random windows** (as published) | everything | test | **0.9229** | 0.9968 | **99.6 %** |
+| by recording | everything | test | 0.6173 | 0.9887 | 0.0 % |
+| by recording | train only | val | **0.6033** | 0.9888 | 0.0 % |
 
-```powershell
-py -3.11 -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r environment/requirements-local.txt   # torch CPU index has no scipy/numpy
-pip install -e ".[dev,analysis]"
+**Splitting windows at random inflates sensitivity by 31 points.** At a 4 s window and 1 s stride
+adjacent windows share 75 % of their samples, so **99.6 % of test windows have a near-duplicate in
+training** — measured, not asserted. All three architectures behave the same way, so this is a
+property of the protocol, not of any one model.
 
-python scripts/generate_synthetic_dataset.py
-python scripts/make_manifest.py profile=local_synthetic
-python scripts/make_splits.py  profile=local_synthetic
-python scripts/train.py        profile=local_synthetic
-python scripts/evaluate.py     profile=local_synthetic
+**And accuracy cannot see it.** Across every measured cell accuracy spans **1.15 pp** while
+sensitivity spans **32 pp**. At 0.62 % ictal prevalence a model that never predicts a seizure
+already scores **99.38 %** — the best cell above sits 0.30 pp higher. Accuracy has almost no
+dynamic range on this data, which is why it never appears here without prevalence next to it.
 
-pytest tests/unit -v
-pytest tests/integration -v -m integration
-```
+Honest limits of this reproduction: it kept a 1 s stride where the published protocol slides by
+**one sample**, and it evaluates segments where the published event-level figure evaluates whole
+recordings. `scripts/run_stride_sweep.sh` tests the first.
 
-## Running on a server
+---
 
-Set both variables, then always pass **`profile=server data=chbmit`** — the `profile` group picks
-device and paths, but `data` still defaults to `synthetic`, and `profile=server` alone would point
-the synthetic loader at clinical recordings. `utils/profile_guard.py` refuses the combination.
+## 4. What has been ruled out
 
-```bash
-export CHBMIT_RAW_DIR=~/Manh/datasets/CHB-MIT/1.0.0
-export WEARSEIZURE_ARTIFACTS_DIR=~/Manh/WearSeizure-1D-artifacts
+Negative results, kept because they are the expensive kind to rediscover.
 
-python scripts/make_manifest.py profile=server data=chbmit
-python scripts/make_splits.py   profile=server data=chbmit
-python scripts/train.py         profile=server data=chbmit train.pretrain.enabled=true
-python scripts/evaluate.py      profile=server data=chbmit
-```
-
-`scripts/server_bootstrap.sh` has the full first-time setup. `docs/SERVER_INVENTORY.md` covers the
-four-server inventory; SERVER-02/03/04 share `~/Manh` over NFS, so **the checkout is one directory,
-not three** — run `scripts/check_servers.py` before starting work on a second host.
-
-**Discipline**: the server only ever checks out a reviewed commit SHA from `main`, never a branch
-tip. Runs touch clinical data and feed a publication.
-
-Long runs go through a script in `scripts/run_phase*.sh`, never a pasted command block. Every
-hand-typed block in this project's history shipped a defect (missing `ulimit -n`, a dropped `&`,
-an ignored `TAG`); every scripted one did not.
-
-## Useful overrides
-
-| Override | What it does |
+| Idea | Outcome |
 |---|---|
-| `train.seeds=[0,1,2]` | Lever L7. One run per seed into its own `seed<N>/`; `evaluate.py` reports mean ± std. Without it no comparison has an error bar, and the top configurations are ~1.4pp apart — about one seizure in 77. |
-| `train.pretrain.enabled=true` | Lever L1. Cohort pre-training then per-patient fine-tuning. The largest gain on record, +6 to +9pp. |
-| `train.distill.teacher_model=baseline_frontiers2d` | Lever L8. Distil a finished single-channel run into the small student. |
-| `train.model_selection=val_auprc` | Lever L4. Select checkpoints on AUPRC instead of cross-entropy — better FAR, same sensitivity. |
-| `eval.gates_path=configs/eval/gates_v2_proposed.yaml` | Score against the v2 gate table instead of v1. |
+| Wider pre-training corpus (more CHB-MIT cases) | Null at four electrode positions, **significantly worse** at one |
+| Multi-channel teacher → single-channel student | **Significantly worse** false-alarm rate |
+| Selecting checkpoints on AUPRC | Same sensitivity, 16 % lower FAR — an operating point, not a gain |
+| Narrowing the context block (−37 % MACs) | Costs 2.33 pp sensitivity. Not free |
+| Wider stages inside the MAC budget | Identical to the control: the same 72 of 77 events |
 
-Compare two runs with `scripts/paired_bootstrap.py A_DIR B_DIR --all-metrics` — patient-clustered
-paired bootstrap from saved `*.metrics.json`, no GPU and no retraining. Use it instead of comparing
-point estimates.
+The one thing that worked is **cohort pre-training**: +6 to +9 pp, the largest effect the project
+has measured. Distillation from a stronger *single-channel* teacher adds a further +1.3 pp.
 
-## Tooling
+Read together, the two distillation results say something reusable: **distillation helps when the
+teacher's advantage is capacity, and hurts when it is information.** A soft target is only
+imitable if the student can, in principle, compute it.
 
-| Script | Answers |
-|---|---|
-| `check_servers.py` | Which host is running what, and does anything collide? |
-| `estimate_remaining.py` | How much longer, per host, measured from artifact timestamps |
-| `check_phase_complete.sh` | Did a phase finish, or abort? They look identical from outside |
-| `hardware_spec.py` | Per-layer shapes, MACs, line buffers and SRAM footprint |
-| `check_fold_montage.py` | Which EEG channels each fold's teacher would get |
-| `summarise_leaky_repro.py` | The protocol-ladder table above |
+---
 
 ## Layout
 
 ```
 configs/         Hydra groups (profile, data, split, model, window, postprocess, precision, eval)
 docs/            Protocol, gates, experiment log, model card, hardware handoff, RTL interface
-scripts/         CLI entry points and the phase runners
+scripts/         CLI entry points, phase runners, diagnostics
 src/wearseizure  data, signal, models, quant, postprocess, eval, training, rtl_interface
 tests/           Unit (fast, synthetic) and integration smoke tests
 ```
 
-Start with `docs/EXPERIMENT_LOG_G1a.md` — every real-data run, in order, with what it disproved.
-`docs/PROTOCOL.md` defines the leakage-safe protocol; `docs/RESEARCH_REALITY_CHECK.md` records
-which of this project's own earlier claims have since been overturned.
+| Document | What it holds |
+|---|---|
+| [`docs/RUNNING.md`](docs/RUNNING.md) | Install, run, servers, levers, diagnostics |
+| [`docs/EXPERIMENT_LOG_G1a.md`](docs/EXPERIMENT_LOG_G1a.md) | Every real-data run in order, and what it disproved |
+| [`docs/MODEL_CARD_k5only.md`](docs/MODEL_CARD_k5only.md) | Frozen model: layers, buffers, footprint, PE sizing |
+| [`docs/HARDWARE_HANDOFF.md`](docs/HARDWARE_HANDOFF.md) | What the accelerator team needs, and what is still open |
+| [`docs/PROTOCOL.md`](docs/PROTOCOL.md) | The leakage-safe protocol, in full |
+| [`docs/RESEARCH_REALITY_CHECK.md`](docs/RESEARCH_REALITY_CHECK.md) | Which of this project's own earlier claims have been overturned |
