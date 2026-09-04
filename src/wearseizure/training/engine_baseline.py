@@ -118,14 +118,22 @@ def evaluate_fold(
     sensitivity_floor: float | None = None,
     postprocess_alarm_timestamp: str = "window_end",
     compile_mode: str | None = None,
+    datasets: dict | None = None,
 ) -> FoldResult:
     """Threshold-freeze on val + evaluate on test for an already-trained
     `model` -- no training happens here. Used by `run_fold` right after
     training, and directly by `scripts/rethreshold.py` to re-run
     postprocessing against a saved checkpoint without re-training (e.g. after
     widening the threshold search grid).
+
+    `datasets` lets a caller pass partitions it has already built. Filtering and
+    normalising a fold's recordings is the expensive part of this function and
+    it does not depend on the model, so a sweep that evaluates one fold under
+    several numeric formats would otherwise redo it once per format. Left None,
+    the behaviour is exactly as before.
     """
-    datasets, _band, _normalizer = build_fold_datasets(records, fold, window_s, stride_s)
+    if datasets is None:
+        datasets, _band, _normalizer = build_fold_datasets(records, fold, window_s, stride_s)
     val_ds, test_ds = datasets["val"], datasets["test"]
     model.to(device)
 

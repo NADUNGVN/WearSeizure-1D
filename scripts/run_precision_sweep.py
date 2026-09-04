@@ -128,6 +128,12 @@ def main(cfg: DictConfig) -> None:
                 )
             params = frozen_thresholds(metrics)
 
+            # Built ONCE per fold and shared by every cell. Filtering and
+            # normalising the fold's recordings does not depend on the numeric
+            # format, and rebuilding it per cell made the sweep ten times
+            # slower than it needed to be.
+            fold_datasets = None
+
             for cell in CELLS:
                 out_dir = ensure_dir(
                     art / "precision_sweep" / cell.name
@@ -142,13 +148,17 @@ def main(cfg: DictConfig) -> None:
                 model = build_model(cfg)
                 model.load_state_dict(torch.load(ckpt, map_location="cpu"), strict=True)
 
+                if fold_datasets is None:
+                    fold_datasets, _band, _norm = build_fold_datasets(
+                        records, fold, window_s, stride_s
+                    )
+
                 if not cell.is_reference:
-                    # Calibration data is the fold's VAL partition. Building the
-                    # datasets here rather than inside evaluate_fold costs one
-                    # extra pass and keeps the calibration source explicit.
-                    datasets, _band, _norm = build_fold_datasets(records, fold, window_s, stride_s)
+                    # Calibration data is the fold's VAL partition, stated here
+                    # rather than buried, because calibrating on test would be a
+                    # leak and this is the line that prevents it.
                     cal = DataLoader(
-                        datasets["val"], batch_size=cfg.train.batch_size, shuffle=False,
+                        fold_datasets["val"], batch_size=cfg.train.batch_size, shuffle=False,
                         num_workers=cfg.profile.get("num_workers", 0),
                     )
                     model = prepare_ptq(
@@ -170,6 +180,7 @@ def main(cfg: DictConfig) -> None:
                     batch_size=cfg.train.batch_size, device=cfg.profile.device,
                     num_workers=cfg.profile.get("num_workers", 0),
                     postprocess_alarm_timestamp=params.get("alarm_timestamp", "window_end"),
+                    datasets=fold_datasets,
                 )
                 payload = {
                     "cell": cell.name,
