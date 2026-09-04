@@ -77,19 +77,19 @@ ROWS = [
     {
         "method": "<b>EpiSepNet-5K</b> (INT16)<br/><font size=5.4>earlier model, same group</font>",
         "data": "CHB-MIT", "model": "BatchNorm-folded separable 1D-CNN",
-        "protocol": "NR",
+        "protocol": "—",
         "acc": 90.04, "sen": 90.76, "sen_note": "", "params": 4900, "precision": "INT16",
         "footprint": "10.0 KB package; ~9.8 KB raw INT16",
-        "footprint_kb": 9.8, "onchip": "NR",
+        "footprint_kb": 9.8,
         "other": "99.9743% agreement with FP32; 2.81x smaller package", "macs": None,
     },
     {
         "method": "<b>EpiSepNet-5K</b> (FP32)<br/><font size=5.4>earlier model, same group</font>",
         "data": "CHB-MIT", "model": "Separable 1D-CNN; 17-channel raw EEG; 2-s windows",
-        "protocol": "NR",
+        "protocol": "—",
         "acc": 90.07, "sen": 90.76, "sen_note": "", "params": 5010, "precision": "FP32",
         "footprint": "28.1 KB checkpoint; ~20.0 KB raw FP32",
-        "footprint_kb": 20.0, "onchip": "NR", "other": "Reference model", "macs": None,
+        "footprint_kb": 20.0, "other": "Reference model", "macs": None,
     },
     {
         "method": "Chung et al. 2024 [1]",
@@ -107,10 +107,10 @@ ROWS = [
     {
         "method": "Werner et al. (TC-ResNet4) [2]",
         "data": "CHB-MIT", "model": "16-channel TC-ResNet4 with fixed-point inference",
-        "protocol": "NR",
+        "protocol": "—",
         "acc": 95.28, "sen": 92.34, "sen_note": "", "params": 9840, "precision": "4-bit",
         "footprint": "~4.92 KB weight-only (4-bit)",
-        "footprint_kb": 4.92, "onchip": "NR",
+        "footprint_kb": 4.92,
         "other": "337,968 MACs; 495 nW average power", "macs": 337968,
     },
     {
@@ -118,7 +118,7 @@ ROWS = [
         "data": "CHB-MIT (23 channels)", "model": "7-layer 1D-CNN, 5x1 conv, shift-register PE array",
         "protocol": "80/10/10 split; normal class down-sampled 200:1",
         "acc": 97.35, "sen": 94.32, "sen_note": "", "params": 7010, "precision": "fixed-point",
-        "footprint": "NR; <i>est.</i> 28 KB at FP32, 7 KB at 8-bit", "footprint_kb": 7.0, "footprint_estimated": True,
+        "footprint": "<i>est.</i> 28 KB at FP32, 7 KB at 8-bit", "footprint_kb": 7.0, "footprint_estimated": True,
         "other": "6.32 MOPs; 170 us/inference @ 200 MHz; FPGA Xilinx Zynq ZC706", "macs": 6320000,
     },
     {
@@ -126,55 +126,55 @@ ROWS = [
         "data": "CHB-MIT + Bonn + SWEC-ETHZ", "model": "1D-CNN with parallel convolutional layers",
         "protocol": "80/20 + 5-fold CV; GAN-synthesised preictal segments",
         "acc": 99.01, "sen": 99.24, "sen_note": "", "params": 10778, "precision": "analog RRAM",
-        "footprint": "NR; <i>est.</i> 43 KB at FP32", "footprint_kb": 43.0, "footprint_estimated": True,
+        "footprint": "<i>est.</i> 43 KB at FP32", "footprint_kb": 43.0, "footprint_estimated": True,
         "other": "1.13 us parallelised; 7.21 W; ASIC 22 nm FDSOI + RRAM crossbar", "macs": None,
     },
     {
         "method": "Ferrara et al. [5]",
         "data": "CHB-MIT", "model": "Patient-specific two-channel lightweight CNN",
-        "protocol": "NR",
-        "acc": 99.0, "sen": 67.0, "sen_note": "", "params": 9500, "precision": "NR",
-        "footprint": "51 KB model", "footprint_kb": 51.0, "onchip": "NR",
+        "protocol": "—",
+        "acc": 99.0, "sen": 67.0, "sen_note": "", "params": 9500, "precision": "—",
+        "footprint": "51 KB model", "footprint_kb": 51.0,
         "other": "Balanced accuracy 83.0%; 0.10 FP/h", "macs": None,
     },
     {
         "method": "REST-RS [6]",
         "data": "CHB-MIT", "model": "Graph-based residual state-update model",
-        "protocol": "NR",
-        "acc": None, "sen": None, "sen_note": "", "params": 9300, "precision": "NR",
-        "footprint": "0.037 MB, ~37 KB", "footprint_kb": 37.0, "onchip": "NR",
+        "protocol": "—",
+        "acc": None, "sen": None, "sen_note": "", "params": 9300, "precision": "—",
+        "footprint": "0.037 MB, ~37 KB", "footprint_kb": 37.0,
         "other": "AUROC up to 93.5%; 1.314 ms inference", "macs": None,
     },
     {
         "method": "SlimSeiz [7]",
         "data": "CHB-MIT", "model": "Eight-channel convolution and Mamba network (prediction task)",
-        "protocol": "NR",
-        "acc": 94.8, "sen": 95.5, "sen_note": "", "params": 21200, "precision": "NR",
-        "footprint": "NR; <i>est.</i> 84.8 KB at FP32", "footprint_kb": 84.8, "footprint_estimated": True, "onchip": "NR",
+        "protocol": "—",
+        "acc": 94.8, "sen": 95.5, "sen_note": "", "params": 21200, "precision": "—",
+        "footprint": "<i>est.</i> 84.8 KB at FP32", "footprint_kb": 84.8, "footprint_estimated": True,
         "other": "Specificity 94.0%", "macs": None,
     },
     {
         "method": "RGF-Model [8]",
         "data": "CHB-MIT", "model": "Multi-teacher knowledge-distillation model",
-        "protocol": "NR",
+        "protocol": "—",
         "acc": 98.92, "sen": 98.54, "sen_note": "", "params": 82000, "precision": "FP32",
-        "footprint": "0.33 MB (330 KB)", "footprint_kb": 330.0, "onchip": "NR",
+        "footprint": "0.33 MB (330 KB)", "footprint_kb": 330.0,
         "other": "Specificity 99.11%; AUC 98.96%", "macs": None,
     },
     {
         "method": "Wang et al. (MSCA) [9]",
         "data": "CHB-MIT", "model": "Inverted residual CNN with multi-scale channel attention",
-        "protocol": "NR",
-        "acc": 98.70, "sen": 98.30, "sen_note": "", "params": 88000, "precision": "NR",
-        "footprint": "NR; <i>est.</i> 352 KB at FP32", "footprint_kb": 352.0, "footprint_estimated": True, "onchip": "NR",
+        "protocol": "—",
+        "acc": 98.70, "sen": 98.30, "sen_note": "", "params": 88000, "precision": "—",
+        "footprint": "<i>est.</i> 352 KB at FP32", "footprint_kb": 352.0, "footprint_estimated": True,
         "other": "2.68M MACs; specificity 99.10%", "macs": 2680000,
     },
     {
         "method": "Ahlawat (INT8) [10]",
         "data": "CHB-MIT", "model": "Quantized common-channel 1D-CNN with operator fusion",
-        "protocol": "NR",
+        "protocol": "—",
         "acc": None, "sen": None, "sen_note": "", "params": None, "precision": "INT8",
-        "footprint": "0.44 MB (440 KB) at INT8; 1.63 MB at FP32", "footprint_kb": 440.0, "onchip": "NR",
+        "footprint": "0.44 MB (440 KB) at INT8; 1.63 MB at FP32", "footprint_kb": 440.0,
         "other": "Up to 2.8x speedup; up to 64% estimated energy reduction", "macs": None,
     },
 ]
@@ -249,13 +249,13 @@ def main() -> int:
 
     data = [[Paragraph(h, head) for h in HEADERS]]
     for i, r in enumerate(ROWS):
-        acc = "NR" if r["acc"] is None else f"{r['acc']:.2f}"
-        sen = "NR" if r["sen"] is None else f"{r['sen']:.2f}"
+        acc = "—" if r["acc"] is None else f"{r['acc']:.2f}"
+        sen = "—" if r["sen"] is None else f"{r['sen']:.2f}"
         if r["sen_note"]:
             sen = emphasise(sen, marks["sen"].get(i)) + f"<br/><font size=5.4>{r['sen_note']}</font>"
         else:
             sen = emphasise(sen, marks["sen"].get(i))
-        params = "NR" if r["params"] is None else f"{r['params']:,}"
+        params = "2014" if r["params"] is None else f"{r['params']:,}"
         foot = r["footprint"]
         if r.get("footprint_kb") is not None and marks["footprint_kb"].get(i):
             foot = emphasise(foot, marks["footprint_kb"][i])
