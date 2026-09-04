@@ -101,7 +101,12 @@ ROWS = [
         "protocol": "Segment-level 70/20/10 split per patient; ~91 h",
         "acc": 98.18, "sen": 99.62, "sen_note": "event level; 96.76 segment level",
         "params": 116700, "precision": "FP32",
-        "footprint": "NR; <i>est.</i> 467 KB at FP32", "footprint_kb": 467.0, "footprint_estimated": True, "onchip": "NR",
+        "footprint": "<b>454 KB</b> at FP32<br/><font size=5.4>rebuilt from the paper; "
+                     "116 226 params vs 116 700 reported, +0.4%</font>",
+        "footprint_kb": 454.0,
+        "onchip": "<b>510 KB</b> at FP32 = <b>91% of XC7Z020 BRAM</b><br/>"
+                  "128 KB at INT8 (23%)<br/>"
+                  "<font size=5.4>peak 14 464 values at stage 2, both branches live</font>",
         "other": "FAR 0.22/h; detection delay 3.3 s; specificity 98.19%",
         "macs": None,
     },

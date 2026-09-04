@@ -37,7 +37,7 @@ Footprints marked *est.* are derived as `params x bytes-per-value`, not reported
 
 | Work | Ch | Acc | Sens | Params | Precision | W | W+A | MACs |
 |---|--:|--:|--:|--:|---|--:|--:|--:|
-| Chung 2024, *Front. Neurol.* | **1** | 98.18 % | **99.62 %** (event) / 96.76 % (seg) | 116 700 | FP32 | *est.* 467 KB | — | — |
+| Chung 2024, *Front. Neurol.* | **1** | 98.18 % | **99.62 %** (event) / 96.76 % (seg) | 116 700 | FP32 | **454 KB** | **510 KB** (91 % of BRAM) | — |
 | Cao 2025, *BMC MIDM* | multi | 98.43 % | 97.84 % | ~5 100 | FP32 | *est.* 20 KB | — | — |
 | Hasan 2024, IEEE RAAICON | multi | 98.93 % | 98.60 % | ~4 080 000 | FP32 | *est.* 16.3 MB | — | — |
 | Li 2022, *IEEE TBioCAS* | multi | 99.01 % | 99.24 % | 10 778 | RRAM | *est.* 43 KB | in crossbar | — |
@@ -64,6 +64,16 @@ Two claims this table does **not** support, and which should never be made:
 
 What the table *does* support: **one channel, 9.9× fewer parameters than the single-channel
 work it is compared against, and the only row evaluated on 185 h without leakage.**
+
+Chung's footprint is **computed, not guessed**: the architecture is described completely enough in
+the paper to rebuild (two parallel modules, 1×3 and 1×5 kernels, 32/64/128 filters, strides 2/2/1,
+pool 3, then GAP and FC), and the rebuild reproduces **116 226 parameters against the 116 700
+reported — 0.4 % off**, which is what makes the derived memory trustworthy. See
+`scripts/estimate_published_footprint.py`; a reconstruction that misses the reported parameter
+count is rejected rather than reported.
+
+That gives the sharpest number in the table: on the same 4-second, 256 Hz, single-channel input,
+**Chung needs 510 KB — 91 % of the XC7Z020's BRAM — where this work needs 18.2 KB, 3.6 %.**
 
 **EpiSepNet-5K is this group's own earlier model**, kept in the table as the design WearSeizure-1D
 succeeds — 17 channels and 2-second windows, against one channel and four seconds here. It also
