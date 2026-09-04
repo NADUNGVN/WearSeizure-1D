@@ -125,6 +125,33 @@ def chung2024() -> Reconstruction:
     )
 
 
+# Works whose architecture is not published in enough detail to rebuild, but
+# whose INPUT tensor is fully determined by channels x window x sampling rate.
+# The input must be held whatever the architecture does with it, so this is a
+# hard LOWER BOUND on activation memory, not an estimate.
+INPUT_BOUNDS = [
+    # (name, channels, window_s, fs_hz, params, bytes_per_value, format)
+    ("EpiSepNet-5K (earlier model, same group)", 17, 2.0, 256, 4_900, 2, "INT16"),
+    ("EpiSepNet-5K (earlier model, same group)", 17, 2.0, 256, 5_010, 4, "FP32"),
+    ("Alharthi et al. 2022", 18, 10.0, 256, 83_300, 4, "FP32"),
+]
+
+
+def input_bounds() -> None:
+    print()
+    print("LOWER BOUNDS from the input tensor alone (architecture not published in")
+    print("enough detail to rebuild; the input is held regardless of what follows):")
+    print(f"  {'work':<44}{'ch':>4}{'window':>8}{'input':>10}{'weights':>10}{'W+A >=':>10}")
+    for name, ch, win, fs, params, width, fmt in INPUT_BOUNDS:
+        n = ch * round(win * fs)
+        ib, wb = n * width, params * width
+        print(f"  {name:<44}{ch:>4}{win:>7.0f}s{ib/1024:>9.1f}K{wb/1024:>9.1f}K"
+              f"{(ib+wb)/1024:>9.1f}K  ({fmt})")
+    print("  EpiSepNet's input tensor is LARGER than its weights, because it reads 17")
+    print("  channels. Single-channel input is why this project's activations are small.")
+
+
+
 def report(rec: Reconstruction) -> None:
     got = rec.params()
     off = abs(got - rec.reported_params) / rec.reported_params
@@ -151,7 +178,9 @@ def report(rec: Reconstruction) -> None:
 def main() -> int:
     for rec in (chung2024(),):
         report(rec)
-    print("\nOther works in the comparison table still need their architectures read")
+    input_bounds()
+    print()
+    print("Everything else in the comparison table still needs its architecture read")
     print("out of the paper before a footprint can be computed rather than guessed.")
     return 0
 
