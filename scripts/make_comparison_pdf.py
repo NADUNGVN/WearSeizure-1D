@@ -31,7 +31,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 # ---------------------------------------------------------------------------
 
 HEADERS = [
-    "Method", "Data", "Model", "Protocol / test exposure",
+    "Method", "Dataset", "Model", "Protocol / test exposure",
     "ACC (%)", "SEN (%)", "Parameters", "Precision",
     "Weight memory", "Total on-chip (W+A)", "Other efficiency",
 ]
@@ -176,21 +176,6 @@ ROWS = [
         "footprint": "0.44 MB (440 KB) at INT8; 1.63 MB at FP32", "footprint_kb": 440.0, "onchip": "NR",
         "other": "Up to 2.8x speedup; up to 64% estimated energy reduction", "macs": None,
     },
-    {
-        "method": "Lee et al. 2024 (RVDLAHA) [11]",
-        "data": "<i>Rat skull EEG (not CHB-MIT)</i>",
-        "model": "DWT (2 levels) + Z-score, then Conv(k6, s2, <b>1 kernel</b>) - BN - MaxPool, twice; "
-                 "FC20 - FC2. RISC-V CPU + DLA, on-device personalisation",
-        "protocol": "64/16/20 split",
-        "acc": 99.5, "sen": 99.0, "sen_note": "99.3 at 16-bit fixed point",
-        "params": 356, "precision": "<b>16-bit fixed</b>",
-        "footprint": "NR; <i>est.</i> 0.7 KB at 16-bit", "footprint_kb": 0.7,
-        "footprint_estimated": True,
-        "onchip": "<b>7 BRAMs</b> on PYNQ-Z2",
-        "other": "3 909 total time complexity; 2.1 ms (preproc 1.0 + detect 1.1); 107 mW @ 1 MHz; "
-                 "<b>16-bit fixed costs 0.2 pp vs FP32 and halves memory</b>", "macs": None,
-        "off_dataset": True,
-    },
 ]
 
 REFERENCES = [
@@ -215,13 +200,6 @@ REFERENCES = [
     (
         "[10] K. Ahlawat. Efficient EEG Seizure Detection Using INT8 Quantization, Channel Pruning, and Spiking Neural "
         "Networks. arXiv:2607.16296, 2026."
-    ),
-    (
-        "[11] S.-Y. Lee, M.-Y. Ku, Y.-H. Tsai, C.-C. Lin. RVDLAHA: An RISC-V DLA Hardware Architecture for On-Device "
-        "Real-Time Seizure Detection and Personalization in Wearable Applications. IEEE TBioCAS, 2024. "
-        "DOI 10.1109/TBCAS.2024.3442250, PMID 39137083. The 356-parameter figure is verified against "
-        "the full text: “Configuration 5 serves as the proposed CNN model architecture, achieving "
-        "a 99.5% accuracy with 356 parameters in software”, Section II, immediately above Table I."
     ),
 ]
 
@@ -324,10 +302,9 @@ def main() -> int:
             (
                 "<b>Bold</b> = best in column. <u>Underlined</u> = second best. "
                 "Higher is better for ACC and SEN; lower is better for parameters, stored footprint and MACs. "
-                "Rows on a dataset other than CHB-MIT are shown for reference and excluded from the ranking, "
-                "as are footprints marked <i>est.</i>, which are derived from a parameter count rather than "
-                "reported. Weight memory and total on-chip memory are different quantities: most papers "
-                "report only the first."
+                "Every row is CHB-MIT. Footprints marked <i>est.</i> are derived from a parameter count rather "
+                "than reported by the paper, and are excluded from the ranking. Weight memory and total "
+                "on-chip memory are different quantities: most papers report only the first."
             ),
             note),
         Spacer(1, 4),
