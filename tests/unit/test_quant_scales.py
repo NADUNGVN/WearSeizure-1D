@@ -10,6 +10,10 @@ These tests pin the two properties that decision rests on.
 """
 from __future__ import annotations
 
+import math
+
+import pytest
+
 # ---------------------------------------------------------------------------
 # Dynamic fixed point: power-of-two scales
 # ---------------------------------------------------------------------------
@@ -61,3 +65,80 @@ def test_the_exponent_is_the_shift_a_datapath_would_use():
 
     q = compute_symmetric_scale(torch.tensor([1.0]), n_bits=8, power_of_two=True)
     assert q.scale == 2.0 ** q.exponent
+
+
+# ---------------------------------------------------------------------------
+# Per-channel weight scales -- ladder step P1
+# ---------------------------------------------------------------------------
+
+
+def _skewed_depthwise_weight(spread: float = 128.0):
+    """A depthwise weight whose channels span `spread`x in magnitude.
+
+    Not an artificial worry: a depthwise layer has one independent filter per
+    channel and nothing mixing them, so trained channels drift apart. This is
+    the shape of the problem Krishnamoorthi (2018) measured on MobileNet.
+    """
+    import torch
+
+    torch.manual_seed(0)
+    n = 8
+    gains = torch.logspace(0, math.log10(spread), n).view(n, 1, 1)
+    return torch.randn(n, 1, 5) * gains
+
+
+def _err(w, **kw):
+    from wearseizure.quant.scales import compute_symmetric_scale
+
+    q = compute_symmetric_scale(w, n_bits=8, **kw)
+    return float((q.dequantize(q.quantize(w)) - w).abs().mean())
+
+
+def test_per_channel_is_the_larger_lever_by_far():
+    """The point of measuring both: the scale FORMAT (power-of-two or not) is a
+    small effect next to the scale GRANULARITY. Choosing dynamic fixed point
+    without also going per-channel would optimise the wrong axis."""
+    w = _skewed_depthwise_weight()
+    per_tensor = _err(w)
+    per_channel = _err(w, per_channel=True)
+    pow2_cost = _err(w, power_of_two=True) - per_tensor
+
+    assert per_channel < per_tensor / 3, "per-channel must be a large win on skewed channels"
+    assert pow2_cost < per_tensor - per_channel, "the format change is the smaller effect"
+
+
+def test_per_channel_gives_one_scale_per_output_channel_shaped_to_broadcast():
+    from wearseizure.quant.scales import compute_symmetric_scale
+
+    w = _skewed_depthwise_weight()
+    q = compute_symmetric_scale(w, n_bits=8, per_channel=True)
+    assert q.per_channel
+    assert q.scale.shape == (w.shape[0], 1, 1), "must broadcast against the weight"
+    # Every channel uses its full code range, which is the whole point.
+    used = q.quantize(w).abs().flatten(1).amax(dim=1)
+    assert (used > q.qmax * 0.5).all()
+
+
+def test_per_channel_power_of_two_gives_one_shift_per_channel():
+    """This is what makes per-channel affordable in hardware: the requantisation
+    stays a shift, it is just a different shift per output channel."""
+    from wearseizure.quant.scales import compute_symmetric_scale
+
+    q = compute_symmetric_scale(_skewed_depthwise_weight(), n_bits=8,
+                                per_channel=True, power_of_two=True)
+    assert q.is_power_of_two
+    exps = q.exponent
+    assert exps.shape == q.scale.shape
+    assert exps.dtype.is_signed and not exps.dtype.is_floating_point
+
+
+def test_a_scalar_scale_still_behaves_exactly_as_before():
+    """Per-tensor is the default and must be untouched: every number in the
+    experiment log was produced with it."""
+    from wearseizure.quant.scales import compute_symmetric_scale
+
+    w = _skewed_depthwise_weight()
+    q = compute_symmetric_scale(w, n_bits=8)
+    assert not q.per_channel
+    assert isinstance(q.scale, float)
+    assert q.scale == pytest.approx(float(w.abs().max()) / q.qmax)

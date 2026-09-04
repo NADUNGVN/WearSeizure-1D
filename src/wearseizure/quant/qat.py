@@ -43,9 +43,16 @@ class _QATMixin:
     flag is set (i.e. at inference / continuous test time).
     """
 
-    def _init_qat_state(self, act_bits: int, weight_bits: int) -> None:
+    def _init_qat_state(
+        self, act_bits: int, weight_bits: int,
+        weight_per_channel: bool = False, power_of_two: bool = False,
+    ) -> None:
         self.act_bits = act_bits
         self.weight_bits = weight_bits
+        # Both default off so every number already in the experiment log stays
+        # reproducible: this is per-tensor with an arbitrary scale unless asked.
+        self.weight_per_channel = weight_per_channel
+        self.power_of_two = power_of_two
         self.calibrating = False
         self.momentum = 0.1
         self.register_buffer("act_running_max", torch.tensor(1e-4))
@@ -55,51 +62,71 @@ class _QATMixin:
             with torch.no_grad():
                 batch_max = x.detach().abs().max()
                 self.act_running_max.mul_(1 - self.momentum).add_(self.momentum * batch_max)
-        act_scale = compute_symmetric_scale_from_max(self.act_running_max, self.act_bits)
+        act_scale = compute_symmetric_scale_from_max(
+            self.act_running_max, self.act_bits, power_of_two=self.power_of_two
+        )
         return fake_quantize(x, act_scale)
+
+    def _weight_scale(self, weight: torch.Tensor) -> QuantScale:
+        return compute_symmetric_scale(
+            weight, self.weight_bits,
+            power_of_two=self.power_of_two, per_channel=self.weight_per_channel,
+        )
 
     def last_scales(self, weight: torch.Tensor) -> tuple[QuantScale, QuantScale]:
         """(activation_scale, weight_scale) as of the most recent forward pass."""
         return (
-            compute_symmetric_scale_from_max(self.act_running_max, self.act_bits),
-            compute_symmetric_scale(weight, self.weight_bits),
+            compute_symmetric_scale_from_max(
+                self.act_running_max, self.act_bits, power_of_two=self.power_of_two
+            ),
+            self._weight_scale(weight),
         )
 
 
 class QATConv1d(nn.Module, _QATMixin):
-    def __init__(self, conv: nn.Conv1d, weight_bits: int = 8, act_bits: int = 8) -> None:
+    def __init__(
+        self, conv: nn.Conv1d, weight_bits: int = 8, act_bits: int = 8,
+        weight_per_channel: bool = False, power_of_two: bool = False,
+    ) -> None:
         super().__init__()
         self.conv = conv
-        self._init_qat_state(act_bits, weight_bits)
+        self._init_qat_state(act_bits, weight_bits, weight_per_channel, power_of_two)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x_q = self._quantize_activation(x)
-        weight_scale = compute_symmetric_scale(self.conv.weight, self.weight_bits)
+        weight_scale = self._weight_scale(self.conv.weight)
         w_q = fake_quantize(self.conv.weight, weight_scale)
         return F.conv1d(x_q, w_q, self.conv.bias, self.conv.stride, self.conv.padding, self.conv.dilation, self.conv.groups)
 
 
 class QATLinear(nn.Module, _QATMixin):
-    def __init__(self, linear: nn.Linear, weight_bits: int = 8, act_bits: int = 8) -> None:
+    def __init__(
+        self, linear: nn.Linear, weight_bits: int = 8, act_bits: int = 8,
+        weight_per_channel: bool = False, power_of_two: bool = False,
+    ) -> None:
         super().__init__()
         self.linear = linear
-        self._init_qat_state(act_bits, weight_bits)
+        self._init_qat_state(act_bits, weight_bits, weight_per_channel, power_of_two)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x_q = self._quantize_activation(x)
-        weight_scale = compute_symmetric_scale(self.linear.weight, self.weight_bits)
+        weight_scale = self._weight_scale(self.linear.weight)
         w_q = fake_quantize(self.linear.weight, weight_scale)
         return F.linear(x_q, w_q, self.linear.bias)
 
 
-def prepare_qat(model: nn.Module, weight_bits: int = 8, act_bits: int = 8) -> nn.Module:
+def prepare_qat(
+    model: nn.Module, weight_bits: int = 8, act_bits: int = 8,
+    weight_per_channel: bool = False, power_of_two: bool = False,
+) -> nn.Module:
+    opts = (weight_bits, act_bits, weight_per_channel, power_of_two)
     for name, child in list(model.named_children()):
         if isinstance(child, nn.Conv1d):
-            setattr(model, name, QATConv1d(child, weight_bits, act_bits))
+            setattr(model, name, QATConv1d(child, *opts))
         elif isinstance(child, nn.Linear):
-            setattr(model, name, QATLinear(child, weight_bits, act_bits))
+            setattr(model, name, QATLinear(child, *opts))
         else:
-            prepare_qat(child, weight_bits, act_bits)
+            prepare_qat(child, *opts)
     return model
 
 
