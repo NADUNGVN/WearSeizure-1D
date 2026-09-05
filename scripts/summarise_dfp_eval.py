@@ -40,10 +40,24 @@ def load_dfp(root: Path, bits: int) -> dict[tuple[int, str], dict]:
     # Both scoring arms: dfp<bits> holds the requantised-logit run and
     # dfp<bits>_acc the raw-accumulator one. Which is which comes from each
     # row's own `raw_margin` field, not from the directory name.
+    strays: list[str] = []
     for arm in sorted((root / "dfp_eval").glob(f"dfp{bits}*")):
+        expected = arm.name.endswith("_acc")
         for path in sorted(arm.rglob("*.json")):
             d = json.loads(path.read_text(encoding="utf-8"))
-            out[(bool(d.get("raw_margin", False)), d["seed"], d["fold_id"])] = d
+            raw = bool(d.get("raw_margin", False))
+            if raw != expected:
+                strays.append(f"{arm.name}/{path.name}")
+            out[(raw, d["seed"], d["fold_id"])] = d
+    if strays:
+        # A directory holding rows from the other arm means two runs wrote to
+        # the same place -- typically one launched before the fix that
+        # separated them. The overwritten rows are gone, and every mean below
+        # is computed over whatever survived.
+        print(f"CORRUPT: {len(strays)} result files sit in the wrong arm's directory, "
+              "so a second\n  run overwrote a first one. Those folds must be re-run "
+              "before any number here\n  is trustworthy. First few: "
+              f"{', '.join(strays[:5])}\n")
     return out
 
 
@@ -145,12 +159,28 @@ def main() -> int:
                   "WIDTH of the interval,\n    not the point estimate.")
 
     if len(arms) == 2:
-        a = statistics.mean([r["sensitivity"] for r in arms[False].values()])
-        b = statistics.mean([r["sensitivity"] for r in arms[True].values()])
-        print(f"\n  reading the accumulator instead of the logits: {100 * (b - a):+.2f} pp")
-        print("  That is the price of pushing the final layer through the same "
-              "requantiser as\n  every other one. The value is already in the PE, so "
-              "recovering it costs no\n  hardware -- only an instruction bit.")
+        shared = set(arms[False]) & set(arms[True])
+        if not shared:
+            print("\n  The two arms share NO fold, so they cannot be compared. Each "
+                  "arm's absolute\n  number above is still readable; the difference "
+                  "between them is not.")
+        elif len(shared) < min(len(arms[False]), len(arms[True])):
+            # Comparing an arm's mean against a different arm's mean over a
+            # different set of folds measures which folds were included, not
+            # which scoring path was used. Refusing beats printing a number
+            # that looks like an answer.
+            print(f"\n  The arms cover different folds -- {len(arms[False])} and "
+                  f"{len(arms[True])}, overlapping in {len(shared)}. Comparing their "
+                  "means would\n  measure which folds each happened to include. "
+                  "Pairing on the shared folds only:")
+        if shared:
+            a = statistics.mean([arms[False][k]["sensitivity"] for k in shared])
+            b = statistics.mean([arms[True][k]["sensitivity"] for k in shared])
+            print(f"\n  reading the accumulator instead of the logits, on the "
+                  f"{len(shared)} folds both\n  arms cover: {100 * (b - a):+.2f} pp")
+            print("  That is the price of pushing the final layer through the same "
+                  "requantiser as\n  every other one. The value is already in the PE, "
+                  "so recovering it costs no\n  hardware -- only an instruction bit.")
     else:
         print("\n  Only one scoring arm present. Run the other with "
               "+export.raw_margin=true\n  to price the final requantisation "

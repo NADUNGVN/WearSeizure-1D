@@ -601,6 +601,21 @@ def main(cfg: DictConfig) -> None:
     src = fold_run_dir(art, cfg.model.name, cfg.split.name, cfg.window.name, seed, tag=run_tag)
     window_s, stride_s = cfg.window.window_s, cfg.window.stride_s
 
+    if do_evaluate:
+        # Fail now rather than after three hours of overwriting. A directory
+        # already holding the other scoring arm's rows means another run is
+        # writing here, and its results would be replaced silently.
+        existing = art / "dfp_eval" / eval_arm_dir(bits, raw_margin) / f"seed{seed}"
+        for path in sorted(existing.glob("*.json"))[:200]:
+            prior = json.loads(path.read_text(encoding="utf-8"))
+            if bool(prior.get("raw_margin", False)) != raw_margin:
+                raise SystemExit(
+                    f"{path} was written by the other scoring arm "
+                    f"(raw_margin={prior.get('raw_margin')}). Two runs are writing to "
+                    "the same directory and one is destroying the other's results. "
+                    "Stop the other run, then re-run the folds it overwrote."
+                )
+
     chosen = [f for f in folds if f.fold_id == export_fold] if export_fold else folds[:1]
     if not chosen:
         raise SystemExit(f"fold {export_fold!r} is not in {cfg.split.folds_path}")
