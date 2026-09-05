@@ -85,6 +85,17 @@ SHIFT_FIELD_BITS = 6          # Controller.v: OUTPUT_SHIFT = instruction[27:22]
 # Decomposing the network into the fifteen layers the hardware executes
 # --------------------------------------------------------------------------
 
+def eval_arm_dir(bits: int, raw_margin: bool) -> str:
+    """Where a scoring arm's per-fold results live.
+
+    The two arms -- the requantised logits and the raw 48-bit accumulator --
+    answer different questions and each takes hours to produce, so they must not
+    land in the same directory. The second run would overwrite the first, and
+    the loss would be silent.
+    """
+    return f"dfp{bits}" + ("_acc" if raw_margin else "")
+
+
 def write_lf(path: Path, text: str) -> None:
     """Write with Unix line endings, whatever platform the exporter runs on.
 
@@ -733,7 +744,8 @@ def main(cfg: DictConfig) -> None:
                    "sensitivity": result.test_event_metrics.sensitivity,
                    "far_per_hour": result.test_event_metrics.far_per_hour}
             results.append(row)
-            out = ensure_dir(art / "dfp_eval" / f"dfp{bits}" / f"seed{seed}")
+            out = ensure_dir(art / "dfp_eval" / eval_arm_dir(bits, raw_margin)
+                             / f"seed{seed}")
             (out / f"{fold.fold_id}.json").write_text(json.dumps(row, indent=2),
                                                       encoding="utf-8")
             log.info(f"{fold.fold_id}: sens={row['sensitivity']:.4f} "
