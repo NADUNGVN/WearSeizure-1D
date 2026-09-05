@@ -157,9 +157,18 @@ def main() -> int:
         print(f"    folds where the two differ: sensitivity {differ_s}/{len(matched)}, "
               f"FAR {differ_f}/{len(matched)}")
         if differ_s == 0 and differ_f == 0:
-            print("    IDENTICAL on every fold and both metrics. That is not a "
-                  "quantisation\n    result -- check that the two arms are not the "
-                  "same files.")
+            if len(matched) < MIN_FOLDS_FOR_IDENTITY:
+                # Identity across a handful of folds is ordinary. In this
+                # cohort the two differ on roughly a fifth of folds, so three
+                # agreeing happens about half the time. Calling that a wiring
+                # bug would be crying wolf on a run that is simply young.
+                print(f"    Identical on all {len(matched)} folds so far, which is "
+                      "not yet informative:\n    with this many folds, agreement is "
+                      "unremarkable. Wait for more.")
+            else:
+                print("    IDENTICAL on every fold and both metrics, across "
+                      f"{len(matched)} folds. That is\n    not a quantisation result "
+                      "-- check that the two arms are not the same files.")
 
         d, lo, hi = paired_delta(pairs_s)
         df, flo, fhi = paired_delta(pairs_f)
