@@ -402,7 +402,15 @@ def write_artefacts(layers: list[HwLayer], out_dir: Path, bits: int,
     }
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n",
                                            encoding="utf-8")
-    log.info(f"wrote {total} weights and manifest.json to {out_dir}")
+
+    # The golden model travels with the artefacts it describes. The RTL team
+    # runs it without this repository checked out, and a golden model that is a
+    # version behind the manifest is worse than none at all.
+    if GOLDEN_SOURCE.is_file() and GOLDEN_SOURCE.resolve() != (out_dir / "golden_model.py").resolve():
+        (out_dir / "golden_model.py").write_text(
+            GOLDEN_SOURCE.read_text(encoding="utf-8"), encoding="utf-8")
+
+    log.info(f"wrote {total} weights, manifest.json and golden_model.py to {out_dir}")
 
 
 # --------------------------------------------------------------------------
@@ -443,14 +451,20 @@ class GoldenWrapper(nn.Module):
         return torch.from_numpy(out).to(x.device, x.dtype)
 
 
-def load_golden(model_dir: Path):
-    """Import golden_model.py from the RTL repository, not a copy of it.
+GOLDEN_SOURCE = Path(__file__).resolve().parents[1] / "hardware" / "golden_model.py"
 
-    One implementation, in the repository that owns it. A copy here would be a
-    second thing to keep in step with the RTL, and it would drift.
+
+def load_golden(_unused: Path | None = None):
+    """Import the golden model from THIS repository, and deliver a copy.
+
+    It lives here because this is where the network is defined and where it can
+    be tested against the float model on every commit. The RTL repository gets
+    a copy alongside the weights it describes -- a delivered artefact, not a
+    second original. Keeping the source there instead meant the servers, which
+    have this repository and the dataset but not that one, could not run it.
     """
     import importlib.util
-    path = model_dir / "golden_model.py"
+    path = GOLDEN_SOURCE
     if not path.is_file():
         raise SystemExit(f"golden_model.py not found at {path}")
     spec = importlib.util.spec_from_file_location("golden_model", path)

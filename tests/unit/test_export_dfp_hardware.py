@@ -34,7 +34,7 @@ export_dfp = importlib.util.module_from_spec(_spec)
 sys.modules["export_dfp_hardware"] = export_dfp
 _spec.loader.exec_module(export_dfp)
 
-GOLDEN_PATH = ROOT.parent / "AI-Accelerator-RTL" / "model" / "golden_model.py"
+GOLDEN_PATH = ROOT / "hardware" / "golden_model.py"
 
 
 def build_k5only() -> WearSeizure1D:
@@ -159,7 +159,7 @@ def test_exported_hex_reloads_to_exactly_what_was_quantised(tmp_path):
     """
     if not GOLDEN_PATH.is_file():
         pytest.skip(f"golden_model.py not present at {GOLDEN_PATH}")
-    golden = export_dfp.load_golden(GOLDEN_PATH.parent)
+    golden = export_dfp.load_golden()
 
     model = build_k5only()
     layers = export_dfp.decompose(model)
@@ -202,7 +202,7 @@ def test_golden_model_reproduces_its_own_dumped_vectors(tmp_path):
     """
     if not GOLDEN_PATH.is_file():
         pytest.skip(f"golden_model.py not present at {GOLDEN_PATH}")
-    golden = export_dfp.load_golden(GOLDEN_PATH.parent)
+    golden = export_dfp.load_golden()
 
     model = build_k5only()
     layers = export_dfp.decompose(model)
