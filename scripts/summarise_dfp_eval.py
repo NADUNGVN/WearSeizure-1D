@@ -143,6 +143,24 @@ def main() -> int:
             pairs_s[patient].append((row["sensitivity"], fp32[key]["sensitivity"]))
             pairs_f[patient].append((row["far_per_hour"], fp32[key]["far_per_hour"]))
 
+        # The baseline itself, and how often the two disagree at all. A delta of
+        # exactly zero with a zero-width interval is either a real result or a
+        # comparison of something against itself, and the reader cannot tell
+        # which from the delta alone.
+        ref_s = statistics.mean([fp32[k]["sensitivity"] for k in matched])
+        ref_f = statistics.mean([fp32[k]["far_per_hour"] for k in matched])
+        differ_s = sum(1 for k in matched
+                       if matched[k]["sensitivity"] != fp32[k]["sensitivity"])
+        differ_f = sum(1 for k in matched
+                       if matched[k]["far_per_hour"] != fp32[k]["far_per_hour"])
+        print(f"    FP32 on the same folds: sensitivity {ref_s:.4f}    FAR/h {ref_f:.4f}")
+        print(f"    folds where the two differ: sensitivity {differ_s}/{len(matched)}, "
+              f"FAR {differ_f}/{len(matched)}")
+        if differ_s == 0 and differ_f == 0:
+            print("    IDENTICAL on every fold and both metrics. That is not a "
+                  "quantisation\n    result -- check that the two arms are not the "
+                  "same files.")
+
         d, lo, hi = paired_delta(pairs_s)
         df, flo, fhi = paired_delta(pairs_f)
         worst = -lo
