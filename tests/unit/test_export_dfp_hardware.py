@@ -293,3 +293,68 @@ def test_agreement_report_refuses_to_score_a_constant_model(capsys):
     out = capsys.readouterr().out
     assert "UNDETERMINED" in out
     assert "spearman" not in out
+
+
+def _prepared_layers(x: torch.Tensor):
+    model = build_k5only()
+    layers = export_dfp.decompose(model)
+    probe: list = []
+    export_dfp.float_forward(layers, x, collect=probe)
+    for spec, (_, t) in zip(layers, probe[1:]):
+        spec.out_length = int(t.shape[2])
+    for spec, prev in zip(layers, [probe[0][1]] + [t for _, t in probe[1:-1]]):
+        spec.in_length = int(prev.shape[2])
+    export_dfp.calibrate(layers, [x], bits=8)
+    return model, layers
+
+
+@pytest.mark.parametrize("raw_margin", [False, True])
+def test_wrapper_returns_real_values_not_stored_integers(tmp_path, raw_margin):
+    """The evaluator takes a softmax, so the SCALE of the output matters.
+
+    `engine_baseline.score_partition` scores with softmax(logits)[:, 1] and
+    compares against thresholds frozen from the FP32 run. The hardware stores
+    an integer; what that integer MEANS is itself over 2**exponent. Returning
+    the stored integer makes the logits several times too large -- and for the
+    48-bit accumulator, thousands of times -- which sharpens the softmax or
+    saturates it to exactly 0 and 1.
+
+    Nothing about that looks like a bug downstream. It looks like a
+    quantisation result: a sensitivity of exactly 1.000 and a handful of
+    distinct scores. So the invariant is checked here, on the probabilities the
+    evaluator will actually threshold.
+    """
+    if not GOLDEN_PATH.is_file():
+        pytest.skip(f"golden_model.py not present at {GOLDEN_PATH}")
+    golden_mod = export_dfp.load_golden()
+
+    x = torch.randn(8, 1, 1024, dtype=torch.float64)
+    model, layers = _prepared_layers(x)
+    export_dfp.write_artefacts(layers, tmp_path, bits=8, window_samples=1024,
+                               provenance={"test": True})
+
+    import json
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    specs = [golden_mod.LayerSpec.from_manifest(d) for d in manifest["layers"]]
+    golden = golden_mod.GoldenModel(
+        manifest, golden_mod.load_weights(tmp_path / "weights", specs, bits=8), bits=8)
+
+    last = layers[-1]
+    wrapper = export_dfp.GoldenWrapper(
+        golden, layers[0].p_in, 8, raw_margin,
+        logit_exponent=last.p_out, acc_exponent=last.p_in + last.p_weight)
+
+    with torch.no_grad():
+        want = model(x)
+        got = wrapper(x)
+
+    # Same order of magnitude as the float logits: an undequantised return
+    # would be off by 2**p_out (four times) or 2**(p_in+p_weight) (thousands).
+    assert got.abs().max() < 4 * want.abs().max() + 1.0
+
+    # And the thing the evaluator actually thresholds must survive. A saturated
+    # softmax is the specific failure this guards: it produces exactly 0 and 1.
+    p_want = torch.softmax(want, dim=1)[:, 1]
+    p_got = torch.softmax(got, dim=1)[:, 1]
+    assert (p_got - p_want).abs().max() < 0.25, (p_want.tolist(), p_got.tolist())
+    assert not torch.all((p_got == 0) | (p_got == 1)), "softmax saturated to 0/1"

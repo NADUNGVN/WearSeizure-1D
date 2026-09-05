@@ -456,9 +456,18 @@ class GoldenWrapper(nn.Module):
     would notice which.
     """
 
-    def __init__(self, golden, p_in: int, bits: int, raw_margin: bool) -> None:
+    def __init__(self, golden, p_in: int, bits: int, raw_margin: bool,
+                 logit_exponent: int, acc_exponent: int) -> None:
         super().__init__()
         self.golden, self.p_in, self.bits, self.raw_margin = golden, p_in, bits, raw_margin
+        # The scale the returned numbers must be divided by to become the real
+        # values the float model would have produced. This is not cosmetic:
+        # engine_baseline scores with softmax(logits)[:, 1] and compares against
+        # thresholds frozen from the FP32 run, so a logit that is 4x too large
+        # sharpens the softmax and a raw accumulator 4096x too large saturates
+        # it to exactly 0 or 1. Either way the frozen thresholds stop meaning
+        # what they meant, and the result looks like a quantisation finding.
+        self.scale = 2.0 ** (acc_exponent if raw_margin else logit_exponent)
         self._dummy = nn.Parameter(torch.zeros(1), requires_grad=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -478,7 +487,10 @@ class GoldenWrapper(nn.Module):
                 out[i] = [float(acc[0]), float(acc[1])]
             else:
                 out[i] = [float(logits[0, 0]), float(logits[1, 0])]
-        return torch.from_numpy(out).to(x.device, x.dtype)
+        # Back to the real scale before the evaluator takes a softmax. What the
+        # hardware stores is an integer; what it MEANS is that integer over
+        # 2**exponent, and the meaning is what the thresholds were fitted on.
+        return torch.from_numpy(out / self.scale).to(x.device, x.dtype)
 
 
 GOLDEN_SOURCE = Path(__file__).resolve().parents[1] / "hardware" / "golden_model.py"
@@ -752,7 +764,10 @@ def main(cfg: DictConfig) -> None:
             golden = golden_mod.GoldenModel(
                 json.loads((tmp / "manifest.json").read_text()),
                 golden_mod.load_weights(tmp / "weights", specs, bits=bits), bits=bits)
-            wrapper = GoldenWrapper(golden, layers[0].p_in, bits, raw_margin)
+            last = layers[-1]
+            wrapper = GoldenWrapper(golden, layers[0].p_in, bits, raw_margin,
+                                    logit_exponent=last.p_out,
+                                    acc_exponent=last.p_in + last.p_weight)
 
             result = evaluate_fold(
                 model=wrapper, records=records, fold=fold,
