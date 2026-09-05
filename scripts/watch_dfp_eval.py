@@ -69,6 +69,18 @@ def arm_status(arm_dir: Path) -> dict:
     }
 
 
+def arms_complete(base: Path, bits: int) -> bool:
+    """Both arms present AND finished.
+
+    Named rather than written inline as `all(...)`, because `all` over the arms
+    that happen to exist is vacuously true when only one of them has ever been
+    started -- which reads as "both arms complete" at exactly the moment the
+    second one still has three hours to run.
+    """
+    wanted = [base / f"dfp{bits}", base / f"dfp{bits}_acc"]
+    return all(d.is_dir() and arm_status(d)["done"] >= TOTAL_FOLDS for d in wanted)
+
+
 def render(root: Path, bits: int) -> None:
     procs = running_processes()
     print(f"\n{time.strftime('%H:%M:%S')}  processes: ", end="")
@@ -112,8 +124,13 @@ def render(root: Path, bits: int) -> None:
         if len(st["strays"]) > 5:
             print(f"      ... and {len(st['strays']) - 5} more")
 
-    if all(arm_status(a)["done"] >= TOTAL_FOLDS for a in arms):
-        print(f"\n  Both arms complete. The cohort number:")
+    if arms_complete(base, bits):
+        print("\n  Both arms complete. The cohort number:")
+        print(f"    python scripts/summarise_dfp_eval.py {root} --bits {bits}")
+    elif any(arm_status(a)["done"] >= TOTAL_FOLDS for a in arms):
+        missing = "accumulator" if not (base / f"dfp{bits}_acc").is_dir() else "logits"
+        print(f"\n  One arm is done; the {missing} arm has not run. Its number alone "
+              "is still\n  worth reading:")
         print(f"    python scripts/summarise_dfp_eval.py {root} --bits {bits}")
 
 
@@ -131,9 +148,7 @@ def main() -> int:
         render(root, args.bits)
         if not args.watch:
             return 0
-        base = root / "dfp_eval"
-        arms = sorted(base.glob(f"dfp{args.bits}*")) if base.is_dir() else []
-        if arms and all(arm_status(a)["done"] >= TOTAL_FOLDS for a in arms):
+        if arms_complete(root / "dfp_eval", args.bits):
             return 0
         time.sleep(args.every)
 
