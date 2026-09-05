@@ -32,6 +32,10 @@ from pathlib import Path
 import numpy as np
 
 TARGET_PP, MINIMUM_PP = 0.5, 1.0
+# Below this many folds, two arms agreeing on everything says nothing: in this
+# cohort they differ on about a fifth of folds, so a handful matching is the
+# common case rather than a symptom.
+MIN_FOLDS_FOR_IDENTITY = 10
 N_BOOT, N_EVENTS = 10_000, 77
 
 
@@ -205,6 +209,10 @@ def main() -> int:
             b = statistics.mean([arms[True][k]["sensitivity"] for k in shared])
             print(f"\n  reading the accumulator instead of the logits, on the "
                   f"{len(shared)} folds both\n  arms cover: {100 * (b - a):+.2f} pp")
+            if len(shared) < MIN_FOLDS_FOR_IDENTITY:
+                print(f"  Only {len(shared)} folds. One seizure in 77 is 1.3 pp, so "
+                      "this is not yet a\n  number -- wait for the second arm to "
+                      "finish.")
             print("  That is the price of pushing the final layer through the same "
                   "requantiser as\n  every other one. The value is already in the PE, "
                   "so recovering it costs no\n  hardware -- only an instruction bit.")
