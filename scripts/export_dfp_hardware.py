@@ -623,7 +623,20 @@ def main(cfg: DictConfig) -> None:
     golden_mod = load_golden(out_dir)
     results = []
 
+    n_skipped = 0
     for fold in (folds if do_evaluate else chosen):
+        if do_evaluate:
+            # Resume rather than restart. A fold costs about three minutes and
+            # there are 66 of them, so a run interrupted at fold 60 must not
+            # begin again at fold 1. A resumed run does not rewrite the RTL
+            # artefacts either -- those came from the first pass and are still
+            # the same weights.
+            done = (art / "dfp_eval" / eval_arm_dir(bits, raw_margin) / f"seed{seed}"
+                    / f"{fold.fold_id}.json")
+            if done.exists():
+                n_skipped += 1
+                continue
+
         ckpt = Path(src) / f"{fold.fold_id}.pt"
         metrics_path = Path(src) / f"{fold.fold_id}.metrics.json"
         if not ckpt.exists():
@@ -766,15 +779,22 @@ def main(cfg: DictConfig) -> None:
             log.info(f"{fold.fold_id}: sens={row['sensitivity']:.4f} "
                      f"FAR={row['far_per_hour']:.4f}")
 
+    if n_skipped:
+        log.info(f"{n_skipped} folds already had results and were skipped; delete "
+                 "their JSON to recompute them")
+
     if results:
         sens = float(np.mean([r["sensitivity"] for r in results]))
         far = float(np.mean([r["far_per_hour"] for r in results]))
-        print(f"\nDFP{bits} through the integer datapath, {len(results)} folds:")
+        scope = "the folds computed in THIS run" if n_skipped else "all folds"
+        print(f"\nDFP{bits} through the integer datapath, {len(results)} folds ({scope}):")
         print(f"  event sensitivity {sens:.4f}    FAR/h {far:.4f}")
-        print("  Compare against the FP32 row for the same folds. This is the number "
-              "to quote for the quantised model -- it includes the 48-bit accumulator, "
-              "the shift-based requantisation and the saturation that the fake-quantised "
-              "precision sweep does not model.")
+        if n_skipped:
+            print(f"  {n_skipped} further folds were already on disk and are NOT in "
+                  "this mean.\n  Do not quote it -- it covers whatever this run happened "
+                  "to recompute.")
+        print("  For the cohort number, paired against FP32 and clustered by patient:")
+        print(f"    python scripts/summarise_dfp_eval.py {art} --bits {bits}")
 
 
 if __name__ == "__main__":
