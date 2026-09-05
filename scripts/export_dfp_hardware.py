@@ -21,7 +21,7 @@ Two consequences that shaped the code:
 
 * The RTL has one 6-bit `OUTPUT_SHIFT` field per layer, so `p_weight` must be
   per-tensor, not per-channel. Per-channel scales were what the modelling side
-  preferred; `--report-per-channel` measures what per-tensor costs instead of
+  preferred; the single-fold run reports what per-tensor costs in dB instead of
   assuming it is fine, so the RTL team can decide with a number in hand.
 * The hardware runs the depthwise and pointwise convolutions as separate
   instructions, so it requantises BETWEEN them. The trained network has no
@@ -32,13 +32,21 @@ Because the evaluation protocol is patient-specific LOSO, there is no single
 "the model": each of the 66 folds trains its own weights. So the two jobs are
 kept separate.
 
-    # artefacts for RTL bring-up, from one fold
+Configuration is Hydra's, so the flags below take a leading `+` -- they add
+keys the base config does not define.
+
+    # artefacts for RTL bring-up, from one fold (the first, unless named)
     python scripts/export_dfp_hardware.py profile=server data=chbmit \\
-        model=wearseizure1d_k5only train.run_tag=L8 --export-fold chb01__chb01_03
+        model=wearseizure1d_k5only train.run_tag=L8 \\
+        +export.fold=chb01__chb01_03
 
     # the quotable accuracy number, every fold through the integer datapath
     python scripts/export_dfp_hardware.py profile=server data=chbmit \\
-        model=wearseizure1d_k5only train.run_tag=L8 --evaluate
+        model=wearseizure1d_k5only train.run_tag=L8 +export.evaluate=true
+
+Also available: `+export.bits=16` switches the whole toolchain to DFP16,
+`+export.out_dir=...` writes elsewhere, and `+export.raw_margin=true` scores
+from the final 48-bit accumulator rather than the two requantised logits.
 """
 from __future__ import annotations
 
@@ -76,6 +84,19 @@ SHIFT_FIELD_BITS = 6          # Controller.v: OUTPUT_SHIFT = instruction[27:22]
 # --------------------------------------------------------------------------
 # Decomposing the network into the fifteen layers the hardware executes
 # --------------------------------------------------------------------------
+
+def write_lf(path: Path, text: str) -> None:
+    """Write with Unix line endings, whatever platform the exporter runs on.
+
+    These files are read by Verilog `$readmemh` and by the RTL team's tools.
+    Python's default newline translation turns every "\\n" into "\\r\\n" when the
+    exporter runs on Windows, and a stray carriage return in a hex file is the
+    kind of defect that looks like a hardware bug for a day before anyone
+    thinks to open the file in a hex editor.
+    """
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(text)
+
 
 @dataclass
 class HwLayer:
@@ -361,10 +382,10 @@ def write_artefacts(layers: list[HwLayer], out_dir: Path, bits: int,
                      -(1 << (BIAS_BITS - 1)), (1 << (BIAS_BITS - 1)) - 1).astype(np.int64)
 
         safe = spec.name.replace(".", "_")
-        (weights_dir / f"{spec.layer_id:02d}_{safe}_weights.txt").write_text(
-            "".join(f"{int(v) & mask:0{digits}X}\n" for v in wq.ravel()), encoding="utf-8")
-        (weights_dir / f"{spec.layer_id:02d}_{safe}_bias.txt").write_text(
-            "".join(f"{int(v) & 0xFFFFFFFF:08X}\n" for v in bq.ravel()), encoding="utf-8")
+        write_lf(weights_dir / f"{spec.layer_id:02d}_{safe}_weights.txt",
+                 "".join(f"{int(v) & mask:0{digits}X}\n" for v in wq.ravel()))
+        write_lf(weights_dir / f"{spec.layer_id:02d}_{safe}_bias.txt",
+                 "".join(f"{int(v) & 0xFFFFFFFF:08X}\n" for v in bq.ravel()))
         total += wq.size
 
     manifest = {
@@ -400,15 +421,13 @@ def write_artefacts(layers: list[HwLayer], out_dir: Path, bits: int,
             "calibration": s.stats,
         } for s in layers],
     }
-    (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n",
-                                           encoding="utf-8")
+    write_lf(out_dir / "manifest.json", json.dumps(manifest, indent=2) + "\n")
 
     # The golden model travels with the artefacts it describes. The RTL team
     # runs it without this repository checked out, and a golden model that is a
     # version behind the manifest is worse than none at all.
     if GOLDEN_SOURCE.is_file() and GOLDEN_SOURCE.resolve() != (out_dir / "golden_model.py").resolve():
-        (out_dir / "golden_model.py").write_text(
-            GOLDEN_SOURCE.read_text(encoding="utf-8"), encoding="utf-8")
+        write_lf(out_dir / "golden_model.py", GOLDEN_SOURCE.read_text(encoding="utf-8"))
 
     log.info(f"wrote {total} weights, manifest.json and golden_model.py to {out_dir}")
 
@@ -452,6 +471,71 @@ class GoldenWrapper(nn.Module):
 
 
 GOLDEN_SOURCE = Path(__file__).resolve().parents[1] / "hardware" / "golden_model.py"
+
+
+def report_score_agreement(golden, layers: list[HwLayer], model: nn.Module,
+                           batches: list[torch.Tensor], bits: int,
+                           limit: int = 256) -> None:
+    """Does the integer datapath still rank windows the way the float model does?
+
+    Detection does not use the logits directly: a threshold, hysteresis and a
+    run-length filter turn a score sequence into events. What that pipeline
+    needs is that the ORDER of the scores survives quantisation, and that the
+    scores stay distinguishable enough for a threshold to sit between them.
+    Neither is implied by low weight error, so both are measured here.
+
+    The second row is the one to read. The RTL currently pushes the final layer
+    through the same requantiser as every other, which squeezes the two logits
+    into the data width and leaves the detector only a handful of distinct
+    scores. Reading the 48-bit accumulator instead costs nothing in hardware --
+    the value is already there -- and the two rows say what that is worth.
+    """
+    x = torch.cat(batches)[:limit]
+    with torch.no_grad():
+        fl = model(x).detach().cpu().numpy()
+    float_margin = fl[:, 1] - fl[:, 0]
+
+    lo, hi = -(1 << (bits - 1)), (1 << (bits - 1)) - 1
+    q = np.clip(np.round(x[:, 0].numpy() * 2.0 ** layers[0].p_in), lo, hi).astype(np.int64)
+    logit_margin, acc_margin = [], []
+    for i in range(q.shape[0]):
+        lg, _ = golden.run(q[i])
+        logit_margin.append(float(lg[1, 0] - lg[0, 0]))
+        a = golden.final_acc.flatten()
+        acc_margin.append(float(a[1] - a[0]))
+
+    def rank_corr(a: np.ndarray, b: np.ndarray) -> float:
+        ra, rb = np.argsort(np.argsort(a)), np.argsort(np.argsort(b))
+        if ra.std() == 0 or rb.std() == 0:
+            return float("nan")
+        return float(np.corrcoef(ra, rb)[0, 1])
+
+    print(f"\nscore agreement with the float model, {len(float_margin)} windows")
+    spread = float(float_margin.max() - float_margin.min())
+    scale = float(np.abs(float_margin).max()) + 1e-12
+    print(f"  float margin spans [{float_margin.min():+.4f}, {float_margin.max():+.4f}]"
+          f", spread {spread:.3e} ({100 * spread / scale:.2f}% of its magnitude)")
+    # Relative, not absolute: a model whose scores all sit near -0.165 and vary
+    # in the fifth decimal has no usable ranking either, and an absolute
+    # threshold would wave it through.
+    if spread / scale < 1e-3:
+        # Without a spread in the reference there is no order to preserve, so a
+        # rank correlation here would be a correlation between two orderings of
+        # noise. Saying so beats printing a number that means nothing.
+        print("  UNDETERMINED: the float model gives every window the same score, so "
+              "there is\n  no ranking for quantisation to preserve. This says the "
+              "checkpoint is degenerate,\n  not that the quantisation is good or bad. "
+              "Re-run on a trained checkpoint.")
+        return
+    for label, g in (("int logits", np.array(logit_margin)),
+                     ("48-bit accumulator", np.array(acc_margin))):
+        print(f"  {label:<20} spearman {rank_corr(float_margin, g):+.4f}   "
+              f"distinct scores {len(np.unique(g))}/{len(g)}   "
+              f"same sign {100 * np.mean((float_margin > 0) == (g > 0)):.1f}%")
+    print("  A low count of distinct scores means the detector cannot place a "
+          "threshold\n  between windows the float model separates, however well "
+          "the weights\n  were quantised. Re-run with +export.raw_margin=true to "
+          "score from the\n  accumulator instead.")
 
 
 def load_golden(_unused: Path | None = None):
@@ -605,12 +689,12 @@ def main(cfg: DictConfig) -> None:
             digits, mask = bits // 4, (1 << bits) - 1
             for i, (name, arr) in enumerate(trace.items()):
                 fname = f"{i:02d}_{name.split('_', 1)[-1].replace('.', '_')}.txt"
-                (vec_dir / fname).write_text(
-                    "".join(f"{int(v) & mask:0{digits}X}\n" for v in arr.ravel()),
-                    encoding="utf-8")
+                write_lf(vec_dir / fname,
+                         "".join(f"{int(v) & mask:0{digits}X}\n" for v in arr.ravel()))
             print(f"\nwrote {len(trace)} test vectors to {vec_dir}")
             print(f"peak accumulator on this window: {golden.peak_acc} "
                   f"({golden.peak_acc.bit_length()} bits of {ACC_BITS})")
+            report_score_agreement(golden, layers, model, batches, bits)
 
         if do_evaluate:
             params = json.loads(metrics_path.read_text(encoding="utf-8"))["frozen_postprocess"]["params"]

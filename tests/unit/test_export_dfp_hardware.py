@@ -234,3 +234,62 @@ def test_golden_model_reproduces_its_own_dumped_vectors(tmp_path):
     # The 48-bit accumulator exists to make overflow impossible; confirm that
     # this network gets nowhere near it, so the RTL team can size it knowingly.
     assert a.peak_acc.bit_length() < export_dfp.ACC_BITS
+
+
+def test_delivered_files_have_unix_line_endings(tmp_path):
+    """Verilog `$readmemh` reads these, and some simulators choke on a stray CR.
+
+    The exporter runs on Windows as often as not, where Python's default
+    newline translation silently turns every "\n" into "\r\n". The failure
+    that produces looks like a hardware bug, in someone else's repository,
+    with no clue pointing back here.
+    """
+    if not GOLDEN_PATH.is_file():
+        pytest.skip(f"golden_model.py not present at {GOLDEN_PATH}")
+
+    model = build_k5only()
+    layers = export_dfp.decompose(model)
+    x = torch.randn(2, 1, 1024, dtype=torch.float64)
+    probe: list = []
+    export_dfp.float_forward(layers, x, collect=probe)
+    for spec, (_, t) in zip(layers, probe[1:]):
+        spec.out_length = int(t.shape[2])
+    for spec, prev in zip(layers, [probe[0][1]] + [t for _, t in probe[1:-1]]):
+        spec.in_length = int(prev.shape[2])
+    export_dfp.calibrate(layers, [x], bits=8)
+    export_dfp.write_artefacts(layers, tmp_path, bits=8, window_samples=1024,
+                               provenance={"test": True})
+
+    written = list(tmp_path.rglob("*"))
+    assert any(p.suffix == ".txt" for p in written), "no hex files were written"
+    for path in written:
+        if path.is_file():
+            assert b"\r" not in path.read_bytes(), path.name
+
+
+def test_agreement_report_refuses_to_score_a_constant_model(capsys):
+    """A rank correlation needs a ranking. Without one, say so.
+
+    A degenerate checkpoint gives every window the same score. Correlating
+    against that produces a number between -1 and 1 that is pure noise, and a
+    reader who takes it for a quantisation result reaches the opposite of the
+    truth.
+    """
+    class Constant(torch.nn.Module):
+        def forward(self, x):
+            return torch.zeros(x.shape[0], 2, dtype=x.dtype)
+
+    class FakeGolden:
+        final_acc = np.zeros((2, 1), dtype=np.int64)
+
+        def run(self, _):
+            return np.zeros((2, 1), dtype=np.int64), {}
+
+    layers = export_dfp.decompose(build_k5only())
+    layers[0].p_in = 5
+    export_dfp.report_score_agreement(
+        FakeGolden(), layers, Constant(),
+        [torch.randn(4, 1, 1024, dtype=torch.float64)], bits=8)
+    out = capsys.readouterr().out
+    assert "UNDETERMINED" in out
+    assert "spearman" not in out

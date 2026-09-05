@@ -388,9 +388,12 @@ def main() -> int:
         mask, digits = (1 << args.bits) - 1, args.bits // 4
         for i, (name, arr) in enumerate(trace.items()):
             fname = f"{i:02d}_{name.split('_', 1)[-1].replace('.', '_')}.txt"
-            (out / fname).write_text(
-                "".join(f"{int(v) & mask:0{digits}X}\n" for v in arr.flatten()),
-                encoding="utf-8")
+            # Unix line endings whatever the platform: these are read by
+            # Verilog $readmemh, and a stray carriage return in a hex file
+            # looks like a hardware bug for a day.
+            with open(out / fname, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write("".join(f"{int(v) & mask:0{digits}X}\n"
+                                 for v in arr.flatten()))
         print(f"wrote {len(trace)} vectors to {out}")
     return 0
 
