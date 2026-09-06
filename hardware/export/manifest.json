@@ -1,0 +1,532 @@
+{
+  "model_name": "WearSeizure-1D (k5_only)",
+  "precision": "DFP8",
+  "generated_by": "WearSeizure-1D/scripts/export_dfp_hardware.py",
+  "provenance": {
+    "fold_id": "chb01__chb01_03",
+    "seed": 0,
+    "run_tag": "L8",
+    "model": "wearseizure1d_k5only",
+    "split": "patient_specific_loso_edf",
+    "checkpoint": "/home/ubuntu/Manh/WearSeizure-1D-artifacts/wearseizure1d_k5only/patient_specific_loso_edf/w4s_stride1s__L8/seed0/chb01__chb01_03.pt",
+    "calibrated_on": "validation partition of this fold"
+  },
+  "sampling_rate_hz": 256,
+  "window_samples": 1024,
+  "num_classes": 2,
+  "total_weights": 11128,
+  "input_exponent": 3,
+  "notes": [
+    "A tensor stored with exponent p represents the real value q / 2**p.",
+    "output_shift = p_in + p_weight - p_out, applied with round-to-nearest ties-away-from-zero, matching Fixed_Point_Quantizer.v.",
+    "Biases are scaled to the ACCUMULATOR fixed point (p_in + p_weight), because PE.v loads the bias as the accumulator's initial value.",
+    "`relu` is part of the network, not of the reference RTL, which has no activation unit yet."
+  ],
+  "memory_config": {
+    "num_banks": 16,
+    "dwidth": 8,
+    "bank_depth": 1024
+  },
+  "layers": [
+    {
+      "layer_id": 1,
+      "name": "stem.0",
+      "type": "conv1d",
+      "in_channels": 1,
+      "out_channels": 8,
+      "in_length": 1024,
+      "out_length": 512,
+      "kernel_size": 7,
+      "stride": 2,
+      "dilation": 1,
+      "padding": 3,
+      "relu": true,
+      "p_in": 3,
+      "p_weight": 6,
+      "p_out": 3,
+      "output_shift": 6,
+      "src_fm_sel": 0,
+      "dst_fm_sel": 1,
+      "calibration": {
+        "weight": {
+          "peak": 1.0211053631437512,
+          "clipped_frac": 0.0,
+          "sqnr_db": 36.900540853478454,
+          "exponent_no_clip": 6
+        },
+        "activation": {
+          "peak": 23.29627986659099,
+          "clipped_frac": 2.288818359375e-05,
+          "sqnr_db": 22.562799540545974,
+          "exponent_no_clip": 2
+        },
+        "input": {
+          "p_in": 3
+        }
+      }
+    },
+    {
+      "layer_id": 2,
+      "name": "b1.dw",
+      "type": "depthwise",
+      "in_channels": 8,
+      "out_channels": 8,
+      "in_length": 512,
+      "out_length": 256,
+      "kernel_size": 5,
+      "stride": 2,
+      "dilation": 1,
+      "padding": 2,
+      "relu": false,
+      "p_in": 3,
+      "p_weight": 8,
+      "p_out": 4,
+      "output_shift": 7,
+      "src_fm_sel": 1,
+      "dst_fm_sel": 0,
+      "calibration": {
+        "weight": {
+          "peak": 0.5016104578971863,
+          "clipped_frac": 0.025,
+          "sqnr_db": 47.378417416783634,
+          "exponent_no_clip": 7
+        },
+        "activation": {
+          "peak": 9.877760048118075,
+          "clipped_frac": 4.863739013671875e-05,
+          "sqnr_db": 23.340568814415704,
+          "exponent_no_clip": 3
+        }
+      }
+    },
+    {
+      "layer_id": 3,
+      "name": "b1.pw",
+      "type": "pointwise",
+      "in_channels": 8,
+      "out_channels": 16,
+      "in_length": 256,
+      "out_length": 256,
+      "kernel_size": 1,
+      "stride": 1,
+      "dilation": 1,
+      "padding": 0,
+      "relu": true,
+      "p_in": 4,
+      "p_weight": 5,
+      "p_out": 3,
+      "output_shift": 6,
+      "src_fm_sel": 0,
+      "dst_fm_sel": 1,
+      "calibration": {
+        "weight": {
+          "peak": 3.489084410375299,
+          "clipped_frac": 0.0,
+          "sqnr_db": 40.44907903682543,
+          "exponent_no_clip": 5
+        },
+        "activation": {
+          "peak": 20.919502048423,
+          "clipped_frac": 1.52587890625e-05,
+          "sqnr_db": 24.4528993878911,
+          "exponent_no_clip": 2
+        }
+      }
+    },
+    {
+      "layer_id": 4,
+      "name": "b2.dw",
+      "type": "depthwise",
+      "in_channels": 16,
+      "out_channels": 16,
+      "in_length": 256,
+      "out_length": 128,
+      "kernel_size": 5,
+      "stride": 2,
+      "dilation": 1,
+      "padding": 2,
+      "relu": true,
+      "p_in": 3,
+      "p_weight": 5,
+      "p_out": 3,
+      "output_shift": 5,
+      "src_fm_sel": 1,
+      "dst_fm_sel": 0,
+      "calibration": {
+        "weight": {
+          "peak": 2.3471052838292477,
+          "clipped_frac": 0.0,
+          "sqnr_db": 40.75481503397239,
+          "exponent_no_clip": 5
+        },
+        "activation": {
+          "peak": 22.937736890693,
+          "clipped_frac": 4.100799560546875e-05,
+          "sqnr_db": 24.323904736579912,
+          "exponent_no_clip": 2
+        }
+      }
+    },
+    {
+      "layer_id": 5,
+      "name": "b2.pw",
+      "type": "pointwise",
+      "in_channels": 16,
+      "out_channels": 24,
+      "in_length": 128,
+      "out_length": 128,
+      "kernel_size": 1,
+      "stride": 1,
+      "dilation": 1,
+      "padding": 0,
+      "relu": true,
+      "p_in": 3,
+      "p_weight": 6,
+      "p_out": 3,
+      "output_shift": 6,
+      "src_fm_sel": 0,
+      "dst_fm_sel": 1,
+      "calibration": {
+        "weight": {
+          "peak": 1.1959641743691973,
+          "clipped_frac": 0.0,
+          "sqnr_db": 39.956562715153474,
+          "exponent_no_clip": 6
+        },
+        "activation": {
+          "peak": 24.182281038449858,
+          "clipped_frac": 4.4504801432291664e-05,
+          "sqnr_db": 24.677809953962708,
+          "exponent_no_clip": 2
+        }
+      }
+    },
+    {
+      "layer_id": 6,
+      "name": "b3.dw",
+      "type": "depthwise",
+      "in_channels": 24,
+      "out_channels": 24,
+      "in_length": 128,
+      "out_length": 64,
+      "kernel_size": 5,
+      "stride": 2,
+      "dilation": 2,
+      "padding": 4,
+      "relu": true,
+      "p_in": 3,
+      "p_weight": 6,
+      "p_out": 2,
+      "output_shift": 7,
+      "src_fm_sel": 1,
+      "dst_fm_sel": 0,
+      "calibration": {
+        "weight": {
+          "peak": 1.752205171832104,
+          "clipped_frac": 0.0,
+          "sqnr_db": 45.68548424465043,
+          "exponent_no_clip": 6
+        },
+        "activation": {
+          "peak": 31.227346757518188,
+          "clipped_frac": 0.0,
+          "sqnr_db": 21.871363454333796,
+          "exponent_no_clip": 2
+        }
+      }
+    },
+    {
+      "layer_id": 7,
+      "name": "b3.pw",
+      "type": "pointwise",
+      "in_channels": 24,
+      "out_channels": 32,
+      "in_length": 64,
+      "out_length": 64,
+      "kernel_size": 1,
+      "stride": 1,
+      "dilation": 1,
+      "padding": 0,
+      "relu": true,
+      "p_in": 2,
+      "p_weight": 6,
+      "p_out": 3,
+      "output_shift": 5,
+      "src_fm_sel": 0,
+      "dst_fm_sel": 1,
+      "calibration": {
+        "weight": {
+          "peak": 1.1685518483191957,
+          "clipped_frac": 0.0,
+          "sqnr_db": 36.4349995649079,
+          "exponent_no_clip": 6
+        },
+        "activation": {
+          "peak": 21.90472247197579,
+          "clipped_frac": 5.7220458984375e-06,
+          "sqnr_db": 25.96161049306123,
+          "exponent_no_clip": 2
+        }
+      }
+    },
+    {
+      "layer_id": 8,
+      "name": "b4.dw",
+      "type": "depthwise",
+      "in_channels": 32,
+      "out_channels": 32,
+      "in_length": 64,
+      "out_length": 32,
+      "kernel_size": 5,
+      "stride": 2,
+      "dilation": 4,
+      "padding": 8,
+      "relu": true,
+      "p_in": 3,
+      "p_weight": 5,
+      "p_out": 3,
+      "output_shift": 5,
+      "src_fm_sel": 1,
+      "dst_fm_sel": 0,
+      "calibration": {
+        "weight": {
+          "peak": 3.1045136643268725,
+          "clipped_frac": 0.0,
+          "sqnr_db": 41.027423389193494,
+          "exponent_no_clip": 5
+        },
+        "activation": {
+          "peak": 25.82090609117449,
+          "clipped_frac": 4.38690185546875e-05,
+          "sqnr_db": 24.42183247631913,
+          "exponent_no_clip": 2
+        }
+      }
+    },
+    {
+      "layer_id": 9,
+      "name": "b4.pw",
+      "type": "pointwise",
+      "in_channels": 32,
+      "out_channels": 48,
+      "in_length": 32,
+      "out_length": 32,
+      "kernel_size": 1,
+      "stride": 1,
+      "dilation": 1,
+      "padding": 0,
+      "relu": true,
+      "p_in": 3,
+      "p_weight": 6,
+      "p_out": 3,
+      "output_shift": 6,
+      "src_fm_sel": 0,
+      "dst_fm_sel": 1,
+      "calibration": {
+        "weight": {
+          "peak": 1.302009714483008,
+          "clipped_frac": 0.0,
+          "sqnr_db": 36.91551497517045,
+          "exponent_no_clip": 6
+        },
+        "activation": {
+          "peak": 23.976625881622134,
+          "clipped_frac": 1.1444091796875e-05,
+          "sqnr_db": 25.963309788222745,
+          "exponent_no_clip": 2
+        }
+      }
+    },
+    {
+      "layer_id": 10,
+      "name": "context.0.dw",
+      "type": "depthwise",
+      "in_channels": 48,
+      "out_channels": 48,
+      "in_length": 32,
+      "out_length": 32,
+      "kernel_size": 5,
+      "stride": 1,
+      "dilation": 8,
+      "padding": 16,
+      "relu": false,
+      "p_in": 3,
+      "p_weight": 7,
+      "p_out": 4,
+      "output_shift": 6,
+      "src_fm_sel": 1,
+      "dst_fm_sel": 0,
+      "calibration": {
+        "weight": {
+          "peak": 0.6466682553291321,
+          "clipped_frac": 0.0,
+          "sqnr_db": 41.73770074398921,
+          "exponent_no_clip": 7
+        },
+        "activation": {
+          "peak": 15.839574255269133,
+          "clipped_frac": 2.7974446614583332e-05,
+          "sqnr_db": 23.131681272609782,
+          "exponent_no_clip": 3
+        }
+      }
+    },
+    {
+      "layer_id": 11,
+      "name": "context.0.pw",
+      "type": "pointwise",
+      "in_channels": 48,
+      "out_channels": 64,
+      "in_length": 32,
+      "out_length": 32,
+      "kernel_size": 1,
+      "stride": 1,
+      "dilation": 1,
+      "padding": 0,
+      "relu": true,
+      "p_in": 4,
+      "p_weight": 6,
+      "p_out": 4,
+      "output_shift": 6,
+      "src_fm_sel": 0,
+      "dst_fm_sel": 1,
+      "calibration": {
+        "weight": {
+          "peak": 1.8210799265300408,
+          "clipped_frac": 0.0,
+          "sqnr_db": 40.17333701735111,
+          "exponent_no_clip": 6
+        },
+        "activation": {
+          "peak": 16.419622166726587,
+          "clipped_frac": 3.814697265625e-05,
+          "sqnr_db": 28.004650957118123,
+          "exponent_no_clip": 2
+        }
+      }
+    },
+    {
+      "layer_id": 12,
+      "name": "context.1.dw",
+      "type": "depthwise",
+      "in_channels": 64,
+      "out_channels": 64,
+      "in_length": 32,
+      "out_length": 32,
+      "kernel_size": 5,
+      "stride": 1,
+      "dilation": 16,
+      "padding": 32,
+      "relu": false,
+      "p_in": 4,
+      "p_weight": 7,
+      "p_out": 4,
+      "output_shift": 7,
+      "src_fm_sel": 1,
+      "dst_fm_sel": 0,
+      "calibration": {
+        "weight": {
+          "peak": 0.5846248865127563,
+          "clipped_frac": 0.0,
+          "sqnr_db": 41.67189976967318,
+          "exponent_no_clip": 7
+        },
+        "activation": {
+          "peak": 10.201073485406994,
+          "clipped_frac": 2.86102294921875e-06,
+          "sqnr_db": 24.19486484534321,
+          "exponent_no_clip": 3
+        }
+      }
+    },
+    {
+      "layer_id": 13,
+      "name": "context.1.pw",
+      "type": "pointwise",
+      "in_channels": 64,
+      "out_channels": 64,
+      "in_length": 32,
+      "out_length": 32,
+      "kernel_size": 1,
+      "stride": 1,
+      "dilation": 1,
+      "padding": 0,
+      "relu": true,
+      "p_in": 4,
+      "p_weight": 5,
+      "p_out": 4,
+      "output_shift": 5,
+      "src_fm_sel": 0,
+      "dst_fm_sel": 1,
+      "calibration": {
+        "weight": {
+          "peak": 2.6156289292733836,
+          "clipped_frac": 0.0,
+          "sqnr_db": 34.539371083305966,
+          "exponent_no_clip": 5
+        },
+        "activation": {
+          "peak": 18.53679165223218,
+          "clipped_frac": 6.961822509765625e-05,
+          "sqnr_db": 31.54557793099037,
+          "exponent_no_clip": 2
+        }
+      }
+    },
+    {
+      "layer_id": 14,
+      "name": "gap",
+      "type": "gap",
+      "in_channels": 64,
+      "out_channels": 64,
+      "in_length": 32,
+      "out_length": 1,
+      "kernel_size": 1,
+      "stride": 1,
+      "dilation": 1,
+      "padding": 0,
+      "relu": false,
+      "p_in": 4,
+      "p_weight": 0,
+      "p_out": 4,
+      "output_shift": 5,
+      "src_fm_sel": 1,
+      "dst_fm_sel": 0,
+      "calibration": {}
+    },
+    {
+      "layer_id": 15,
+      "name": "fc",
+      "type": "linear",
+      "in_channels": 64,
+      "out_channels": 2,
+      "in_length": 1,
+      "out_length": 1,
+      "kernel_size": 1,
+      "stride": 1,
+      "dilation": 1,
+      "padding": 0,
+      "relu": false,
+      "p_in": 4,
+      "p_weight": 8,
+      "p_out": 2,
+      "output_shift": 10,
+      "src_fm_sel": 0,
+      "dst_fm_sel": 1,
+      "calibration": {
+        "weight": {
+          "peak": 0.37874698638916016,
+          "clipped_frac": 0.0,
+          "sqnr_db": 45.98251539673466,
+          "exponent_no_clip": 8
+        },
+        "activation": {
+          "peak": 21.089862232199273,
+          "clipped_frac": 0.0,
+          "sqnr_db": 35.255439485203496,
+          "exponent_no_clip": 2
+        }
+      }
+    }
+  ]
+}
