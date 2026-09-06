@@ -78,6 +78,24 @@ RELU_AFTER = frozenset({
 ACC_BITS = 48
 
 
+def all_layers(manifest: dict) -> list[dict]:
+    """Every layer of the network, in order, from either manifest schema.
+
+    The manifest splits the network by where it runs: `layers` holds the
+    thirteen the accelerator executes as micro-instructions, `software_layers`
+    the two the host ARM runs -- global average pooling, which is a shift, and
+    the 64-to-2 classifier. That split is right for the RTL, which must compile
+    exactly thirteen instructions.
+
+    It is wrong for this model, which has to reproduce the whole network end to
+    end whatever executes each part. So they are read back together and ordered
+    by layer_id. An older flat manifest with all fifteen under `layers` still
+    works unchanged.
+    """
+    merged = list(manifest.get("layers", [])) + list(manifest.get("software_layers", []))
+    return sorted(merged, key=lambda d: d["layer_id"])
+
+
 @dataclass(frozen=True)
 class LayerSpec:
     layer_id: int
@@ -198,7 +216,7 @@ class GoldenModel:
 
     def __init__(self, manifest: dict, weights: dict, bits: int = 8,
                  check_overflow: bool = False) -> None:
-        self.specs = [LayerSpec.from_manifest(d) for d in manifest["layers"]]
+        self.specs = [LayerSpec.from_manifest(d) for d in all_layers(manifest)]
         self.weights = weights
         self.bits = bits
         self.check_overflow = check_overflow
@@ -360,7 +378,7 @@ def main() -> int:
         return self_test()
 
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    specs = [LayerSpec.from_manifest(d) for d in manifest["layers"]]
+    specs = [LayerSpec.from_manifest(d) for d in all_layers(manifest)]
     weights = load_weights(Path(args.weights), specs, bits=args.bits)
 
     if args.input:

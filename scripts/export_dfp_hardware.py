@@ -416,27 +416,13 @@ def write_artefacts(layers: list[HwLayer], out_dir: Path, bits: int,
                  "".join(f"{int(v) & 0xFFFFFFFF:08X}\n" for v in bq.ravel()))
         total += wq.size
 
-    manifest = {
-        "model_name": "WearSeizure-1D (k5_only)",
-        "precision": f"DFP{bits}",
-        "generated_by": "WearSeizure-1D/scripts/export_dfp_hardware.py",
-        "provenance": provenance,
-        "sampling_rate_hz": 256,
-        "window_samples": window_samples,
-        "num_classes": 2,
-        "total_weights": total,
-        "input_exponent": layers[0].p_in,
-        "notes": [
-            "A tensor stored with exponent p represents the real value q / 2**p.",
-            "output_shift = p_in + p_weight - p_out, applied with round-to-nearest "
-            "ties-away-from-zero, matching Fixed_Point_Quantizer.v.",
-            "Biases are scaled to the ACCUMULATOR fixed point (p_in + p_weight), "
-            "because PE.v loads the bias as the accumulator's initial value.",
-            "`relu` is part of the network, not of the reference RTL, which has no "
-            "activation unit yet.",
-        ],
-        "memory_config": {"num_banks": 16, "dwidth": bits, "bank_depth": 1024},
-        "layers": [{
+    # The RTL team's schema, not ours: they split the fifteen layers into the
+    # thirteen the accelerator executes as micro-instructions and the two the
+    # host ARM runs (GAP, which is a shift, and the 64->2 classifier). Their
+    # generate_instructions.py compiles `layers` and would silently emit two
+    # instructions too many if we handed it all fifteen.
+    def entry(s: HwLayer) -> dict:
+        return {
             "layer_id": s.layer_id, "name": s.name, "type": s.type,
             "in_channels": s.in_channels, "out_channels": s.out_channels,
             "in_length": s.in_length, "out_length": s.out_length,
@@ -447,7 +433,43 @@ def write_artefacts(layers: list[HwLayer], out_dir: Path, bits: int,
             "output_shift": s.output_shift,
             "src_fm_sel": s.layer_id % 2 ^ 1, "dst_fm_sel": s.layer_id % 2,
             "calibration": s.stats,
-        } for s in layers],
+        }
+
+    hardware = [s for s in layers if s.type in ("conv1d", "depthwise", "pointwise")]
+    software = [s for s in layers if s not in hardware]
+
+    manifest = {
+        "model_name": "WearSeizure-1D (k5_only)",
+        "precision": f"DFP{bits}",
+        # Their generate_instructions.py greps this field for "STUB" and stamps
+        # a warning banner into instructions.hex when it finds one. These shifts
+        # are measured, so the banner must stop appearing -- clearing the field
+        # is the handshake, not a cosmetic edit.
+        "_quantization_status": (
+            f"CALIBRATED: per-layer exponents measured on the trained checkpoint "
+            f"({provenance.get('fold_id', 'unknown fold')}), activations calibrated on "
+            "that fold's validation windows. Not placeholders."
+        ),
+        "generated_by": "WearSeizure-1D/scripts/export_dfp_hardware.py",
+        "provenance": provenance,
+        "sampling_rate_hz": 256,
+        "window_samples": window_samples,
+        "num_classes": 2,
+        "total_weights": total,
+        "input_exponent": layers[0].p_in,
+        "hardware_instruction_count": len(hardware),
+        "notes": [
+            "A tensor stored with exponent p represents the real value q / 2**p.",
+            "output_shift = p_in + p_weight - p_out, applied with round-to-nearest "
+            "ties-away-from-zero, matching Fixed_Point_Quantizer.v.",
+            "Biases are scaled to the ACCUMULATOR fixed point (p_in + p_weight), "
+            "because PE.v loads the bias as the accumulator's initial value.",
+            "`relu` is part of the network, not of the reference RTL, which has no "
+            "activation unit yet.",
+        ],
+        "memory_config": {"num_banks": 16, "dwidth": bits, "bank_depth": 1024},
+        "layers": [entry(s) for s in hardware],
+        "software_layers": [entry(s) for s in software],
     }
     write_lf(out_dir / "manifest.json", json.dumps(manifest, indent=2) + "\n")
 
@@ -763,7 +785,7 @@ def main(cfg: DictConfig) -> None:
             manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
             weights = golden_mod.load_weights(
                 out_dir / "weights",
-                [golden_mod.LayerSpec.from_manifest(d) for d in manifest["layers"]],
+                [golden_mod.LayerSpec.from_manifest(d) for d in golden_mod.all_layers(manifest)],
                 bits=bits)
             golden = golden_mod.GoldenModel(manifest, weights, bits=bits,
                                             check_overflow=True)
@@ -784,18 +806,16 @@ def main(cfg: DictConfig) -> None:
 
         if do_evaluate:
             params = json.loads(metrics_path.read_text(encoding="utf-8"))["frozen_postprocess"]["params"]
-            manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
-            # Each fold has its OWN weights, so the manifest's shifts are
-            # re-derived per fold; only the shapes are shared.
-            for entry, spec in zip(manifest["layers"], layers):
-                entry.update({"p_in": spec.p_in, "p_weight": spec.p_weight,
-                              "p_out": spec.p_out, "output_shift": spec.output_shift,
-                              "in_length": spec.in_length, "out_length": spec.out_length})
+            # Each fold has its OWN weights, so its shifts are calibrated
+            # separately and written to their own directory. write_artefacts
+            # builds the manifest from `layers`, so patching a copy of the
+            # shared manifest first -- which an earlier version did -- achieved
+            # nothing except assuming a flat layer list.
             tmp = ensure_dir(art / "dfp_export" / fold.fold_id)
             write_artefacts(layers, tmp, bits, int(batches[0].shape[2]),
                             provenance={"fold_id": fold.fold_id, "seed": seed})
             specs = [golden_mod.LayerSpec.from_manifest(d)
-                     for d in json.loads((tmp / "manifest.json").read_text())["layers"]]
+                     for d in golden_mod.all_layers(json.loads((tmp / "manifest.json").read_text()))]
             golden = golden_mod.GoldenModel(
                 json.loads((tmp / "manifest.json").read_text()),
                 golden_mod.load_weights(tmp / "weights", specs, bits=bits), bits=bits)

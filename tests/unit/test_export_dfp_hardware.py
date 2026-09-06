@@ -176,7 +176,7 @@ def test_exported_hex_reloads_to_exactly_what_was_quantised(tmp_path):
 
     import json
     manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
-    specs = [golden.LayerSpec.from_manifest(d) for d in manifest["layers"]]
+    specs = [golden.LayerSpec.from_manifest(d) for d in golden.all_layers(manifest)]
     loaded = golden.load_weights(tmp_path / "weights", specs, bits=8)
 
     for spec in layers:
@@ -219,7 +219,7 @@ def test_golden_model_reproduces_its_own_dumped_vectors(tmp_path):
 
     import json
     manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
-    specs = [golden.LayerSpec.from_manifest(d) for d in manifest["layers"]]
+    specs = [golden.LayerSpec.from_manifest(d) for d in golden.all_layers(manifest)]
     weights = golden.load_weights(tmp_path / "weights", specs, bits=8)
 
     q = np.clip(np.round(x[0, 0].numpy() * 2.0 ** layers[0].p_in), -128, 127).astype(np.int64)
@@ -335,7 +335,7 @@ def test_wrapper_returns_real_values_not_stored_integers(tmp_path, raw_margin):
 
     import json
     manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
-    specs = [golden_mod.LayerSpec.from_manifest(d) for d in manifest["layers"]]
+    specs = [golden_mod.LayerSpec.from_manifest(d) for d in golden_mod.all_layers(manifest)]
     golden = golden_mod.GoldenModel(
         manifest, golden_mod.load_weights(tmp_path / "weights", specs, bits=8), bits=8)
 
@@ -358,3 +358,42 @@ def test_wrapper_returns_real_values_not_stored_integers(tmp_path, raw_margin):
     p_got = torch.softmax(got, dim=1)[:, 1]
     assert (p_got - p_want).abs().max() < 0.25, (p_want.tolist(), p_got.tolist())
     assert not torch.all((p_got == 0) | (p_got == 1)), "softmax saturated to 0/1"
+
+
+def test_manifest_splits_hardware_from_software_layers(tmp_path):
+    """The RTL team's schema, which their instruction compiler depends on.
+
+    `generate_instructions.py` compiles every entry of `layers` into one 64-bit
+    micro-instruction. GAP is a shift and the classifier is 64->2, both run on
+    the host ARM, so they live under `software_layers`. Handing all fifteen
+    back under `layers` would compile two instructions the accelerator cannot
+    execute, and the count is checked into their repository as 13.
+
+    Their `generate_instructions.py` also greps `_quantization_status` for
+    "STUB" and stamps a warning banner into instructions.hex when it matches.
+    These shifts are measured, so that banner must stop appearing.
+    """
+    if not GOLDEN_PATH.is_file():
+        pytest.skip(f"golden_model.py not present at {GOLDEN_PATH}")
+    golden = export_dfp.load_golden()
+
+    x = torch.randn(2, 1, 1024, dtype=torch.float64)
+    _model, layers = _prepared_layers(x)
+    export_dfp.write_artefacts(layers, tmp_path, bits=8, window_samples=1024,
+                               provenance={"fold_id": "chb01__chb01_03"})
+
+    import json
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert [d["layer_id"] for d in manifest["layers"]] == list(range(1, 14))
+    assert [d["layer_id"] for d in manifest["software_layers"]] == [14, 15]
+    assert manifest["hardware_instruction_count"] == 13
+    assert "STUB" not in manifest["_quantization_status"]
+
+    # And the golden model must still see the whole network: it reproduces the
+    # network end to end, whatever executes each part.
+    merged = golden.all_layers(manifest)
+    assert [d["layer_id"] for d in merged] == list(range(1, 16))
+
+    # A flat manifest, as written before the split, still reads back whole.
+    flat = {"layers": manifest["layers"] + manifest["software_layers"]}
+    assert [d["layer_id"] for d in golden.all_layers(flat)] == list(range(1, 16))
