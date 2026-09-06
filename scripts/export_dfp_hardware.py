@@ -44,9 +44,18 @@ keys the base config does not define.
     python scripts/export_dfp_hardware.py profile=server data=chbmit \\
         model=wearseizure1d_k5only train.run_tag=L8 +export.evaluate=true
 
+    # what the format costs once its operating point is chosen for it
+    python scripts/export_dfp_hardware.py profile=server data=chbmit \\
+        model=wearseizure1d_k5only train.run_tag=L8 \\
+        +export.evaluate=true +export.refit_thresholds=true
+
 Also available: `+export.bits=16` switches the whole toolchain to DFP16,
 `+export.out_dir=...` writes elsewhere, and `+export.raw_margin=true` scores
 from the final 48-bit accumulator rather than the two requantised logits.
+
+Each combination of those last two writes to its own results directory and is
+resumable, so an interrupted run continues where it stopped and a second
+variation cannot overwrite the first.
 """
 from __future__ import annotations
 
@@ -85,15 +94,23 @@ SHIFT_FIELD_BITS = 6          # Controller.v: OUTPUT_SHIFT = instruction[27:22]
 # Decomposing the network into the fifteen layers the hardware executes
 # --------------------------------------------------------------------------
 
-def eval_arm_dir(bits: int, raw_margin: bool) -> str:
-    """Where a scoring arm's per-fold results live.
+def eval_arm_dir(bits: int, raw_margin: bool, refit: bool = False) -> str:
+    """Where one evaluation arm's per-fold results live.
 
-    The two arms -- the requantised logits and the raw 48-bit accumulator --
-    answer different questions and each takes hours to produce, so they must not
-    land in the same directory. The second run would overwrite the first, and
-    the loss would be silent.
+    Each arm answers a different question and each takes hours to produce, so
+    they must not land in the same directory: the second run would overwrite
+    the first and the loss would be silent.
+
+    Two axes. `raw_margin` chooses what the detector reads -- the requantised
+    logits or the final 48-bit accumulator. `refit` chooses whether the
+    post-processing thresholds are frozen from the FP32 run or fitted afresh on
+    this format's own validation scores. Frozen answers "what does quantisation
+    cost if nothing is re-tuned"; refitted answers "what does it cost if the
+    operating point is chosen for the format you are actually shipping", which
+    is the deployed number.
     """
-    return f"dfp{bits}" + ("_acc" if raw_margin else "")
+    return (f"dfp{bits}" + ("_acc" if raw_margin else "")
+            + ("_refit" if refit else ""))
 
 
 def write_lf(path: Path, text: str) -> None:
@@ -594,6 +611,22 @@ def main(cfg: DictConfig) -> None:
     export_fold = cfg.get("export", {}).get("fold", None)
     do_evaluate = bool(cfg.get("export", {}).get("evaluate", False))
     raw_margin = bool(cfg.get("export", {}).get("raw_margin", False))
+    refit = bool(cfg.get("export", {}).get("refit_thresholds", False))
+    # The same search the training run used, read from config rather than
+    # restated here -- a second copy of a grid is a second thing to keep in
+    # step, and a threshold grid that quietly differs from the one the FP32
+    # arm used would make the comparison meaningless.
+    search = cfg.postprocess.get("threshold_search", {})
+    grid_on = list(search.get("on_grid", []))
+    grid_off = list(search.get("off_grid", []))
+    far_cap = cfg.postprocess.get("far_cap_per_hour")
+    objective = cfg.postprocess.get("objective", "max_sensitivity")
+    if refit and not (grid_on and grid_off):
+        raise SystemExit(
+            "+export.refit_thresholds=true needs postprocess.threshold_search.on_grid "
+            "and off_grid. The current postprocess config has no grid, so there is "
+            "nothing to search and the run would silently reuse the frozen values."
+        )
     n_cal_batches = int(cfg.get("export", {}).get("calibration_batches", 8))
 
     run_tag = run_tag_from_cfg(cfg)
@@ -617,7 +650,7 @@ def main(cfg: DictConfig) -> None:
         # Fail now rather than after three hours of overwriting. A directory
         # already holding the other scoring arm's rows means another run is
         # writing here, and its results would be replaced silently.
-        existing = art / "dfp_eval" / eval_arm_dir(bits, raw_margin) / f"seed{seed}"
+        existing = art / "dfp_eval" / eval_arm_dir(bits, raw_margin, refit) / f"seed{seed}"
         for path in sorted(existing.glob("*.json"))[:200]:
             prior = json.loads(path.read_text(encoding="utf-8"))
             if bool(prior.get("raw_margin", False)) != raw_margin:
@@ -643,7 +676,7 @@ def main(cfg: DictConfig) -> None:
             # begin again at fold 1. A resumed run does not rewrite the RTL
             # artefacts either -- those came from the first pass and are still
             # the same weights.
-            done = (art / "dfp_eval" / eval_arm_dir(bits, raw_margin) / f"seed{seed}"
+            done = (art / "dfp_eval" / eval_arm_dir(bits, raw_margin, refit) / f"seed{seed}"
                     / f"{fold.fold_id}.json")
             if done.exists():
                 n_skipped += 1
@@ -776,18 +809,26 @@ def main(cfg: DictConfig) -> None:
                 postprocess_ema_alpha=params["ema_alpha"],
                 postprocess_run_length=params["run_length"],
                 postprocess_event_merge_gap_s=params["event_merge_gap_s"],
-                threshold_on_grid=[params["threshold_on"]],
-                threshold_off_grid=[params["threshold_off"]],
+                # Frozen from FP32 by default: a single-element grid imposes
+                # that run's choice, so the measurement is what quantisation
+                # costs rather than which format tolerates re-tuning best.
+                # With --refit the full grid is searched on THIS format's own
+                # validation scores -- still never on test -- which is the
+                # operating point a deployed DFP8 model would actually use.
+                threshold_on_grid=(list(grid_on) if refit else [params["threshold_on"]]),
+                threshold_off_grid=(list(grid_off) if refit else [params["threshold_off"]]),
+                far_cap_per_hour=(far_cap if refit else None),
+                objective=(objective if refit else "max_sensitivity"),
                 batch_size=cfg.train.batch_size, device="cpu", num_workers=0,
                 postprocess_alarm_timestamp=params.get("alarm_timestamp", "window_end"),
                 datasets=datasets,
             )
             row = {"fold_id": fold.fold_id, "seed": seed, "bits": bits,
-                   "raw_margin": raw_margin,
+                   "raw_margin": raw_margin, "refit_thresholds": refit,
                    "sensitivity": result.test_event_metrics.sensitivity,
                    "far_per_hour": result.test_event_metrics.far_per_hour}
             results.append(row)
-            out = ensure_dir(art / "dfp_eval" / eval_arm_dir(bits, raw_margin)
+            out = ensure_dir(art / "dfp_eval" / eval_arm_dir(bits, raw_margin, refit)
                              / f"seed{seed}")
             (out / f"{fold.fold_id}.json").write_text(json.dumps(row, indent=2),
                                                       encoding="utf-8")

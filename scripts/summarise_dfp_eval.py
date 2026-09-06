@@ -46,13 +46,15 @@ def load_dfp(root: Path, bits: int) -> dict[tuple[int, str], dict]:
     # row's own `raw_margin` field, not from the directory name.
     strays: list[str] = []
     for arm in sorted((root / "dfp_eval").glob(f"dfp{bits}*")):
-        expected = arm.name.endswith("_acc")
+        suffix = arm.name[len(f"dfp{bits}"):]
+        expected = ("_acc" in suffix, "_refit" in suffix)
         for path in sorted(arm.rglob("*.json")):
             d = json.loads(path.read_text(encoding="utf-8"))
-            raw = bool(d.get("raw_margin", False))
-            if raw != expected:
+            got = (bool(d.get("raw_margin", False)),
+                   bool(d.get("refit_thresholds", False)))
+            if got != expected:
                 strays.append(f"{arm.name}/{path.name}")
-            out[(raw, d["seed"], d["fold_id"])] = d
+            out[(got, d["seed"], d["fold_id"])] = d
     if strays:
         # A directory holding rows from the other arm means two runs wrote to
         # the same place -- typically one launched before the fix that
@@ -115,17 +117,18 @@ def main() -> int:
     # Split by whether the score came from the requantised logits or the raw
     # accumulator: they answer different questions and averaging them would
     # answer neither.
-    arms: dict[bool, dict] = defaultdict(dict)
-    for (raw, seed, fold_id), row in dfp.items():
-        arms[raw][(seed, fold_id)] = row
+    arms: dict[tuple[bool, bool], dict] = defaultdict(dict)
+    for (kind, seed, fold_id), row in dfp.items():
+        arms[kind][(seed, fold_id)] = row
 
     print(f"DFP{args.bits} through the integer datapath")
     if not fp32:
         print(f"  no FP32 arm under {root / 'precision_sweep' / 'fp32'}; reporting "
               "absolute numbers only.\n  Run the precision sweep first to get a delta.")
 
-    for raw, rows in sorted(arms.items()):
-        label = "48-bit accumulator" if raw else "requantised logits"
+    for (raw, refit), rows in sorted(arms.items()):
+        label = ("48-bit accumulator" if raw else "requantised logits")
+        label += ", thresholds refitted on val" if refit else ", FP32 thresholds"
         sens = [r["sensitivity"] for r in rows.values()]
         far = [r["far_per_hour"] for r in rows.values()]
         seeds = sorted({k[0] for k in rows})
@@ -189,37 +192,46 @@ def main() -> int:
                   "measurably\n    different from FP32. What separates formats is the "
                   "WIDTH of the interval,\n    not the point estimate.")
 
-    if len(arms) == 2:
-        shared = set(arms[False]) & set(arms[True])
+    # Every arm against the baseline one -- requantised logits with the FP32
+    # thresholds -- on the folds they share. Each variation costs hours, so
+    # they arrive at different times, and comparing an arm's mean against
+    # another arm's mean over a different set of folds measures which folds
+    # each happened to contain.
+    base_key = (False, False)
+    if base_key not in arms:
+        print("\n  No baseline arm (requantised logits, FP32 thresholds), so the "
+              "variations\n  below cannot be priced against anything.")
+        return 0
+
+    base = arms[base_key]
+    for key, rows in sorted(arms.items()):
+        if key == base_key:
+            continue
+        raw, refit = key
+        shared = set(base) & set(rows)
+        what = []
+        if raw:
+            what.append("reading the accumulator instead of the logits")
+        if refit:
+            what.append("refitting the thresholds on this format's own validation "
+                        "scores")
+        change = " and ".join(what)
         if not shared:
-            print("\n  The two arms share NO fold, so they cannot be compared. Each "
-                  "arm's absolute\n  number above is still readable; the difference "
-                  "between them is not.")
-        elif len(shared) < min(len(arms[False]), len(arms[True])):
-            # Comparing an arm's mean against a different arm's mean over a
-            # different set of folds measures which folds were included, not
-            # which scoring path was used. Refusing beats printing a number
-            # that looks like an answer.
-            print(f"\n  The arms cover different folds -- {len(arms[False])} and "
-                  f"{len(arms[True])}, overlapping in {len(shared)}. Comparing their "
-                  "means would\n  measure which folds each happened to include. "
-                  "Pairing on the shared folds only:")
-        if shared:
-            a = statistics.mean([arms[False][k]["sensitivity"] for k in shared])
-            b = statistics.mean([arms[True][k]["sensitivity"] for k in shared])
-            print(f"\n  reading the accumulator instead of the logits, on the "
-                  f"{len(shared)} folds both\n  arms cover: {100 * (b - a):+.2f} pp")
-            if len(shared) < MIN_FOLDS_FOR_IDENTITY:
-                print(f"  Only {len(shared)} folds. One seizure in 77 is 1.3 pp, so "
-                      "this is not yet a\n  number -- wait for the second arm to "
-                      "finish.")
-            print("  That is the price of pushing the final layer through the same "
-                  "requantiser as\n  every other one. The value is already in the PE, "
-                  "so recovering it costs no\n  hardware -- only an instruction bit.")
-    else:
-        print("\n  Only one scoring arm present. Run the other with "
-              "+export.raw_margin=true\n  to price the final requantisation "
-              "(section 3.3 of MODEL_TEAM_TASKS.md).")
+            print(f"\n  {change}: shares no fold with the baseline, cannot be priced.")
+            continue
+        if len(shared) < min(len(base), len(rows)):
+            print(f"\n  NOTE: this arm and the baseline overlap in {len(shared)} folds "
+                  f"of {len(base)} and {len(rows)};\n  pairing on the overlap only.")
+        d_sens = 100 * (statistics.mean([rows[k]["sensitivity"] for k in shared])
+                        - statistics.mean([base[k]["sensitivity"] for k in shared]))
+        d_far = (statistics.mean([rows[k]["far_per_hour"] for k in shared])
+                 - statistics.mean([base[k]["far_per_hour"] for k in shared]))
+        print(f"\n  {change},\n  over {len(shared)} shared folds: "
+              f"sensitivity {d_sens:+.2f} pp, FAR/h {d_far:+.4f}")
+        if len(shared) < MIN_FOLDS_FOR_IDENTITY:
+            print(f"  Only {len(shared)} folds. One seizure in 77 is 1.3 pp, so this "
+                  "is not yet a number.")
+
     return 0
 
 
