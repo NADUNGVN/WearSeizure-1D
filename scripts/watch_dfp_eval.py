@@ -69,16 +69,26 @@ def arm_status(arm_dir: Path) -> dict:
     }
 
 
-def arms_complete(base: Path, bits: int) -> bool:
-    """Both arms present AND finished.
+def arm_label(name: str, bits: int) -> str:
+    """Read the two axes back out of a results directory name."""
+    suffix = name[len(f"dfp{bits}"):]
+    return ("accumulator" if "_acc" in suffix else "logits    ") + (
+        " refit " if "_refit" in suffix else " frozen")
 
-    Named rather than written inline as `all(...)`, because `all` over the arms
-    that happen to exist is vacuously true when only one of them has ever been
-    started -- which reads as "both arms complete" at exactly the moment the
-    second one still has three hours to run.
+
+def everything_done(base: Path, bits: int, busy: bool) -> bool:
+    """Nothing left to wait for: no process running, and every arm at 66.
+
+    The `busy` term is what makes this trustworthy. An arm that has just been
+    launched has written no results and so has no directory, and `all` over the
+    directories that exist is vacuously true -- which announced completion at
+    the moment a fresh arm still had ninety minutes ahead of it. A running
+    process is proof that something is still expected.
     """
-    wanted = [base / f"dfp{bits}", base / f"dfp{bits}_acc"]
-    return all(d.is_dir() and arm_status(d)["done"] >= TOTAL_FOLDS for d in wanted)
+    if busy:
+        return False
+    arms = sorted(base.glob(f"dfp{bits}*")) if base.is_dir() else []
+    return bool(arms) and all(arm_status(a)["done"] >= TOTAL_FOLDS for a in arms)
 
 
 def render(root: Path, bits: int) -> None:
@@ -104,8 +114,7 @@ def render(root: Path, bits: int) -> None:
 
     for arm in arms:
         st = arm_status(arm)
-        label = "accumulator" if st["name"].endswith("_acc") else "logits     "
-        line = f"  {label} {st['done']:2d} / {TOTAL_FOLDS}"
+        line = f"  {arm_label(st['name'], bits)} {st['done']:2d} / {TOTAL_FOLDS}"
         if st["rate"]:
             line += f"   {st['rate']:.0f}s/fold"
             if st["done"] < TOTAL_FOLDS:
@@ -124,14 +133,14 @@ def render(root: Path, bits: int) -> None:
         if len(st["strays"]) > 5:
             print(f"      ... and {len(st['strays']) - 5} more")
 
-    if arms_complete(base, bits):
-        print("\n  Both arms complete. The cohort number:")
-        print(f"    python scripts/summarise_dfp_eval.py {root} --bits {bits}")
+    if everything_done(base, bits, busy=bool(procs)):
+        print("\n  Every arm on disk is complete. The cohort numbers:")
     elif any(arm_status(a)["done"] >= TOTAL_FOLDS for a in arms):
-        missing = "accumulator" if not (base / f"dfp{bits}_acc").is_dir() else "logits"
-        print(f"\n  One arm is done; the {missing} arm has not run. Its number alone "
-              "is still\n  worth reading:")
-        print(f"    python scripts/summarise_dfp_eval.py {root} --bits {bits}")
+        print("\n  Some arms are done while something is still running. What has "
+              "finished can\n  already be read:")
+    else:
+        return
+    print(f"    python scripts/summarise_dfp_eval.py {root} --bits {bits}")
 
 
 def main() -> int:
@@ -148,7 +157,8 @@ def main() -> int:
         render(root, args.bits)
         if not args.watch:
             return 0
-        if arms_complete(root / "dfp_eval", args.bits):
+        if everything_done(root / "dfp_eval", args.bits,
+                           busy=bool(running_processes())):
             return 0
         time.sleep(args.every)
 
