@@ -228,6 +228,20 @@ def main() -> int:
                  - statistics.mean([base[k]["far_per_hour"] for k in shared]))
         print(f"\n  {change},\n  over {len(shared)} shared folds: "
               f"sensitivity {d_sens:+.2f} pp, FAR/h {d_far:+.4f}")
+        if refit:
+            # An unchanged FAR has two very different explanations: the search
+            # found a better operating point and it did not help, or the search
+            # came back with the frozen values and never moved. Only the second
+            # says the error is irreducible, and they are told apart here.
+            moved = sum(1 for k in shared
+                        if (rows[k].get("threshold_on") != rows[k].get("frozen_threshold_on")
+                            or rows[k].get("threshold_off") != rows[k].get("frozen_threshold_off")))
+            print(f"  the search chose different thresholds on {moved} of "
+                  f"{len(shared)} folds")
+            if moved == 0:
+                print("  It never moved, so this measures nothing about re-tuning: "
+                      "the grid's\n  best choice for DFP8 is the one FP32 already "
+                      "made.")
         if len(shared) < MIN_FOLDS_FOR_IDENTITY:
             print(f"  Only {len(shared)} folds. One seizure in 77 is 1.3 pp, so this "
                   "is not yet a number.")

@@ -825,6 +825,16 @@ def main(cfg: DictConfig) -> None:
             )
             row = {"fold_id": fold.fold_id, "seed": seed, "bits": bits,
                    "raw_margin": raw_margin, "refit_thresholds": refit,
+                   # What the search actually chose. Without this a refit run
+                   # cannot be explained: if the thresholds came back identical
+                   # to the frozen ones, an unchanged FAR means the search found
+                   # nothing better, not that quantisation error is irreducible.
+                   "threshold_on": result.frozen_postprocess.params.threshold_on,
+                   "threshold_off": result.frozen_postprocess.params.threshold_off,
+                   "val_sensitivity": result.frozen_postprocess.val_sensitivity,
+                   "val_far_per_hour": result.frozen_postprocess.val_far_per_hour,
+                   "frozen_threshold_on": params["threshold_on"],
+                   "frozen_threshold_off": params["threshold_off"],
                    "sensitivity": result.test_event_metrics.sensitivity,
                    "far_per_hour": result.test_event_metrics.far_per_hour}
             results.append(row)
