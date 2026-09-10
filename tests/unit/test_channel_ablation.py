@@ -103,3 +103,42 @@ def test_input_length_is_derived_not_hardcoded():
         model(torch.randn(1, 4, 1024))
     with pytest.raises(ValueError, match="expected input length"):
         model(torch.randn(1, 4, 512))
+
+
+def test_watcher_counts_runs_not_dataloader_workers(monkeypatch):
+    """A fork inherits the parent's command line, so `pgrep` sees workers.
+
+    During one healthy run with twelve DataLoader workers the watcher reported
+    thirteen processes and warned that they would overwrite each other. That
+    alarm invites killing something, on a run that was fine -- a false alarm
+    here is more dangerous than no alarm.
+    """
+    watcher_spec = importlib.util.spec_from_file_location(
+        "watch_channel_ablation", ROOT / "scripts" / "watch_channel_ablation.py")
+    watcher = importlib.util.module_from_spec(watcher_spec)
+    sys.modules["watch_channel_ablation"] = watcher
+    watcher_spec.loader.exec_module(watcher)
+
+    CMD = "python scripts/run_channel_ablation.py profile=server"
+
+    class FakePS:
+        def __init__(self, text): self.stdout = text
+
+    # One real run (owned by init after nohup) plus twelve of its workers.
+    one_run = "\n".join(
+        [f"  2925282       1 {CMD}"]
+        + [f"  {2958955 + i} 2925282 {CMD}" for i in range(12)]
+    )
+    monkeypatch.setattr(watcher.subprocess, "run", lambda *a, **k: FakePS(one_run))
+    assert len(watcher.running_processes()) == 1
+
+    # Two genuine runs: both orphaned to init, each with its own workers.
+    two_runs = one_run + "\n" + "\n".join(
+        [f"  3100000       1 {CMD}"]
+        + [f"  {3100001 + i} 3100000 {CMD}" for i in range(12)]
+    )
+    monkeypatch.setattr(watcher.subprocess, "run", lambda *a, **k: FakePS(two_runs))
+    assert len(watcher.running_processes()) == 2
+
+    monkeypatch.setattr(watcher.subprocess, "run", lambda *a, **k: FakePS(""))
+    assert watcher.running_processes() == []

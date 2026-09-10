@@ -31,14 +31,32 @@ TOTAL_FOLDS = 66
 SECONDS_PER_FOLD_HINT = 170
 
 
-def running_processes() -> list[str]:
-    """The export processes alive right now, one line each."""
+def running_processes(pattern: str = "export_dfp_hardware") -> list[str]:
+    """Only the ROOT export processes, never their workers.
+
+    A DataLoader worker is a fork and inherits the parent's whole command line,
+    so `pgrep -af` counts it as another run. One healthy run then reports as
+    many "processes", which reads as the overwrite condition this watcher
+    exists to catch -- and the natural reaction to that alarm is to kill
+    something. Keep only processes whose parent is not itself a match: a
+    genuine second run is owned by a shell or by init, never by another
+    matching python.
+    """
     try:
-        out = subprocess.run(["pgrep", "-af", "export_dfp_hardware"],
+        out = subprocess.run(["ps", "-eo", "pid=,ppid=,args="],
                              capture_output=True, text=True, timeout=10)
     except (FileNotFoundError, subprocess.SubprocessError):
         return []
-    return [ln for ln in out.stdout.strip().splitlines() if ln.strip()]
+    matched: dict[int, tuple[int, str]] = {}
+    for line in out.stdout.splitlines():
+        parts = line.strip().split(None, 2)
+        if len(parts) < 3:
+            continue
+        pid, ppid, args = parts
+        if pattern in args and "watch_" not in args:
+            matched[int(pid)] = (int(ppid), args)
+    return [f"{pid} {args}" for pid, (ppid, args) in sorted(matched.items())
+            if ppid not in matched]
 
 
 def arm_status(arm_dir: Path) -> dict:

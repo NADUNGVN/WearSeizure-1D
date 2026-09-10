@@ -22,13 +22,34 @@ from pathlib import Path
 STALL_AFTER_S = 1800
 
 
-def running_processes() -> list[str]:
+def running_processes(pattern: str = "run_channel_ablation") -> list[str]:
+    """Only the ROOT processes matching `pattern`, never their workers.
+
+    A DataLoader worker is a fork, so it inherits the parent's entire command
+    line and `pgrep -af` reports it as another run. One healthy run with twelve
+    workers then shows as thirteen "processes", which reads as exactly the
+    data-loss condition this watcher exists to catch -- and the natural reaction
+    to that alarm is to kill something.
+
+    So: match on the command line, then keep only those whose parent is not
+    itself a match. A genuine second run is orphaned to init or owned by a
+    shell, never by another matching python.
+    """
     try:
-        out = subprocess.run(["pgrep", "-af", "run_channel_ablation"],
+        out = subprocess.run(["ps", "-eo", "pid=,ppid=,args="],
                              capture_output=True, text=True, timeout=10)
     except (FileNotFoundError, subprocess.SubprocessError):
         return []
-    return [ln for ln in out.stdout.strip().splitlines() if ln.strip()]
+    matched: dict[int, tuple[int, str]] = {}
+    for line in out.stdout.splitlines():
+        parts = line.strip().split(None, 2)
+        if len(parts) < 3:
+            continue
+        pid, ppid, args = parts
+        if pattern in args and "watch_" not in args:
+            matched[int(pid)] = (int(ppid), args)
+    return [f"{pid} {args}" for pid, (ppid, args) in sorted(matched.items())
+            if ppid not in matched]
 
 
 def arm_status(arm_dir: Path) -> dict:
