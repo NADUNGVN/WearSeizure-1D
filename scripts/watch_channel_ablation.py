@@ -36,20 +36,33 @@ def running_processes(pattern: str = "run_channel_ablation") -> list[str]:
     shell, never by another matching python.
     """
     try:
-        out = subprocess.run(["ps", "-eo", "pid=,ppid=,args="],
+        out = subprocess.run(["ps", "-eo", "pid=,ppid=,etimes=,args="],
                              capture_output=True, text=True, timeout=10)
     except (FileNotFoundError, subprocess.SubprocessError):
         return []
-    matched: dict[int, tuple[int, str]] = {}
+    matched: dict[int, tuple[int, int, str]] = {}
     for line in out.stdout.splitlines():
-        parts = line.strip().split(None, 2)
-        if len(parts) < 3:
+        parts = line.strip().split(None, 3)
+        if len(parts) < 4:
             continue
-        pid, ppid, args = parts
+        pid, ppid, etimes, args = parts
         if pattern in args and "watch_" not in args:
-            matched[int(pid)] = (int(ppid), args)
-    return [f"{pid} {args}" for pid, (ppid, args) in sorted(matched.items())
+            matched[int(pid)] = (int(ppid), int(etimes), args)
+    return [f"{pid} [{age}s] {args}"
+            for pid, (ppid, age, args) in sorted(matched.items())
             if ppid not in matched]
+
+
+def youngest_run_age_s(procs: list[str]) -> int | None:
+    """Seconds since the newest matching run started, or None if none run.
+
+    A run that started five minutes ago cannot have stalled, however long ago
+    the previous run's last result file was written. Without this the watcher
+    greeted every restart with three STALLED warnings, because the clock it was
+    reading was the clock of a run that had finished a day and a half earlier.
+    """
+    ages = [int(p.split("[", 1)[1].split("s]", 1)[0]) for p in procs if "[" in p]
+    return min(ages) if ages else None
 
 
 def arm_status(arm_dir: Path) -> dict:
@@ -75,6 +88,7 @@ def arm_status(arm_dir: Path) -> dict:
 
 def render(root: Path, total_folds: int) -> bool:
     procs = running_processes()
+    run_age = youngest_run_age_s(procs)
     print(f"\n{time.strftime('%H:%M:%S')}  processes: ", end="")
     if not procs:
         print("none running")
@@ -104,9 +118,16 @@ def render(root: Path, total_folds: int) -> bool:
             line += "   COMPLETE"
         else:
             all_done = False
-            if st["last_write"] and time.time() - st["last_write"] > STALL_AFTER_S:
-                line += (f"   STALLED? nothing written for "
-                         f"{(time.time() - st['last_write']) / 60:.0f} min")
+            idle = time.time() - st["last_write"] if st["last_write"] else 0
+            # A stall needs BOTH: nothing written recently, AND a run that has
+            # been alive long enough to have written something. On a restart the
+            # first condition is true by construction -- the last file belongs to
+            # the previous run -- and reporting that as a stall is a false alarm
+            # on a healthy run, which is the alarm people learn to ignore.
+            if idle > STALL_AFTER_S and (run_age or 0) > STALL_AFTER_S:
+                line += f"   STALLED? nothing written for {idle / 60:.0f} min"
+            elif not procs:
+                line += "   stopped"
         print(line)
         for name in st["bad"][:3]:
             print(f"      unreadable: {name}")

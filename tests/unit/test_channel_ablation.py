@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -126,19 +127,69 @@ def test_watcher_counts_runs_not_dataloader_workers(monkeypatch):
 
     # One real run (owned by init after nohup) plus twelve of its workers.
     one_run = "\n".join(
-        [f"  2925282       1 {CMD}"]
-        + [f"  {2958955 + i} 2925282 {CMD}" for i in range(12)]
+        [f"  2925282       1    7200 {CMD}"]
+        + [f"  {2958955 + i} 2925282    7100 {CMD}" for i in range(12)]
     )
     monkeypatch.setattr(watcher.subprocess, "run", lambda *a, **k: FakePS(one_run))
     assert len(watcher.running_processes()) == 1
 
     # Two genuine runs: both orphaned to init, each with its own workers.
     two_runs = one_run + "\n" + "\n".join(
-        [f"  3100000       1 {CMD}"]
-        + [f"  {3100001 + i} 3100000 {CMD}" for i in range(12)]
+        [f"  3100000       1     600 {CMD}"]
+        + [f"  {3100001 + i} 3100000     500 {CMD}" for i in range(12)]
     )
     monkeypatch.setattr(watcher.subprocess, "run", lambda *a, **k: FakePS(two_runs))
     assert len(watcher.running_processes()) == 2
 
     monkeypatch.setattr(watcher.subprocess, "run", lambda *a, **k: FakePS(""))
     assert watcher.running_processes() == []
+
+
+def test_a_just_started_run_is_not_reported_as_stalled(monkeypatch, tmp_path, capsys):
+    """A restart cannot be a stall, however old the previous run's files are.
+
+    The stall check reads the time since the last result file was written. On a
+    restart that file belongs to the PREVIOUS run, so the condition is true by
+    construction, and every restart was greeted with STALLED warnings on a
+    perfectly healthy run. An alarm that fires on healthy runs is one people
+    learn to ignore.
+    """
+    import json
+    import os
+
+    watcher_spec = importlib.util.spec_from_file_location(
+        "watch_channel_ablation_stall", ROOT / "scripts" / "watch_channel_ablation.py")
+    watcher = importlib.util.module_from_spec(watcher_spec)
+    sys.modules["watch_channel_ablation_stall"] = watcher
+    watcher_spec.loader.exec_module(watcher)
+
+    arm = tmp_path / "channel_ablation" / "1ch" / "seed0"
+    arm.mkdir(parents=True)
+    stale = arm / "chb01__chb01_03.json"
+    stale.write_text(json.dumps({"seconds": 200.0}), encoding="utf-8")
+    long_ago = time.time() - 36 * 3600
+    os.utime(stale, (long_ago, long_ago))
+
+    CMD = "python scripts/run_channel_ablation.py profile=server"
+
+    class FakePS:
+        def __init__(self, text):
+            self.stdout = text
+
+    # Alive for 120 seconds: too young to have stalled, whatever the file says.
+    monkeypatch.setattr(watcher.subprocess, "run",
+                        lambda *a, **k: FakePS(f"  111       1     120 {CMD}"))
+    watcher.render(tmp_path, total_folds=198)
+    assert "STALLED" not in capsys.readouterr().out
+
+    # Same stale file, but a run alive for ten hours: that is a real stall.
+    monkeypatch.setattr(watcher.subprocess, "run",
+                        lambda *a, **k: FakePS(f"  111       1   36000 {CMD}"))
+    watcher.render(tmp_path, total_folds=198)
+    assert "STALLED" in capsys.readouterr().out
+
+    # Nothing running: stopped, which is not the same thing as stalled.
+    monkeypatch.setattr(watcher.subprocess, "run", lambda *a, **k: FakePS(""))
+    watcher.render(tmp_path, total_folds=198)
+    out = capsys.readouterr().out
+    assert "STALLED" not in out and "stopped" in out
