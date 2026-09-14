@@ -929,92 +929,94 @@ INT8 as well.
 
 The choice is on the interval and the precedent, **not** on the point estimate.
 A later reader must not conclude that `dfp16` scored better; on this cohort
-nothing scored better than anything else.
-## 2n. Rows 58-60 -- what one channel costs, measured without the leak (11-09)
+nothing scored better than anything else.## 2n. Rows 58-60 -- what one channel costs, measured without the leak (11-09 to 14-09)
 
 Three arms differing in exactly one thing: how many channels the model reads.
 Montages taken verbatim from Chung et al. 2024 so the comparison lines up
 channel-for-channel with their published ablation -- 18-channel full montage,
 their 4-channel wearable subset, and each patient's own clinically confirmed
-single position. 66 folds per arm, **seed 0 only**, `patient_specific_loso_edf`,
-trained from scratch per fold (no cohort pre-training, no distillation) so the
-arms are comparable to each other rather than to production numbers.
+single position. 66 folds x 3 seeds = 198 per arm,
+`patient_specific_loso_edf`, trained from scratch per fold (no cohort
+pre-training, no distillation) so the arms are comparable to each other rather
+than to production numbers.
 
 | # | arm | params | event sens | FAR/h | seg sens | seg acc | seg AUROC |
 |---|---|--:|--:|--:|--:|--:|--:|
-| 58 | 1 channel | 11,786 | 0.9129 | 0.3575 | **0.4893** | 0.9895 | 0.8819 |
-| 59 | 4 channels | 11,954 | 0.9205 | 0.2470 | **0.5859** | 0.9915 | 0.9259 |
-| 60 | 18 channels | 12,738 | 0.9470 | 0.3011 | **0.6867** | 0.9928 | 0.9666 |
+| 58 | 1 channel | 11,786 | 0.9179 | 0.2798 | **0.4936** | 0.9896 | 0.8870 |
+| 59 | 4 channels | 11,954 | 0.9331 | 0.3334 | **0.5936** | 0.9910 | 0.9237 |
+| 60 | 18 channels | 12,738 | 0.9520 | 0.2625 | **0.7051** | 0.9937 | 0.9586 |
 
 Paired bootstrap against the 18-channel arm, clustered by patient:
 
 | comparison | event sens | 95% CI | segment sens | 95% CI |
 |---|--:|---|--:|---|
-| 1ch vs 18ch | -3.41 pp | [-10.53, +3.39] | **-19.74 pp** | **[-24.92, -14.56]** |
-| 4ch vs 18ch | -2.65 pp | [-6.56, +0.88] | **-10.08 pp** | **[-15.39, -4.43]** |
+| 1ch vs 18ch | **-3.41 pp** | **[-5.83, -0.93]** | **-21.16 pp** | [-26.28, -16.47] |
+| 4ch vs 18ch | -1.89 pp | [-5.89, +1.97] | **-11.16 pp** | [-15.18, -7.13] |
 
-### The channel penalty is real, and it is ten times the published one
+### One channel is measurably worse. The equivalence claim is dead.
 
-Chung et al. report segment sensitivity falling 98.66% -> 97.31% -> 96.76% as
-channels drop from 18 to 4 to 1: a **1.9-point** penalty. Measured here without
-the leak, the same drop is **19.7 points**, with an interval that excludes zero
-decisively.
+At seed 0 the event-level interval was [-10.53, +3.39] and spanned zero, which
+made "one channel is not measurably worse" tempting. Two more seeds did not
+move the point estimate at all -- it is -3.41 pp in both -- and narrowed the
+interval to **[-5.83, -0.93]**, which excludes zero.
 
-AUROC says the same thing from a threshold-free direction: 0.8819 -> 0.9259 ->
-0.9666, monotone, +8.5 points from one channel to eighteen.
+**One channel costs 3.41 pp of event sensitivity against eighteen: 2.62
+seizures out of 77.** That is the honest number and it must be reported.
 
-Why their number is so much smaller: their segment-level stage pools
-overlapping 4-second windows from every recording and splits them 7:2:1 at
-random. Section 2j measured what that split is worth on this data -- 31 points
-of window sensitivity. A leak that large lifts *every* arm toward its ceiling,
-and compresses the distance between them. Their 1.9 points is what remains of a
-19.7-point gap after the leak has absorbed the rest.
+This is the textbook shape of a result that was under-powered rather than null,
+and it is worth remembering the next time an interval spans zero on one seed.
+Under this project's own rule -- rank by the worst case the interval allows --
+the seed-0 reading was never an equivalence claim; it was an absence of
+evidence, and the distinction turned out to matter.
 
-**This corrects a claim made earlier in this project.** Reading their event-level
-table alone -- 1 channel at 99.62% beating 4 channels at 97.05%, with the lowest
-false alarm rate of the three -- supported the conclusion that extra channels
-buy nothing. That conclusion does not survive their own segment-level numbers,
-and it does not survive measurement here. Multi-channel information is real and
-substantial at the window level.
+### What survives, and is now better supported
 
-### But post-processing recovers most of it
-
-19.74 points at segment level becomes **3.41 points** at event level, on an
-interval that spans zero. Smoothing, hysteresis and a run-length filter
+**Post-processing absorbs 84 % of the deficit.** 21.16 pp at segment level
+becomes 3.41 pp at event level. Smoothing, hysteresis and a run-length filter
 integrate the score across many consecutive windows, so a per-window score that
-is materially worse still produces a nearly equivalent event decision.
+is materially worse still produces a nearly equivalent event decision. Three
+seeds now support this rather than one.
 
-That is the finding worth writing up. It is not "one channel is as good"; it is
-that **the single-channel deficit is concentrated where post-processing can
-absorb it.** The deficit exists, it is measurable, and the detector's own
-temporal integration is what pays for it.
+**The cost is concentrated in the last step, not spread across channels.**
+4 channels against 18 has an interval that still spans zero (-1.89 pp,
+[-5.89, +1.97]); 1 channel against 18 does not. Most of the usable information
+survives down to four electrodes and is lost going to one.
 
-The event interval is wide -- the worst case it allows is -10.53 pp -- and this
-is one seed. Under this project's own rule, ranking by the worst case the data
-still allows rather than by the point estimate, **one channel is not yet
-established as equivalent to eighteen at event level.** Seeds 1 and 2 are
-running; if the interval still spans zero across three seeds the equivalence
-claim becomes sayable, and if it separates the honest number is the separation.
+**The channel penalty is an order of magnitude larger than published.** Chung
+et al. report segment sensitivity falling 98.66 % -> 97.31 % -> 96.76 %: a
+1.9-point penalty from eighteen channels to one. Measured without the leak it
+is **21.2 points**. Their segment-level split pools overlapping 4-second windows
+and divides them 7:2:1 at random; section 2j measured that split at 31 points of
+window sensitivity on this data, and a leak that large lifts every arm toward
+its ceiling and compresses the distance between them.
+
+**This corrects a claim made repeatedly earlier in this project.** Reading
+Chung's event-level table alone -- one channel at 99.62 % beating four at
+97.05 %, with the lowest false alarm rate of the three -- supported the
+conclusion that extra channels buy nothing. That conclusion does not survive
+their own segment-level numbers, and it does not survive measurement here.
 
 ### Accuracy is blind again, on a third independent axis
 
-0.9895 -> 0.9915 -> 0.9928. The whole range across an eighteen-fold change in
-input channels is **0.33 pp**, while segment sensitivity moves 19.7. Section 2j
-found accuracy blind to a 31-point protocol effect; it is equally blind to the
-channel count. Any comparison of detectors on this data that is argued on
-accuracy is arguing on a quantity with no dynamic range.
+0.9896 -> 0.9910 -> 0.9937. The whole range across an eighteen-fold change in
+input channels is **0.41 pp**, while segment sensitivity moves 21.2. Section 2j
+found accuracy blind to a 31-point protocol effect; it is equally blind to
+channel count. AUROC, which is threshold-free, is not: 0.8870 -> 0.9237 ->
+0.9586, monotone.
 
 ### Caveats attached to these rows
 
-* **Seed 0 only.** The event-level intervals are wide mostly because of this.
-* **No L1, no L8.** Absolute numbers sit below production (event sens 0.9129
+* **No L1, no L8.** Absolute numbers sit below production (event sens 0.9179
   against 0.9495) because each fold trains from scratch. Cross-arm comparison is
   valid; comparison against the project's headline numbers is not.
-* **FAR is not monotone** across arms (0.3575 / 0.2470 / 0.3011) and should not
-  be read as a channel effect at one seed.
+* **FAR is not monotone** across arms (0.2798 / 0.3334 / 0.2625) and carries no
+  channel-count signal at this sample size.
 * Only `stem.0.weight` differs between arms -- 11,786 to 12,738 parameters, the
   extra 952 being 8 filters x 7 taps x 17 extra channels. Everything after the
   stem is identical, which is what makes the arms a one-variable comparison.
+* Per-fold cost fell between the two batches (233 -> 183 s for the 1-channel
+  arm) because the batches ran on different hosts. It has no bearing on the
+  results.
 
 ## 3b. The teacher montage each L3 fold actually gets (01-09)
 

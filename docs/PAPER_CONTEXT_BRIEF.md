@@ -148,40 +148,46 @@ measured value.
 Rung A is a **partial** reproduction and must be labelled as one: it reaches
 0.9229, not the published 0.9962.
 
-### 4.4 Channel ablation — how much the one-channel constraint costs
+### 4.4 Channel ablation -- how much the one-channel constraint costs
 
 Three arms, identical except channel count; montages taken verbatim from Chung
-et al. 2024. 66 folds, **seed 0 only** (seeds 1–2 in progress). Trained from
-scratch per fold, no cohort pre-training and no distillation, so absolute
-numbers sit below §4.1 and only cross-arm comparison is valid.
+et al. 2024. **66 folds x 3 seeds = 198 per arm.** Trained from scratch per
+fold, no cohort pre-training and no distillation, so absolute numbers sit below
+§4.1 and only cross-arm comparison is valid.
 
 | arm | params | event sens | FAR/h | segment sens | accuracy | AUROC |
 |---|--:|--:|--:|--:|--:|--:|
-| 1 channel | 11,786 | 0.9129 | 0.3575 | **0.4893** | 0.9895 | 0.8819 |
-| 4 channels | 11,954 | 0.9205 | 0.2470 | **0.5859** | 0.9915 | 0.9259 |
-| 18 channels | 12,738 | 0.9470 | 0.3011 | **0.6867** | 0.9928 | 0.9666 |
+| 1 channel | 11,786 | 0.9179 | 0.2798 | **0.4936** | 0.9896 | 0.8870 |
+| 4 channels | 11,954 | 0.9331 | 0.3334 | **0.5936** | 0.9910 | 0.9237 |
+| 18 channels | 12,738 | 0.9520 | 0.2625 | **0.7051** | 0.9937 | 0.9586 |
 
 Paired bootstrap against the 18-channel arm, clustered by patient:
 
 | | event sensitivity | segment sensitivity |
 |---|--:|--:|
-| 1ch vs 18ch | −3.41 pp, CI [−10.53, +3.39] | **−19.74 pp, CI [−24.92, −14.56]** |
-| 4ch vs 18ch | −2.65 pp, CI [−6.56, +0.88] | **−10.08 pp, CI [−15.39, −4.43]** |
+| 1ch vs 18ch | **-3.41 pp, CI [-5.83, -0.93]** | **-21.16 pp, CI [-26.28, -16.47]** |
+| 4ch vs 18ch | -1.89 pp, CI [-5.89, +1.97] | **-11.16 pp, CI [-15.18, -7.13]** |
 
-Two findings, and the second is the interesting one:
+Four findings, all reportable:
 
-1. **The channel penalty is real and is ten times the published one.** Chung et
-   al. report 1.9 points of segment sensitivity from 18 channels to 1; measured
-   without the leak it is 19.7 points, interval excluding zero. Their number is
-   small because their segment-level split lifts every arm toward its ceiling
-   and compresses the distance between them.
-2. **Post-processing absorbs most of it.** 19.74 points at segment level becomes
-   3.41 at event level, on an interval spanning zero. The single-channel deficit
-   is concentrated exactly where smoothing, hysteresis and run-length filtering
-   can recover it.
+1. **One channel is measurably worse than eighteen at event level: -3.41 pp,
+   interval excluding zero, 2.62 seizures out of 77.** Report this cost
+   plainly. It is what the wearable form factor buys.
+2. **Post-processing absorbs 84 % of the deficit.** 21.16 pp at segment level
+   becomes 3.41 pp at event level, because smoothing, hysteresis and a
+   run-length filter integrate the score across many consecutive windows. This
+   is the mechanism worth a subsection.
+3. **The cost is concentrated in the last step.** Four channels against
+   eighteen still spans zero (-1.89 pp); one channel does not. Most usable
+   information survives to four electrodes and is lost going to one.
+4. **The published channel penalty is an order of magnitude too small.** Chung
+   et al. report 1.9 points of segment sensitivity from 18 channels to 1;
+   without the leak it is 21.2. Their random split over overlapping windows
+   lifts every arm toward its ceiling and compresses the distance between them.
 
-Accuracy again moves only 0.33 pp across an eighteen-fold change in input
-channels — a third independent demonstration that it is the wrong metric here.
+Accuracy moves 0.41 pp across an eighteen-fold change in input channels -- a
+third independent demonstration that it is the wrong metric here. AUROC, being
+threshold-free, is not blind: 0.8870 -> 0.9237 -> 0.9586.
 
 ### 4.5 Training-recipe levers already measured
 
@@ -307,6 +313,11 @@ Measured, quotable:
 
 ## 9. Still running
 
-Seeds 1 and 2 of the channel ablation, ~28 h. They decide whether the
-event-level equivalence claim in §4.4 becomes sayable. **Do not draft that
-claim either way until those land.**
+Nothing. The channel ablation completed at three seeds and §4.4 is settled --
+draft it as written there, including the 3.41-point cost of the single-channel
+constraint.
+
+Open items that are *not* blocking and must simply not be claimed: the
+zero-shot / patient-independent branch has never been run, worst-patient and
+detection-delay figures are not verified in the current run set, and the
+94.95 % / 98.48 % discrepancy in §4.1 is unexplained.
