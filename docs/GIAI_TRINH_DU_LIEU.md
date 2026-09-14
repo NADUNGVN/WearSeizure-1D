@@ -3,13 +3,29 @@
 Tài liệu này trả lời ba câu hỏi về dữ liệu của đề tài, kèm dẫn chứng từ y văn và
 từ các thí nghiệm đã chạy:
 
-1. Vì sao huấn luyện trên **một kênh** thay vì 23 kênh của CHB-MIT?
+1. Vì sao huấn luyện trên **một kênh** thay vì toàn bộ montage của CHB-MIT?
 2. Vì sao đánh giá trên **13 ca** thay vì cả 24 ca?
 3. Trong **44 GB** dữ liệu gốc, thực sự dùng bao nhiêu?
 
 ---
 
 ## 1. Một kênh — và đây là lựa chọn có căn cứ, không phải cắt bớt
+
+### 1.0 "23 kênh" là số tín hiệu trong file, không phải số kênh EEG
+
+Một file CHB-MIT chuẩn chứa **23 tín hiệu**, nhưng chỉ **22 phân biệt** —
+`T8-P8` xuất hiện hai lần. Trong 22 tín hiệu đó:
+
+* **18 tín hiệu đầu là montage lâm sàng chuẩn** theo hệ 10-20 ("double
+  banana"): Fp1-F7, F7-T7, T7-P7, P7-O1, Fp1-F3, F3-C3, C3-P3, P3-O1,
+  Fp2-F4, F4-C4, C4-P4, P4-O2, Fp2-F8, F8-T8, T8-P8, P8-O2, Fz-Cz, Cz-Pz.
+* Bốn tín hiệu còn lại (`P7-T7`, `T7-FT9`, `FT9-FT10`, `FT10-T8`) là **chuỗi
+  bổ sung vùng thái dương**, dùng điện cực `FT9`/`FT10` không thuộc hệ 10-20
+  chuẩn, và không có mặt trong mọi bản ghi.
+
+Vì vậy mốc "đầy đủ kênh" có ý nghĩa là **18**, không phải 23: đó là montage
+một bác sĩ thực sự ghi, và là montage Chung et al. dùng. Thí nghiệm đối chứng
+của đề tài đã chạy ở đúng mức đó.
 
 ### 1.1 Bài tham chiếu đã tự kiểm chứng điều này
 
@@ -23,15 +39,14 @@ một dữ liệu** và so với nhau:
 | 4 kênh (Fp1-F3, Fp2-F4, P7-O1, P8-O2) | 97,05 ± 9,23 % | 0,40 ± 0,77 |
 | **1 kênh** (chọn theo xác nhận của bác sĩ) | **99,62 ± 1,39 %** | **0,22 ± 0,34** |
 
-**Bản một kênh có tỷ lệ báo động giả thấp nhất trong cả ba, và độ nhạy cao hơn
-bản bốn kênh.** Thêm kênh không mua được gì trên bài toán này.
+Ở **mức sự kiện**, bản một kênh có FAR thấp nhất trong ba và độ nhạy cao hơn
+bản bốn kênh. Nhưng ở **mức đoạn**, chính bài đó cho thấy độ nhạy giảm đều theo
+số kênh: 98,66 % → 97,31 % → 96,76 %.
 
-Lý do hợp lý về mặt sinh lý: cơn động kinh khởi phát **khu trú**. Khi kênh được
-chọn đúng vị trí khởi phát — Chung et al. chọn thủ công theo xác nhận của bác sĩ
-thần kinh, không dùng thuật toán chọn kênh — thì 17 kênh còn lại chủ yếu đóng
-góp nhiễu chứ không đóng góp tín hiệu.
+**Đừng đọc bảng trên thành "thêm kênh không giúp gì".** Đề tài đã đo lại và kết
+luận đó sai — xem §1.4.
 
-### 1.2 Ba thí nghiệm của đề tài đều nói cùng một điều
+### 1.2 Thêm dữ liệu hay thêm kênh lúc HUẤN LUYỆN thì không giúp
 
 | Thí nghiệm | Thêm gì vào lúc huấn luyện | Kết quả |
 |---|---|---|
@@ -57,13 +72,49 @@ những kênh mà student sẽ không bao giờ nhìn thấy, nên student bị 
 số nó không có đường nào suy ra. Nói gọn: *chưng cất giúp khi ưu thế của teacher
 là **dung lượng**, và có hại khi ưu thế là **thông tin***.
 
-### 1.3 Ràng buộc phần cứng, đo được
+### 1.3 Đề tài đã đo lại, và cái giá của một kênh lớn hơn nhiều
+
+Ba nhánh giống nhau hoàn toàn trừ số kênh, montage lấy nguyên văn của Chung et
+al., **66 fold × 3 seed = 198 mỗi nhánh**, dưới giao thức không rò rỉ của đề tài.
+
+| Nhánh | Độ nhạy sự kiện | FAR/h | Độ nhạy đoạn | Accuracy | AUROC |
+|---|--:|--:|--:|--:|--:|
+| 1 kênh | 0,9179 | 0,2798 | **0,4936** | 0,9896 | 0,8870 |
+| 4 kênh | 0,9331 | 0,3334 | **0,5936** | 0,9910 | 0,9237 |
+| 18 kênh | 0,9520 | 0,2625 | **0,7051** | 0,9937 | 0,9586 |
+
+So với nhánh 18 kênh, ghép cặp theo fold, cụm theo bệnh nhân:
+
+| | Δ độ nhạy sự kiện | Δ độ nhạy đoạn |
+|---|--:|--:|
+| 1 kênh | **−3,41 pp, CI [−5,83; −0,93]** | **−21,16 pp, CI [−26,28; −16,47]** |
+| 4 kênh | −1,89 pp, CI [−5,89; +1,97] | −11,16 pp, CI [−15,18; −7,13] |
+
+Bốn kết luận:
+
+1. **Một kênh kém hơn 18 kênh một cách đo được**: mất 3,41 pp độ nhạy sự kiện,
+   khoảng tin cậy không chứa 0, tương đương **2,62 cơn trong 77**. Đây là cái
+   giá phải nêu thẳng.
+2. **Hậu xử lý thu hồi 84 % thiếu hụt**: 21,16 pp ở mức đoạn còn 3,41 pp ở mức
+   sự kiện, vì làm mượt, hysteresis và lọc run-length tích hợp điểm số qua nhiều
+   cửa sổ liên tiếp. Đây là lý do thiết bị một kênh vẫn khả thi.
+3. **Mất mát dồn vào bước cuối**: 4 kênh so với 18 vẫn chứa 0. Phần lớn thông
+   tin dùng được sống sót tới bốn điện cực và mất đi khi xuống một.
+4. **Mức phạt công bố nhỏ hơn thực tế một bậc**: Chung et al. báo 1,9 pp ở mức
+   đoạn; đo không rò rỉ là **21,2 pp**. Cách chia ngẫu nhiên trên các cửa sổ
+   chồng lấn nâng mọi nhánh lên gần trần và nén khoảng cách giữa chúng.
+
+Accuracy dịch **0,41 pp** khi số kênh đổi 18 lần, trong khi độ nhạy đoạn dịch
+21,2 pp — thêm một xác nhận rằng accuracy không dùng để đánh giá được ở đây.
+
+### 1.4 Ràng buộc phần cứng, đo được
 
 Thiết bị đeo có **một cặp điện cực và một ADC**. Ngoài ra, với vi kiến trúc hiện
 tại (`CNN_1D_Core.v`: `FM_BANK_NUM = 16`, `FM_AWIDTH = 10`):
 
 - Bộ nhớ feature map mỗi buffer ping/pong = **16 × 1024 = 16.384 ô**.
-- Cửa sổ 23 kênh × 1024 mẫu cần **23.552 ô** → **không nằm vừa**, thiếu 7.168 ô.
+- Cửa sổ 23 tín hiệu × 1024 mẫu cần **23.552 ô** → **không nằm vừa**, thiếu 7.168 ô.
+  (Ngay cả với 18 kênh montage chuẩn vẫn cần 18.432 ô, vẫn vượt 16.384.)
 - Khối lượng tính tăng từ **585.920** lên **1.216.704 MACs**, vượt mục tiêu
   "dưới 1 triệu MACs" của đề cương.
 
@@ -119,14 +170,14 @@ trị và nên báo cáo song song hai bảng: khoảng cách giữa hai con s�
 
 | | |
 |---|---|
-| Toàn bộ CHB-MIT, 24 ca, 23 kênh | **41 GB** (≈ con số 44 GB thường trích) |
+| Toàn bộ CHB-MIT, 24 ca, 23 tín hiệu/file | **41 GB** (≈ con số 44 GB thường trích) |
 | Phải có trên đĩa: 13 ca đánh giá | **25,4 GB** |
 | **Thực sự đọc vào model**: 1 kênh, 599,5 h | **1,10 GB** → 2,21 GB khi thành float32 |
 | Riêng phần test (hợp của 66 fold, 185 h) | **341 MB** |
 
 **Tỷ lệ byte thực sự đi vào model: 2,5 % của 44 GB.**
 
-Vẫn phải có đủ 25 GB trên đĩa vì file EDF **gói 23 kênh xen kẽ trong cùng một
+Vẫn phải có đủ 25 GB trên đĩa vì file EDF **gói 23 tín hiệu xen kẽ trong cùng một
 file** — không tải riêng một kênh được. Chương trình gọi `readSignal(ch_idx)`,
 tức vẫn quét qua file nhưng chỉ dựng thành mảng đúng một kênh.
 
