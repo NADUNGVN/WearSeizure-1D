@@ -147,22 +147,39 @@ nó **không** phải yêu cầu để **dạy** model biết sóng ictal trông
 chính là lý do lever L5 được thiết kế để mở rộng corpus tiền huấn luyện ra ngoài
 13 ca trong khi giữ nguyên tập đánh giá.
 
-### 2.2 Điểm yếu phải thừa nhận
+### 2.2 Tiêu chí loại 11 ca là lâm sàng, có công bố
 
-13 ca **là một tập con thuận lợi**. Lý do chọn có căn cứ trích dẫn được, nhưng
-căn cứ đó không loại trừ được nghi ngờ chọn lọc, và phản biện sẽ hỏi đúng câu
-này.
+Chung et al. xét 23 ca (chb01–chb23), 182 cơn, rồi loại 10 ca theo **ba tiêu
+chí do bác sĩ thần kinh quyết định**, không phải do người làm model chọn:
 
-**Hướng xử lý đề xuất:** chạy thêm giao thức trên **đủ 24 ca**, vẫn một kênh.
-Vấn đề duy nhất phải giải là 11 ca ngoài Appendix A chưa biết dùng vị trí nào
-trong bốn — cách sạch là **chọn vị trí trên tập train/val của chính bệnh nhân
-đó, không bao giờ chạm tập test**, đúng như một giai đoạn hiệu chỉnh khi đeo máy
-thật.
+| Ca bị loại | Lý do |
+|---|---|
+| chb12 | các file **không có montage lưỡng cực dọc**; 13 cơn bị loại do thiếu dữ liệu |
+| chb12, 14, 16, 18, 20, 21 | **không xác định được vị trí khởi phát cơn** |
+| chb06, 09, 13, 19 | **vị trí khởi phát không gần** `Fp1-F3`, `Fp2-F4`, `P7-O1`, `P8-O2` |
 
-Dự kiến độ nhạy trên 24 ca sẽ **thấp hơn** 13 ca, vì 11 ca kia không có bằng
-chứng lâm sàng rằng cơn nhìn thấy được từ vị trí đeo. Đó vẫn là kết quả có giá
-trị và nên báo cáo song song hai bảng: khoảng cách giữa hai con số chính là
-**giá trị của việc xác nhận vị trí điện cực trước khi triển khai**.
+Nhóm cuối là điểm quyết định: với bốn ca đó, cơn khởi phát ở vùng mà điện cực
+đeo được **về mặt giải phẫu không với tới**. Không thuật toán nào phát hiện
+được từ một kênh đặt ở đó — đó là giới hạn vị trí, không phải giới hạn model.
+
+Vì vậy 13 ca **không phải một tập con thuận lợi do đề tài tự chọn**. Nó là tập
+bệnh nhân mà một thiết bị đeo một điện cực **có chỉ định sử dụng**. Cohort này
+trùng khít với Chung et al.: cùng 13 ca, cùng 77 cơn, cùng 599,5 giờ.
+
+### 2.3 Nếu vẫn muốn chạy đủ 24 ca
+
+Việc này vẫn đáng làm như một phép kiểm tra độ bền, nhưng phải trình bày đúng
+bản chất: nó **đo xem chuyện gì xảy ra khi dùng thiết bị ngoài chỉ định** — đặt
+điện cực đeo được lên những bệnh nhân mà cơn đã biết là không nằm gần đó — chứ
+không phải "gỡ bỏ một thiên lệch chọn mẫu".
+
+Vấn đề kỹ thuật duy nhất: 11 ca đó chưa được gán vị trí điện cực nào. Cách sạch
+là **chọn vị trí trên tập train/val của chính bệnh nhân đó, không bao giờ chạm
+tập test**, đúng như một giai đoạn hiệu chỉnh khi đeo máy thật.
+
+Dự kiến độ nhạy sẽ thấp hơn rõ rệt, và **nguyên nhân là giải phẫu chứ không
+phải model**. Báo cáo song song hai bảng: khoảng cách giữa chúng chính là giá
+trị của việc xác nhận vị trí điện cực trước khi triển khai.
 
 ---
 
@@ -216,6 +233,18 @@ biệt được giao thức có rò rỉ với giao thức sạch.**
 *Lưu ý khi đọc bảng:* tỷ lệ ictal khác nhau giữa các dòng (0,62 % ở dòng đầu,
 1,42 % ở hai dòng sau), nên accuracy không so trực tiếp giữa các dòng được; độ
 nhạy và độ đặc hiệu thì so được.
+
+### Các bài khác dùng dữ liệu gì
+
+| Bài | Ca | Kênh | Cơn | Giờ ghi | Cách chia |
+|---|--:|---|--:|--:|---|
+| Chung et al. 2024 | **13** | 18 / 4 / 1 | **77** | **599,5** | đoạn 7:2:1 ngẫu nhiên + sự kiện trên file giữ lại |
+| Busia et al. 2025 | 8 | 4 | 43–44 | 61 | leave-one-record-out, **chỉ file có cơn** |
+| Zhu et al. 2021 | *chưa xác minh* | *chưa xác minh* | — | — | *chưa xác minh* |
+| **Đề tài này** | **13** | 1 (+ ablation 18/4) | **77** | **599,5** (test 185,0) | LOSO theo file EDF + giữ thêm file không cơn |
+
+Cohort của đề tài **trùng khít với Chung et al.** và lớn hơn hẳn Busia et al.
+Quy mô dữ liệu không phải điểm yếu của đề tài so với các bài được đem ra so.
 
 ### Kết quả hiện tại của đề tài
 

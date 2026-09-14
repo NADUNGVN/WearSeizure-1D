@@ -34,11 +34,20 @@ RTL side; the accelerator deliverables have already been handed over and merged.
 
 ## 2. Dataset and protocol (state this precisely; reviewers will check)
 
-* **CHB-MIT**, 13 of 24 cases. The restriction comes from Chung et al. 2024,
-  who clinically confirmed that seizure onset is observable from one specific
-  wearable electrode position in exactly those cases. Every CHB-MIT montage
-  carries all four wearable positions, so this is a confirmation restriction,
-  not an availability one.
+* **CHB-MIT**, 13 of 24 cases -- **the same 13 as Chung et al. 2024, with the
+  same 77 seizures and the same 599.5 h.** Their exclusions are documented and
+  clinically grounded, and the paper should reproduce that reasoning rather
+  than merely citing the count: of the 23 cases they screened, chb12's files
+  lack longitudinal bipolar montages; neurologists could not identify a seizure
+  location in chb12, 14, 16, 18, 20 and 21; and in chb06, 09, 13 and 19 the
+  seizure location is **not near any of the four wearable positions**. That
+  last group cannot be detected from a wearable electrode for anatomical
+  reasons, not algorithmic ones.
+
+  So 13 cases is not a favourable subset chosen by the modelling side. It is
+  the population for which a single-electrode wearable **has an indication**.
+  Every CHB-MIT montage carries all four wearable positions, so this is a
+  clinical-confirmation restriction, not an availability one.
 * **One channel per patient**: `P7-O1` (chb02, 05, 10, 11, 15), `Fp1-F3`
   (chb03, 07, 08, 22, 23), `P8-O2` (chb01, 04, 17).
 * **Window** 4.0 s at 256 Hz = 1024 samples, stride 1 s.
@@ -250,6 +259,13 @@ state that it is single-channel.**
 **Ali et al. 2024**: 75.34 % at 4.79 FAR/h with **18 channels**, zero-shot /
 patient-independent. Only compare against this with the protocol difference
 stated in the same sentence.
+
+**Cohort sizes, for the "did you use enough data" question.** This work: 13
+cases, 77 seizures, 599.5 h recorded, 185.0 h of continuous test exposure.
+Chung et al.: identical 13 cases, 77 seizures, 599.5 h, ~91 h tested. Busia et
+al.: 8 cases, 43-44 seizures, 61 h, and only recordings containing a seizure.
+**Cohort size is not a weakness of this work relative to its comparators** --
+state it plainly if a reviewer raises it.
 
 ---
 
