@@ -46,7 +46,7 @@ than left as a column that is empty eleven times.
 | Hasan 2024, IEEE RAAICON | multi | 98.93 % | 98.60 % | ~4 080 000 | FP32 | *est.* 16.3 MB | — |
 | Li 2022, *IEEE TBioCAS* | multi | 99.01 % | 99.24 % | 10 778 | RRAM | *est.* 43 KB | — |
 | Alharthi 2022, *Sensors* | 18 | 96.87 % | 96.85 % | ~83 300 | FP32 | *est.* 325 KB | — |
-| Zhu 2021, IEEE ASICON | 23 | 97.35 % | 94.32 % | 7 010 | fixed-pt | *est.* 7 KB | 6 320 000 |
+| Zhu 2021, IEEE ASICON | *unverified* | 97.35 % | 94.32 % | 7 010 | fixed-pt | *est.* 7 KB | 6 320 000 |
 | Kashefi Amiri 2025, *Sci. Rep.* | multi | 96.94 % | 92.21 % | 765 000 | FP32 | *est.* 3.06 MB | 1 670 000 |
 | **EpiSepNet-5K** *(earlier model, same group)* | 17 | 90.07 % | 90.76 % | 5 010 | FP32 | 20.0 KB | — |
 | **EpiSepNet-5K** *(earlier model, same group)* | 17 | 90.04 % | 90.76 % | 4 900 | **INT16** | **9.8 KB** | — |
@@ -56,8 +56,59 @@ than left as a column that is empty eleven times.
 | Wang et al. (MSCA) | multi | 98.70 % | 98.30 % | 88 000 | — | *est.* 352 KB | 2 680 000 |
 | Ahlawat | multi | — | — | — | INT8 | 440 KB | — |
 | Ali 2024, *R. Soc. Open Sci.* | 18 | — | 75.34 % | — | — | — | — |
-| **WearSeizure-1D** | **1** | 98.88 % | **94.89 %** (event) / 60.33 % (seg) | **11 786** | INT8 | **11.5 KB** | **585 920** |
-| **WearSeizure-1D** | **1** | — | — | **11 786** | DFP16 | 23.0 KB | **585 920** |
+| **WearSeizure-1D** | **1** | 98.88 % | **94.95 %** (event) / 60.33 % (seg) | **11 786** | **DFP8** | **11.5 KB** | **585 920** |
+
+### What the single-channel constraint costs, measured here
+
+The table above compares published systems, each with its own recipe and
+protocol. This block does something different: **three arms of this same model,
+identical in every respect except how many channels it reads**, so the
+difference is attributable to the channel count and nothing else.
+
+All three train from scratch per fold — **no cohort pre-training and no
+distillation** — which is why the 1-channel arm reads 91.79 % rather than the
+94.95 % in the table above. Cross-arm comparison is valid; comparison against
+the row above is not.
+
+66 folds x 3 seeds = 198 per arm, montages taken verbatim from Chung et al.
+
+| Arm | Sens (event) | Sens (segment) | AUROC | Acc | Params | MACs |
+|---|--:|--:|--:|--:|--:|--:|
+| **1 channel** (deployed) | **91.79 %** | **49.36 %** | 0.8870 | 98.96 % | **11 786** | **585 920** |
+| 4 channels | 93.31 % | 59.36 % | 0.9237 | 99.10 % | 11 954 | 671 936 |
+| 18 channels | 95.20 % | 70.51 % | 0.9586 | 99.37 % | 12 738 | 1 073 344 |
+
+Paired bootstrap against the 18-channel arm, clustered by patient:
+
+| | Δ event sens | Δ segment sens |
+|---|--:|--:|
+| 1 channel | **−3.41 pp**, CI [−5.83, −0.93] | **−21.16 pp**, CI [−26.28, −16.47] |
+| 4 channels | −1.89 pp, CI [−5.89, +1.97] | −11.16 pp, CI [−15.18, −7.13] |
+
+Four things this measures:
+
+1. **One channel costs 3.41 pp of event sensitivity** against eighteen — 2.62
+   seizures out of 77, interval excluding zero. That is the price of the
+   wearable form factor, and it should be stated rather than hidden.
+2. **Post-processing absorbs 84 % of the deficit.** 21.16 pp at segment level
+   becomes 3.41 pp at event level, because smoothing, hysteresis and
+   run-length filtering integrate the score across consecutive windows. This is
+   why a single-electrode device is viable at all.
+3. **The loss is concentrated in the last step.** Four channels against
+   eighteen still spans zero; one channel does not.
+4. **The published channel penalty is an order of magnitude too small.** Chung
+   et al. report 1.9 pp of segment sensitivity from 18 channels to 1; measured
+   without their segment-level split, it is 21.2 pp.
+
+And a third independent demonstration that accuracy is the wrong metric here:
+it moves **0.41 pp** across an eighteen-fold change in input channels, while
+segment sensitivity moves 21.2. AUROC, being threshold-free, is not blind.
+
+Note on MACs: only the stem changes between arms, so the extra cost is
+8 filters x 7 taps x the extra channels. The 18-channel arm needs 1 073 344
+MACs, which exceeds the project's own 1 M budget — and its 18 x 1024 input does
+not fit the accelerator's 16 384-cell feature-map memory. It is a measurement,
+not a deployable configuration.
 
 Two claims this table does **not** support, and which should never be made:
 
