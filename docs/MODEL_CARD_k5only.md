@@ -253,11 +253,25 @@ Tiền xử lý phải **nhân quả** (`lfilter` một chiều, reset trạng t
 không phải `filtfilt`. Thiết bị đeo không nhìn được về tương lai. Nếu bộ lọc được
 làm cứng thì nó cũng nằm trong ngân sách tài nguyên và phải tính vào.
 
-### 4.8 ĐÃ ĐO: định dạng số đã chốt là **DFP16**
+### 4.8 ~~ĐÃ ĐO: định dạng số đã chốt là DFP16~~ → **đã bị thay bằng DFP8**
+
+> **MỤC NÀY ĐÃ LỖI THỜI.** Kết luận DFP16 dưới đây dựa trên sweep **fake-quantised**:
+> nó chỉ làm tròn trọng số và activation, **không** mô hình hoá accumulator 48-bit,
+> requant bằng dịch bit, saturation, hay sáu điểm lượng tử hoá thêm giữa mỗi cặp
+> depthwise/pointwise. Đo lại trên **datapath số nguyên thật**, 66 fold, DFP8 mất
+> **0,00 pp** độ nhạy sự kiện so với FP32 (giống hệt trên cả 66 fold), chỉ tốn thêm
+> 0,063 báo động giả/giờ.
+>
+> **Định dạng đã chốt là DFP8.** Mọi con số bộ nhớ ở §4.2 đọc ở cột INT8/DFP8, không
+> phải INT16/DFP16. Xem `docs/HARDWARE_DESIGN_BRIEF.md` §4.
+>
+> Giữ lại nguyên văn bên dưới vì nó ghi cách quyết định dựa trên **độ rộng khoảng tin
+> cậy chứ không phải điểm ước lượng** — lập luận đó vẫn đúng, chỉ là dữ liệu đầu vào
+> đã được thay bằng phép đo tốt hơn.
 
 Đã quét 5 định dạng trên 66 fold × 3 seed (`EXPERIMENT_LOG_G1a.md` §2m).
 
-**Chốt: `dfp16` — dynamic fixed point 16 bit, scale per-channel.**
+**Chốt (đã lỗi thời): `dfp16` — dynamic fixed point 16 bit, scale per-channel.**
 
 | | mất so với FP32 | CI 95% | mất tối đa dữ liệu cho phép |
 |---|---:|---|---:|

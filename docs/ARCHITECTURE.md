@@ -32,6 +32,14 @@ Each arrow is a module boundary in `src/wearseizure/`:
 
 ## WearSeizure-1D (Table 4)
 
+> **Do not use this section for the architecture.** It describes the
+> **multi-scale** variant, which is not what the project deploys, and quotes a
+> design aspiration (13,810 params / 0.644M MACs) rather than a measurement. The
+> frozen model is `wearseizure1d_k5only` at **11,786 params / 585,920 MACs**.
+> The authoritative per-layer table is `docs/MODEL_CARD_k5only.md` §3, and
+> `docs/HARDWARE_DESIGN_BRIEF.md` §2 for hardware work. Regenerate either with
+> `python scripts/hardware_spec.py wearseizure1d_k5only --markdown`.
+
 Stem (Conv1D k7,s2) -> B1 (DW k5,s2) -> B2/B3/B4 (multi-scale
 `[DW k3 || DW k5,dilation]`, s2, dilation 1/2/4) -> Context (2x dilated
 depthwise-separable, s1) -> GAP -> FC(2 logits). Hard budget: <=32k params,

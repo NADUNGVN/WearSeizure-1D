@@ -1,5 +1,17 @@
 # RTL interface spec (draft, pre-hardware)
 
+> **SUPERSEDED IN PART — read `docs/HARDWARE_DESIGN_BRIEF.md` first.**
+>
+> This file was written 2025-08-12, before the precision sweep and before the
+> DFP export. Its **numeric format is wrong**: it specifies INT8 weights and
+> activations with a 32-bit accumulator and a truncating right shift. What the
+> project actually measured and ships is **DFP8 with a 48-bit accumulator and
+> round-to-nearest ties-away-from-zero**. A truncating shift disagrees with the
+> hardware on about half of all values by one LSB.
+>
+> The AXI-Lite / AXI-Stream contract, the register map and the postprocessor
+> description below are still current. The bit widths are not.
+
 Status: **spec only** -- no RTL exists yet. This is the interface contract
 the software pipeline is designed around so that when RTL work starts (Gate
 G3, after the training server and FPGA board are confirmed), the datapath
