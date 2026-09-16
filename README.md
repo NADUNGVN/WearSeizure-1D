@@ -46,7 +46,7 @@ than left as a column that is empty eleven times.
 | Hasan 2024, IEEE RAAICON | multi | 98.93 % | 98.60 % | ~4 080 000 | FP32 | *est.* 16.3 MB | — |
 | Li 2022, *IEEE TBioCAS* | multi | 99.01 % | 99.24 % | 10 778 | RRAM | *est.* 43 KB | — |
 | Alharthi 2022, *Sensors* | 18 | 96.87 % | 96.85 % | ~83 300 | FP32 | *est.* 325 KB | — |
-| Zhu 2021, IEEE ASICON | *unverified* | 97.35 % | 94.32 % | 7 010 | fixed-pt | *est.* 7 KB | 6 320 000 |
+| Zhu 2021, IEEE ASICON | 23 | 97.35 % | 94.32 % | 7 010 | fixed-pt | *est.* 7 KB | 6 320 000 |
 | Kashefi Amiri 2025, *Sci. Rep.* | multi | 96.94 % | 92.21 % | 765 000 | FP32 | *est.* 3.06 MB | 1 670 000 |
 | **EpiSepNet-5K** *(earlier model, same group)* | 17 | 90.07 % | 90.76 % | 5 010 | FP32 | 20.0 KB | — |
 | **EpiSepNet-5K** *(earlier model, same group)* | 17 | 90.04 % | 90.76 % | 4 900 | **INT16** | **9.8 KB** | — |

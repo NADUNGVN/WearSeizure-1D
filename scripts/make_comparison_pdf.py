@@ -46,14 +46,17 @@ ROWS = [
         "model": "Separable 1D-CNN, k5 + dilation 1/2/4/8/16; 1 channel; 4-s windows",
         "protocol": "<b>Leakage-safe</b>: split by recording before filtering; thresholds frozen on val; "
                     "<b>185.0 h</b> continuous test; 66 folds x 3 seeds",
-        "acc": 98.88, "sen": 94.89,
+        "acc": 98.88, "sen": 94.95,
         "sen_note": "event level; 60.33 segment level",
         "params": 11786,
-        "precision": "INT8/DFP8 or<br/><b>INT16/DFP16</b><br/>"
-                     "<font size=5.4>format not yet fixed; being chosen by measured loss</font>",
-        "footprint": "<b>11.5 KB</b> at INT8 or DFP8<br/><b>23.0 KB</b> at INT16 or DFP16",
-        "footprint_kb": 11.5,
-        "other": "585,920 MACs (thop) / 489,600 conv+fc; FAR 0.29/h; delay 17.8 s<br/><b>weights + activations: 18.2 KB at INT8/DFP8, 36.3 KB at INT16/DFP16</b> = <b>3.6% of XC7Z020 BRAM</b>",
+        "precision": "<b>DFP8</b><br/>"
+                     "<font size=5.4>chosen on measured loss: 0.00 pp of event sensitivity "
+                     "against FP32 on all 66 folds, through the real integer datapath</font>",
+        "footprint": "<b>10.87 KiB</b> weights (DFP8)<br/>+ 1.76 KiB biases (32-bit)",
+        "footprint_kb": 10.87,
+        "other": "585,920 MACs (thop) / 489,600 conv+fc; FAR 0.25/h<br/>"
+                 "<b>total on-chip 18.62 KiB</b> = weights + biases + 6.00 KiB peak "
+                 "activation<br/><font size=5.4>3.6% of XC7Z020 BRAM</font>",
         "macs": 585920,
     },
     {
@@ -233,6 +236,94 @@ def emphasise(text: str, mark: str | None) -> str:
     return text
 
 
+
+# ---------------------------------------------------------------------------
+# Table 2: the channel ablation. Three arms of this same model, identical
+# except for how many channels they read, so the difference is attributable to
+# the channel count and nothing else. All three train from scratch per fold --
+# no cohort pre-training, no distillation -- which is why the 1-channel arm
+# reads 91.79 rather than the 94.95 in Table 1. Cross-arm comparison is valid;
+# comparison against Table 1 is not, and the caption says so.
+# ---------------------------------------------------------------------------
+
+ABLATION_HEADERS = [
+    "Channels", "SEN event (%)", "SEN segment (%)", "ACC (%)", "AUROC",
+    "FAR/h", "Parameters", "MACs", "Total on-chip", "Runs on the accelerator?",
+]
+ABLATION_DIRECTION = [None, True, True, True, True, False, False, False, False, None]
+ABLATION_ROWS = [
+    ["<b>1 (deployed)</b>", 91.79, 49.36, 98.96, 0.8870, 0.2798, 11578, 585920, 18.62,
+     "yes - 1,024 of 16,384 cells"],
+    ["4", 93.31, 59.36, 99.10, 0.9237, 0.3334, 11746, 671936, 20.79,
+     "yes - 4,096 of 16,384 cells"],
+    ["18", 95.20, 70.51, 99.37, 0.9586, 0.2625, 12530, 1073344, 35.55,
+     "<b>no</b> - needs 18,432 cells"],
+]
+ABLATION_FMT = [None, "{:.2f}", "{:.2f}", "{:.2f}", "{:.4f}", "{:.4f}",
+                "{:,}", "{:,}", "{:.2f} KiB", None]
+
+# ---------------------------------------------------------------------------
+# Table 3: activation memory under the definition asked for -- the largest sum
+# of the feature maps of two adjacent layers, plus any skip connection live
+# across them. This network has none: DepthwiseSeparableConv1d is
+# depthwise -> pointwise -> BN -> ReLU and MultiScaleDilatedBlock in k5_only
+# mode is a single branch, so neither adds its input back.
+# ---------------------------------------------------------------------------
+
+FOOTPRINT_HEADERS = ["Layer", "Input map", "Output map", "Input + output"]
+FOOTPRINT_ROWS = [
+    ["stem.0", 1024, 4096, 5120], ["<b>b1.dw</b>", 4096, 2048, 6144],
+    ["b1.pw", 2048, 4096, 6144], ["b2.dw", 4096, 2048, 6144],
+    ["b2.pw", 2048, 3072, 5120], ["b3.dw", 3072, 1536, 4608],
+    ["b3.pw", 1536, 2048, 3584], ["b4.dw", 2048, 1024, 3072],
+    ["b4.pw", 1024, 1536, 2560], ["context.0.dw", 1536, 1536, 3072],
+    ["context.0.pw", 1536, 2048, 3584], ["context.1.dw", 2048, 2048, 4096],
+    ["context.1.pw", 2048, 2048, 4096], ["gap", 2048, 64, 2112],
+    ["fc", 64, 2, 66],
+]
+
+
+def marks_for(rows, col, higher_is_better):
+    """best / second for one column of a plain list-of-lists table."""
+    vals = [(i, r[col]) for i, r in enumerate(rows) if isinstance(r[col], (int, float))]
+    if len(vals) < 2:
+        return {}
+    vals.sort(key=lambda t: t[1], reverse=higher_is_better)
+    out = {vals[0][0]: "best"}
+    if vals[1][1] != vals[0][1]:
+        out[vals[1][0]] = "second"
+    return out
+
+
+def simple_table(headers, rows, directions, fmts, widths, head_style, body_style,
+                 page_w, shade_row=None):
+    """A ranked table: best bold, second underlined, computed not hand-marked."""
+    col_marks = {c: marks_for(rows, c, d) for c, d in enumerate(directions) if d is not None}
+    data = [[Paragraph(h, head_style) for h in headers]]
+    for i, row in enumerate(rows):
+        cells = []
+        for c, v in enumerate(row):
+            text = v if fmts[c] is None else fmts[c].format(v)
+            cells.append(Paragraph(emphasise(text, col_marks.get(c, {}).get(i)), body_style))
+        data.append(cells)
+    total = sum(widths)
+    t = Table(data, colWidths=[w / total * page_w for w in widths], repeatRows=1)
+    style = [
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#999999")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E8E8E8")),
+        ("TOPPADDING", (0, 0), (-1, -1), 2.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+    ]
+    if shade_row is not None:
+        style.append(("BACKGROUND", (0, shade_row + 1), (-1, shade_row + 1),
+                      colors.HexColor("#F2F6FF")))
+    t.setStyle(TableStyle(style))
+    return t
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("-o", "--out", default="docs/comparison_table.pdf")
@@ -324,6 +415,72 @@ def main() -> int:
                 "alone, because 99.6 % of test windows then have a near-duplicate in training. "
                 "Accuracy is nearly blind to this: at 0.62 % ictal prevalence a model that never predicts a seizure "
                 "already scores 99.38 %."
+            ),
+            note),
+        Spacer(1, 10),
+        Paragraph("Table 2 &mdash; what the single-channel constraint costs", title),
+        Paragraph(
+            (
+                "Three arms of the <b>same</b> model, identical except for how many channels it reads, so "
+                "the difference is attributable to the channel count and nothing else. 66 folds x 3 seeds = "
+                "198 runs per arm; montages taken verbatim from Chung et al. so the comparison lines up with "
+                "their published ablation channel-for-channel. "
+                "<b>All three train from scratch per fold &mdash; no cohort pre-training, no distillation &mdash; "
+                "which is why the 1-channel arm reads 91.79 % here and 94.95 % in Table 1. Compare the arms "
+                "with each other, never with Table 1.</b>"
+            ),
+            note),
+        Spacer(1, 4),
+        simple_table(ABLATION_HEADERS, ABLATION_ROWS, ABLATION_DIRECTION, ABLATION_FMT,
+                     [12, 14, 15, 11, 11, 11, 13, 13, 13, 22], head, body, page_w,
+                     shade_row=0),
+        Spacer(1, 5),
+        Paragraph(
+            (
+                "<b>Paired bootstrap against the 18-channel arm</b>, clustered by patient. "
+                "1 channel: <b>&minus;3.41 pp</b> event sensitivity, 95 % CI [&minus;5.83, &minus;0.93] &mdash; "
+                "excluding zero, so the cost is established; and &minus;21.16 pp at segment level, "
+                "CI [&minus;26.28, &minus;16.47]. 4 channels: &minus;1.89 pp event, CI [&minus;5.89, +1.97] &mdash; "
+                "<i>spans zero</i>, so four channels are not measurably worse than eighteen. "
+                "<b>Post-processing absorbs 84 % of the deficit</b>: 21.16 points at segment level become 3.41 at "
+                "event level, because smoothing, hysteresis and run-length filtering integrate the score across "
+                "consecutive windows. That is why a single-electrode device is viable at all. "
+                "Chung et al. report the 18-to-1 penalty as 1.9 points of segment sensitivity; measured without "
+                "their segment-level random split it is <b>21.2</b>. "
+                "Accuracy moves <b>0.41 pp</b> across an eighteen-fold change in input channels while segment "
+                "sensitivity moves 21.2 &mdash; a third independent demonstration that it cannot be used to "
+                "compare detectors on this data. AUROC, being threshold-free, is not blind."
+            ),
+            note),
+        Spacer(1, 10),
+        Paragraph("Table 3 &mdash; activation memory, layer by layer", title),
+        Paragraph(
+            (
+                "Definition: <b>the largest sum of the feature maps of two adjacent layers</b>, plus any skip "
+                "connection that must stay live across them. A layer reads its input while writing its output, so "
+                "both are resident at the same instant. <b>This network has no skip connections</b> &mdash; "
+                "DepthwiseSeparableConv1d is depthwise &rarr; pointwise &rarr; BN &rarr; ReLU and the multi-scale "
+                "block in k5-only mode is a single branch, so neither adds its input back &mdash; and there is "
+                "therefore nothing to add. Bytes at DFP8, one byte per activation."
+            ),
+            note),
+        Spacer(1, 4),
+        simple_table(FOOTPRINT_HEADERS, FOOTPRINT_ROWS,
+                     [None, False, False, False], [None, "{:,} B", "{:,} B", "{:,} B"],
+                     [20, 16, 16, 18], head, body, page_w * 0.42, shade_row=1),
+        Spacer(1, 5),
+        Paragraph(
+            (
+                "<b>Peak = 6,144 B = 6.00 KiB, at b1.dw.</b> Total on-chip = 10.87 KiB weights + 1.76 KiB biases "
+                "+ 6.00 KiB activations = <b>18.62 KiB</b>. "
+                "Two details that would otherwise be asked about. <b>Biases are stored at 32 bit</b>, not at the "
+                "data width: the PE loads a bias as the accumulator's initial value, so it lives at the "
+                "accumulator's fixed point, and counting them at 8 bit would understate the total by 1.3 KiB. "
+                "And <b>the accelerator allocates 8.00 KiB rather than 6.00</b>, because it uses a ping-pong pair "
+                "of banks &mdash; layers alternate between them instead of being packed &mdash; so each bank must "
+                "hold the largest map it ever sees. 6.00 KiB is what the network requires; 8.00 KiB is what is on "
+                "the die, for a total of 20.62 KiB. The 18-channel arm needs 22.00 KiB of activation and does not "
+                "fit the 16,384-cell feature-map memory at all."
             ),
             note),
         Spacer(1, 5),
