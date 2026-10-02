@@ -294,12 +294,14 @@ Measured, quotable:
 
 * **98.48 %** as a headline sensitivity. It is one seed and the discrepancy with
   the three-seed 94.95 % is unexplained.
-* **"One channel is equivalent to 18 channels."** The event-level interval
-  spans zero but reaches −10.53 pp on one seed. Under this project's own rule —
-  rank by the worst case the interval allows, not by the point estimate — this
-  is not established.
-* **"Adding channels does not help."** Measured false: 19.7 points of segment
-  sensitivity and 8.5 points of AUROC.
+* **"One channel is equivalent to 18 channels."** **Measured false** over three
+  seeds: −3.41 pp of event sensitivity, CI [−5.83, −0.93], excluding zero. At
+  one seed the interval spanned zero and this claim looked available; that was
+  absence of evidence, not evidence of absence. State the 3.41-point cost
+  instead, and the mechanism that makes it survivable — post-processing absorbs
+  84 % of the segment-level deficit.
+* **"Adding channels does not help."** Measured false: 21.2 points of segment
+  sensitivity and 7.2 points of AUROC from one channel to eighteen.
 * **"Chung et al. evaluated with data leakage."** True of their segment-level
   stage only; their headline is event-level on a held-out recording.
 * **Zhu et al. described as single-channel.** Unverified.
