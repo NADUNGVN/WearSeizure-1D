@@ -333,19 +333,55 @@ MACs 585,920 ≤ 700,000 target; quantisation loss 0.00 pp ≤ 0.5 pp target.
 **Resolve this before writing the first line of RTL.** It has physical lead time and
 nothing else in the project does.
 
-The question: **does the KV260 expose a usable on-board power sensor, and at what
-granularity?** PYNQ-Z2 does not — in the PYNQ family only ZCU104 does — and the
-recorded fallback was an external INA219/INA226 shunt on the 12 V rail, which must
-be ordered.
+**Answered 2026-10-02, from vendor documentation, not from the bench.** The KV260
+carries an **INA260 current/power monitor at I2C address 0x40 on the VCC_SOM rail**
+(UG1089; the K26 SOM design manual recommends exactly this on any carrier). So a
+sensor exists and nothing has to be ordered. The catch is granularity, and it is
+the catch §8 originally warned about:
 
-Three options, with the project's own assessment:
+* **VCC_SOM is the whole SOM — PS and PL on one rail.** There is no per-rail
+  INA on this board. ZCU102/ZCU104 expose VCCINT, VCCBRAM, VCCAUX separately;
+  K26 does not.
+* **The AMS block (`hwmon0`) reports voltages and temperatures, not current.**
+  It cannot substitute.
+* **`xlnx_platformstats` looks for a hwmon node named `ina260_u14` and does not
+  find it on K26** (Xilinx/xlnx_platformstats issue #4) — the utility's hard-coded
+  name predates this board. Read the device directly over I2C at 0x40 rather than
+  relying on that tool, and verify on the bench before trusting either path.
 
-* **External shunt** — works anywhere, needs ordering, gives a true board-level
-  measurement with static/dynamic separable by clock-gating the design.
-* **On-board sensor, if KV260 has one** — verify granularity: a whole-board rail
-  that includes the PS tells you much less than a PL rail.
+### What this means for the measurement protocol
+
+Absolute PL power is **not** separable on this board. That is survivable, because
+§1 already ruled out the absolute-power comparison as unwinnable. What the paper
+needs — and what VCC_SOM *can* give — is a **differential** measurement:
+
+```
+E_dynamic_per_inference = (P_running - P_idle) * t_inference
+```
+
+where `P_idle` is VCC_SOM with the bitstream loaded and the accelerator clock
+gated, and `P_running` is the same board doing inference. Everything common to
+both — PS static, PL static, DDR, fan — cancels. Report:
+
+* **dynamic energy per inference (µJ)** and **pJ/MAC**, which are comparable
+  across the published designs in §10;
+* **whole-SOM idle and active power (mW)** as context, labelled as whole-SOM so
+  no reviewer mistakes it for PL;
+* **never** a PL-only static figure, because this board cannot produce one.
+
+At a 0.12 % duty cycle the delta will be small relative to the idle baseline, so
+average over many inferences and report the sampling interval and the number of
+windows. Establish the noise floor first: run the idle measurement twice and
+report its spread, because a dynamic delta smaller than that spread is not a
+measurement.
+
+An **external INA219/INA226 shunt on the 12 V input** remains the fallback, and
+buys board-level rather than SOM-level numbers — strictly worse granularity. The
+only reason to order one is if the on-board device turns out unreadable on the
+bench. **Check that first; it is one I2C read.**
+
 * **Vivado Power Analyzer estimate — violates the go/no-go.** "Measured", not
-  "estimated". Do not plan around this.
+  "estimated". Do not plan around this, and do not let it into a table.
 
 ---
 

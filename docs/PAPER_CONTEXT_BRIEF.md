@@ -27,8 +27,24 @@ Two claims carry the paper:
    CHB-MIT is protocol, not model.** This is measured, not asserted, and it is
    the paper's strongest and most defensible contribution.
 
-Target venue: IEEE TBioCAS. There is a companion undergraduate thesis on the
-RTL side; the accelerator deliverables have already been handed over and merged.
+3. **A programmable 1D-CNN accelerator that runs this detector on a KV260, with
+   measured energy.** Scope decision of 2026-10-02: **the hardware is in the
+   paper.** Not a companion thesis chapter, not future work — a contribution this
+   manuscript has to carry evidence for.
+
+Target venue: IEEE TBioCAS. There is a separate undergraduate thesis on the RTL
+side and four deliverables were handed to that team; **none of that counts as
+this paper's hardware contribution.** Our accelerator does not exist yet.
+
+**What claim 3 costs, stated plainly so the draft is never written ahead of the
+evidence.** `docs/GATES.md` makes three things submission conditions: bit-exact
+RTL verification against the golden model, **measured** FPGA power, and one
+quantified hardware contribution beyond a generic HLS/CPU baseline. Until each
+has a number attached, the hardware section may describe a *design* and must not
+report a *result*. The intended contribution is **programmability** — a microcoded
+datapath that runs a family of 1D-CNN shapes without resynthesis, where published
+accelerators for this task are hardwired to one model. See
+`docs/HARDWARE_DESIGN_BRIEF.md`, which is the binding document for that side.
 
 ---
 
@@ -269,11 +285,23 @@ state it plainly if a reviewer raises it.
 
 ---
 
-## 6. Hardware side (one section, already delivered)
+## 6. Hardware side — in scope, and mostly not yet measured
 
-Deliverables merged into the RTL team's repository: folded and quantised DFP8
-weights, a bit-exact NumPy golden model, per-layer test vectors, and a manifest
-with calibrated per-layer shifts.
+**Read this section as two lists: what is measured, and what is not built.** The
+split matters more here than anywhere else in this brief, because the hardware is
+the part of the paper most likely to be drafted ahead of its evidence.
+
+**Not built, and therefore unclaimable:** our own RTL (the repository contains no
+`.v`, `.sv` or `.vhd` of ours), any synthesis result, any timing closure, any
+measured power number, any resource utilisation for the KV260. Every LUT/DSP/BRAM
+figure anywhere in this repository was computed for an XC7Z020 and does not
+transfer. The power path itself is now understood — KV260 exposes an INA260 on the
+whole-SOM rail, so only *differential* dynamic energy is obtainable, never PL-only
+static power (`HARDWARE_DESIGN_BRIEF.md` §8) — but understood is not measured.
+
+**Delivered to the RTL team, which is a different thing from being our result:**
+folded and quantised DFP8 weights, a bit-exact NumPy golden model, per-layer test
+vectors, and a manifest with calibrated per-layer shifts.
 
 Measured, quotable:
 
@@ -314,6 +342,20 @@ Measured, quotable:
   accuracy cannot distinguish protocols on this data.
 * **Worst-patient and delay figures** — not verified in the current run set. Ask
   before using.
+* **Any hardware result whatsoever.** Latency, throughput, Fmax, LUT/DSP/BRAM
+  utilisation, power, energy per inference, pJ/MAC, and any comparison against
+  the accelerators in §10 — **none of these exist yet.** The hardware is in the
+  paper's scope (§1, claim 3) and the design is specified, but nothing has been
+  synthesised or measured. Describing the intended datapath is fine; printing a
+  number for it is fabrication.
+* **Any KV260 resource percentage carried over from XC7Z020.** The two parts have
+  different budgets. "18.62 KiB is 3.6 % of BRAM" is an XC7Z020 sentence; state
+  **bytes**, not percentages, until a KV260 budget exists.
+* **PL-only static or total power on KV260.** The board exposes one whole-SOM
+  rail. Only a differential dynamic figure is obtainable — see
+  `HARDWARE_DESIGN_BRIEF.md` §8 for the exact form it may take.
+* **Vivado Power Analyzer estimates presented as power.** They violate the
+  project's own go/no-go, which says *measured*.
 
 ---
 
@@ -335,7 +377,17 @@ Nothing. The channel ablation completed at three seeds and §4.4 is settled --
 draft it as written there, including the 3.41-point cost of the single-channel
 constraint.
 
-Open items that are *not* blocking and must simply not be claimed: the
-zero-shot / patient-independent branch has never been run, worst-patient and
-detection-delay figures are not verified in the current run set, and the
-94.95 % / 98.48 % discrepancy in §4.1 is unexplained.
+Open items on the **software** side that are *not* blocking and must simply not
+be claimed: the zero-shot / patient-independent branch has never been run,
+worst-patient and detection-delay figures are not verified in the current run
+set, and the 94.95 % / 98.48 % discrepancy in §4.1 is unexplained. The 24-case
+full-cohort run is coded and pushed but has not been confirmed started.
+
+The **hardware** side is a different kind of open: it is not waiting on a run, it
+is waiting on a design that does not exist. In submission order the gating items
+are (1) KV260 resource budget restated from XC7Z020, (2) RTL written or adapted,
+(3) bit-exact verification against `hardware/golden_model.py` on ≥ 10,000 windows,
+(4) the differential power measurement of §8, (5) the programmability
+demonstration over the five configurations of `HARDWARE_DESIGN_BRIEF.md` §9.
+Until (3) and (4) report numbers, the manuscript has a design section and no
+results section for hardware, and should be drafted that way.
