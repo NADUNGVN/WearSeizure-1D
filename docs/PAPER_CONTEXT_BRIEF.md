@@ -310,7 +310,16 @@ Measured, quotable:
 * Weight SQNR 34–47 dB; **activation SQNR only 22–31 dB**. The activations are
   the quantisation bottleneck, so per-channel *weight* scales would attack the
   wrong term — measured at +6.9 dB on the best layer and still not worth it.
-* Peak accumulator on real data: **19,023 — 15 bits of the 48 provided**.
+* Peak accumulator on real data: **23,608 over a whole held-out recording (3,597
+  windows of `chb01_03`) — 15 bits of magnitude, 16 signed, of the 48 provided.**
+  The figure of 19,023 quoted earlier was a calibration batch; this is the same
+  quantity over two hundred times more data and replaces it.
+* The hardware has no softmax, so the frozen probability thresholds become
+  integer comparisons on the logit margin. At `p_out = 2` **one LSB of margin is
+  6.22 percentage points of probability** at the decision boundary — the
+  detector's on-chip score resolution. This fold's thresholds survive the
+  conversion (`0.30 -> margin >= -3`, `0.01 -> margin >= -18`, fifteen integer
+  steps of hysteresis), but it is measured, not guaranteed.
 * The reference RTL had no activation unit and no dilation support. The network
   needs ReLU after 10 of 15 layers, non-uniformly, and dilation 2/4/8/16 in four
   depthwise layers. The RTL team has since added a RELU_EN instruction bit and

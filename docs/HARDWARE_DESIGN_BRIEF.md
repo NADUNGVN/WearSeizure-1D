@@ -185,11 +185,18 @@ accumulator's **initial value**, so it lives at the accumulator's fixed point
 
 ### Accumulator width
 
-48 bits is what the reference RTL provides. **Measured peak on real data: 19,023 —
-15 bits.** The arithmetic ceiling is also low: the widest layer accumulates
+48 bits is what the reference RTL provides. **Measured peak over a whole held-out
+recording — 3,597 windows of `chb01_03` — is 23,608**, a magnitude of 15 bits, so
+a signed accumulator needs **16**. The earlier figure of 19,023 came from a
+calibration batch of a few hundred windows; 23,608 supersedes it because it is the
+same quantity measured over two hundred times more data, and it is the one to size
+against.
+
+The arithmetic ceiling is also low: the widest layer accumulates
 64 channels × 5 taps × 127 × 127 = 5.2 × 10⁶, which is 23 bits, and that assumes
-every product simultaneously at full scale. **24 bits is sufficient with margin.**
-Confirm on your own weights before committing.
+every product simultaneously at full scale. **24 bits clears both** — the ceiling
+with one bit to spare and the measured peak by a factor of 256. Confirm on your
+own weights before committing.
 
 ### Per-layer quantisation contract
 
@@ -510,8 +517,9 @@ loads its own patient's. Fine for bring-up; not a cohort accuracy figure.
    duty cycle. Justify against the alternatives rather than inheriting a choice.
 4. **`P_PE` = 4, 8 or 16**, and the clock. §6 says 4 suffices; more buys idle time,
    which at 0.12 % duty cycle may be worth less than the area costs.
-5. **Accumulator width.** 48 provided, 15 used, 23 the arithmetic ceiling. 24 bits
-   is free area in every PE — confirm and take it.
+5. **Accumulator width.** 48 provided; measured peak 23,608 over a full recording
+   (15 bits of magnitude, 16 signed); 23 the arithmetic ceiling. 24 bits is free
+   area in every PE — confirm and take it.
 6. **KV260 resource budget.** Every LUT/DSP/BRAM figure in this repository is for
    XC7Z020. H4's "< 10 %" needs restating in KV260 terms before it means anything.
 7. **Where do GAP and FC run?** The reference design puts them on the host ARM,
