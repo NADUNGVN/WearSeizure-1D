@@ -1,0 +1,22 @@
+[
+  {
+    "dir": "chb01_03_sz0",
+    "onset_sec": 2996.0,
+    "offset_sec": 3036.0,
+    "excerpt": {
+      "start_sample": 759296,
+      "stop_sample": 792576,
+      "duration_s": 130.0,
+      "samples": 33280,
+      "seconds_before_onset": 30.0,
+      "seconds_after_offset": 60.0
+    },
+    "windows": {
+      "window_samples": 1024,
+      "stride_samples": 256,
+      "count": 127,
+      "first_window_idx": 2966,
+      "ictal_count": 43
+    }
+  }
+]
