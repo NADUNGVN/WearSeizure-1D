@@ -7,6 +7,28 @@ work from this file alone. Where you must open another file, that is a gap — s
 not just compute. §11 lists documents in this repository that are stale and will
 mislead you if you read them without this file in hand.
 
+### Where this lives
+
+<https://github.com/NADUNGVN/WearSeizure-1D> — public, branch `main`.
+
+```
+git clone https://github.com/NADUNGVN/WearSeizure-1D.git
+cd WearSeizure-1D
+pip install numpy
+python scripts/verify_onset_vectors.py
+```
+
+Those three commands are the whole entry point. `numpy` is the only dependency
+the check needs; the dataset, the checkpoints and PyTorch are not involved. A
+`PASS` means every artefact in §12 agrees with every other one, on your machine,
+before you have written any RTL. Start from a green baseline — then the first
+red is yours and you know exactly when it appeared.
+
+Everything a hardware designer needs is in the repository: this brief, the golden
+model (`hardware/golden_model.py`), the quantised weights and per-layer contract
+(`hardware/export/`), the per-layer vectors, and the onset stream vectors. §12
+lists each with what it is for.
+
 ---
 
 ## 1. What this design has to prove
@@ -493,10 +515,33 @@ In this repository, under `hardware/`:
   for a day).
 * **`hardware/export/test_vectors/`** — 16 files: the input window and all 15 layer
   outputs, for layer-by-layer bring-up.
+* **`hardware/export/onset_vectors/<recording>_sz<n>/`** — a continuous excerpt
+  straddling a real seizure onset, which is the one thing the 16 per-layer files
+  cannot test. `stream_input.hex` is the AXI-Stream payload; `windows.csv` is the
+  expected output for every window in it; `contract.json` and `README.md` carry
+  the constants and the traps. The shipped excerpt is **130 s of `chb01_03`** —
+  30 s interictal, the 40 s seizure from 2996 s, 60 s of post-ictal — 127 windows,
+  43 ictal. It contains both transitions, onset and offset.
 
-Regenerate any of it with `scripts/export_dfp_hardware.py` (needs the dataset and a
-trained checkpoint, both on the GPU servers). Per-layer numbers come from
-`scripts/hardware_spec.py`; memory from `scripts/memory_footprint.py`.
+### Checking an excerpt without the dataset
+
+```
+python scripts/verify_onset_vectors.py
+```
+
+Replays `stream_input.hex` through the golden model and checks every column of
+`windows.csv`: both logits and the margin exactly, then the probability, the EMA
+re-run from the warm start, and each threshold decision. **It needs no CHB-MIT
+corpus, no checkpoint, no GPU and no config** — only this repository — so whoever
+brings up the hardware can run it, which is the point. Exit code 0 means the
+stream, the weights and the expected outputs are mutually consistent, so a
+testbench failing against these files has an RTL problem and not a data problem.
+A single flipped byte in the stream is reported as one failing window, by index.
+
+Regenerate any of it with `scripts/export_dfp_hardware.py` and
+`scripts/export_onset_vectors.py` (both need the dataset and a trained checkpoint,
+on the GPU servers). Per-layer numbers come from `scripts/hardware_spec.py`;
+memory from `scripts/memory_footprint.py`.
 
 The weights in `hardware/export/` are **one fold's** (`chb01__chb01_03`). The
 protocol is patient-specific, so there are 66 weight sets and a deployed device
