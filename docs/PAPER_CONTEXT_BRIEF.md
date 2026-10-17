@@ -332,10 +332,12 @@ Measured, quotable:
 * Weight SQNR 34–47 dB; **activation SQNR only 22–31 dB**. The activations are
   the quantisation bottleneck, so per-channel *weight* scales would attack the
   wrong term — measured at +6.9 dB on the best layer and still not worth it.
-* Peak accumulator on real data: **23,608 over a whole held-out recording (3,597
-  windows of `chb01_03`) — 15 bits of magnitude, 16 signed, of the 48 provided.**
-  The figure of 19,023 quoted earlier was a calibration batch; this is the same
-  quantity over two hundred times more data and replaces it.
+* Peak accumulator on real data: **23,608 on `chb01_03` and 31,813 on `chb15_40`**,
+  each over that fold's whole held-out recording (3,597 windows). Both are 15 bits
+  of magnitude, 16 signed, of the 48 provided — but the second is within 3 % of
+  saturating a 16-bit accumulator and 64 folds are unmeasured, which is the
+  argument for 24. The 19,023 quoted earlier was a calibration batch and is
+  superseded.
 * The hardware has no softmax, so the frozen probability thresholds become
   integer comparisons on the logit margin. At `p_out = 2` **one LSB of margin is
   6.22 percentage points of probability** at the decision boundary — the

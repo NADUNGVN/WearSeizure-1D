@@ -207,18 +207,27 @@ accumulator's **initial value**, so it lives at the accumulator's fixed point
 
 ### Accumulator width
 
-48 bits is what the reference RTL provides. **Measured peak over a whole held-out
-recording — 3,597 windows of `chb01_03` — is 23,608**, a magnitude of 15 bits, so
-a signed accumulator needs **16**. The earlier figure of 19,023 came from a
-calibration batch of a few hundred windows; 23,608 supersedes it because it is the
-same quantity measured over two hundred times more data, and it is the one to size
-against.
+48 bits is what the reference RTL provides. **The measured peak depends on the
+fold, and the spread is the whole point.** Two folds have been run over their
+entire held-out recording, 3,597 windows each:
 
-The arithmetic ceiling is also low: the widest layer accumulates
+| fold | peak accumulator | magnitude | headroom in 16-bit signed |
+|---|---:|---:|---:|
+| `chb01__chb01_03` | 23,608 | 15 bits | 1.39 × |
+| `chb15__chb15_40` | **31,813** | 15 bits | **1.03 ×** |
+
+Both are 15 bits of magnitude, so a signed accumulator needs 16 — but `chb15_40`
+sits **3 % below saturating** that 16-bit accumulator, and 64 folds have not been
+measured. Sizing at 16 bits on this evidence would be sizing at the edge of a
+distribution whose tail is unknown. (An earlier figure of 19,023 came from a
+calibration batch of a few hundred windows and is superseded by both.)
+
+The arithmetic ceiling is separate and also low: the widest layer accumulates
 64 channels × 5 taps × 127 × 127 = 5.2 × 10⁶, which is 23 bits, and that assumes
 every product simultaneously at full scale. **24 bits clears both** — the ceiling
-with one bit to spare and the measured peak by a factor of 256. Confirm on your
-own weights before committing.
+with one bit to spare and the worst measured peak by a factor of 263. Take the
+24 bits; it is free area in every PE and the alternative is a silent wrap on a
+patient nobody profiled.
 
 ### Per-layer quantisation contract
 
@@ -562,9 +571,10 @@ loads its own patient's. Fine for bring-up; not a cohort accuracy figure.
    duty cycle. Justify against the alternatives rather than inheriting a choice.
 4. **`P_PE` = 4, 8 or 16**, and the clock. §6 says 4 suffices; more buys idle time,
    which at 0.12 % duty cycle may be worth less than the area costs.
-5. **Accumulator width.** 48 provided; measured peak 23,608 over a full recording
-   (15 bits of magnitude, 16 signed); 23 the arithmetic ceiling. 24 bits is free
-   area in every PE — confirm and take it.
+5. **Accumulator width.** 48 provided; worst measured peak 31,813 over a full
+   recording (`chb15_40`), which is 3 % under a 16-bit signed accumulator with
+   64 folds unmeasured; 23 the arithmetic ceiling. 24 bits is free area in every
+   PE — take it rather than sizing at the edge of an unmeasured distribution.
 6. **KV260 resource budget.** Every LUT/DSP/BRAM figure in this repository is for
    XC7Z020. H4's "< 10 %" needs restating in KV260 terms before it means anything.
 7. **Where do GAP and FC run?** The reference design puts them on the host ARM,
