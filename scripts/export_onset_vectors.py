@@ -105,6 +105,21 @@ def probability_from_margin(margin, p_out: int) -> np.ndarray:
 def readme_for(c: dict, bits: int) -> str:
     """Prose for whoever opens the directory without this script to hand."""
     e, w, pp, s = c["excerpt"], c["windows"], c["postprocess"], c["scoring"]
+    d = c["detection"]
+    if d["detected"]:
+        verdict = (f"**The model detects this seizure**: the alarm raises "
+                   f"{d['delay_s']:+.1f} s after onset"
+                   + (f", of which {d['run_length_cost_s']:.1f} s is the "
+                      f"`run_length = {pp['run_length']}` requirement rather than "
+                      "the detector hesitating" if d["run_length_cost_s"] else "")
+                   + f". {d['false_alarms_in_excerpt']} false alarm(s) inside the "
+                   "excerpt.")
+    else:
+        verdict = ("**The model misses this seizure.** It is still a valid vector "
+                   "set -- the\narithmetic is the arithmetic -- but it is not a "
+                   "demonstration. Use it as a\nnegative test, and pick a fold the "
+                   "evaluation scored at sensitivity 1.0 if you\nwant one that "
+                   "fires.")
     step_pp = 100.0 * s["probability_step_at_margin_0"]
     hyst = ("" if pp.get("hysteresis_survives_integer_thresholds", True) else
             "\n> **The two thresholds map to the same integer margin.** On this datapath\n"
@@ -121,6 +136,8 @@ The onset is at **{c['onset_sec']:.1f} s** into the recording and the offset at
 The point of the excerpt is the transition. A design can score an interictal
 hour correctly and still fail at the only moment it exists for, and a per-layer
 dump of one window cannot show that.
+
+{verdict}
 
 ## Files
 
@@ -395,9 +412,35 @@ def main(cfg: DictConfig) -> None:
                          "".join(f"{int(v) & mask:0{digits}X}\n"
                                  for v in quantised[s:s + window_samples]))
 
+        # Crossing a threshold is not an alarm. `run_length` consecutive
+        # crossings are, and the gap between the two is what that parameter
+        # costs -- worth having before anyone implements the postprocessor in
+        # RTL. Whether the seizure was DETECTED is the overlap question, not
+        # the crossing question, so it is answered against the alarm list the
+        # software pipeline produced rather than against the score column.
+        fires = [i for i in sel if decided_on[i] >= params.threshold_on]
+        first_cross = float(end_sec[fires[0]] - event.onset_sec) if fires else None
+        hit = [(a, b) for a, b in alarms
+               if a < event.offset_sec and event.onset_sec < b]
+        spurious = [(a, b) for a, b in alarms
+                    if a < stop / fs and start / fs < b
+                    and not any(e.onset_sec < b and a < e.offset_sec for e in events)]
+        detection = {
+            "detected": bool(hit),
+            "alarm_start_sec": hit[0][0] if hit else None,
+            "delay_s": (hit[0][0] - event.onset_sec) if hit else None,
+            "first_threshold_crossing_rel_onset_s": first_cross,
+            "run_length_cost_s": (
+                (hit[0][0] - event.onset_sec) - first_cross
+                if hit and first_cross is not None else None),
+            "false_alarms_in_excerpt": len(spurious),
+            "false_alarm_starts_sec": [a for a, _ in spurious],
+        }
+
         contract = {
             "recording": edf_id,
             "seizure_index": k,
+            "detection": detection,
             "onset_sec": event.onset_sec,
             "offset_sec": event.offset_sec,
             "excerpt": {
@@ -454,11 +497,11 @@ def main(cfg: DictConfig) -> None:
         write_lf(sub / "README.md", readme_for(contract, bits))
         index.append({"dir": tag, "onset_sec": contract["onset_sec"],
                       "offset_sec": contract["offset_sec"],
+                      "detection": detection,
                       "excerpt": contract["excerpt"],
                       "windows": contract["windows"]})
 
         # What the excerpt is actually worth, said out loud.
-        fires = [i for i in sel if decided_on[i] >= params.threshold_on]
         print(f"\n{tag}: {(stop - start) / fs:.1f} s, {len(sel)} windows "
               f"({n_ictal} ictal)")
         print(f"  onset at {event.onset_sec:.1f} s; excerpt holds "
@@ -471,6 +514,20 @@ def main(cfg: DictConfig) -> None:
         else:
             print(f"  first window over threshold_on: "
                   f"{end_sec[fires[0]] - event.onset_sec:+.1f} s relative to onset")
+
+        if detection["detected"]:
+            cost = detection["run_length_cost_s"]
+            print(f"  DETECTED: alarm at {detection['alarm_start_sec']:.1f} s, "
+                  f"{detection['delay_s']:+.1f} s after onset"
+                  + (f" ({cost:+.1f} s of that is run_length={params.run_length})"
+                     if cost is not None else ""))
+        else:
+            print("  MISSED: no alarm overlaps this seizure"
+                  + (" -- windows cross the threshold but never "
+                     f"{params.run_length} in a row" if fires else ""))
+        print(f"  false alarms inside the excerpt: {len(spurious)}"
+              + (f"  at {', '.join(f'{a:.0f} s' for a, _ in spurious[:4])}"
+                 if spurious else ""))
 
     write_lf(out_dir / "index.json", json.dumps(index, indent=2) + "\n")
     print(f"\nwrote {len(index)} excerpt(s) under {out_dir}")
