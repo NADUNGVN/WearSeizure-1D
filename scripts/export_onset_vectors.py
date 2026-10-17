@@ -106,6 +106,12 @@ def readme_for(c: dict, bits: int) -> str:
     """Prose for whoever opens the directory without this script to hand."""
     e, w, pp, s = c["excerpt"], c["windows"], c["postprocess"], c["scoring"]
     d = c["detection"]
+    # A fixed-length excerpt can stop before the seizure does, and "-18 s after
+    # the seizure ends" is not a sentence.
+    after = e["seconds_after_offset"]
+    tail = (f"**{after:.0f} s after the seizure ends**" if after >= 0 else
+            f"stopping **{-after:.0f} s before the seizure ends** -- it covers the "
+            "onset, not the offset")
     if d["detected"]:
         verdict = (f"**The model detects this seizure**: the alarm raises "
                    f"{d['delay_s']:+.1f} s after onset"
@@ -128,9 +134,9 @@ def readme_for(c: dict, bits: int) -> str:
     return f"""# Onset test vectors -- {c['recording']}, seizure {c['seizure_index']}
 
 {e['duration_s']:.1f} s of continuous signal straddling a real seizure onset:
-**{e['seconds_before_onset']:.0f} s before** it and **{e['seconds_after_offset']:.0f} s
-after the seizure ends**. {w['count']} windows, {w['ictal_count']} of them ictal.
-The onset is at **{c['onset_sec']:.1f} s** into the recording and the offset at
+**{e['seconds_before_onset']:.0f} s before** it, and {tail}.
+{w['count']} windows, {w['ictal_count']} of them ictal. The onset is at
+**{c['onset_sec']:.1f} s** into the recording and the offset at
 **{c['offset_sec']:.1f} s**.
 
 The point of the excerpt is the transition. A design can score an interictal
@@ -195,6 +201,8 @@ def main(cfg: DictConfig) -> None:
     out_dir = Path(ex.get("vectors_out", model_dir / "onset_vectors"))
     pre_s = float(ex.get("pre_s", 30.0))
     post_s = float(ex.get("post_s", 60.0))
+    # Exact length in seconds; overrides post_s when set.
+    duration_s = float(ex.get("duration_s", 0.0) or 0.0)
     per_window_files = bool(ex.get("per_window_files", False))
     which_seizure = ex.get("seizure", None)   # None = every seizure in the EDF
 
@@ -357,9 +365,23 @@ def main(cfg: DictConfig) -> None:
         # off-grid produces windows no software run ever scored.
         want_start = onset_idx - int(round(pre_s * fs))
         start = max(0, (want_start // stride_len) * stride_len)
-        stop = min(n, offset_idx + int(round(post_s * fs)))
+        if duration_s:
+            # A fixed length, because `post_s` measures from the seizure's end
+            # and seizures differ by an order of magnitude: the same pre/post
+            # pair gives a 60 s excerpt on one and 400 s on another. When the
+            # deliverable is "one minute", say one minute.
+            stop = min(n, start + int(round(duration_s * fs)))
+            if stop - start < int(round(duration_s * fs)):
+                log.warning(f"seizure {k}: only {(stop - start) / fs:.1f} s of "
+                            f"recording left, short of the {duration_s:.0f} s asked for")
+        else:
+            stop = min(n, offset_idx + int(round(post_s * fs)))
         if stop - start < window_samples:
             log.warning(f"seizure {k} excerpt is shorter than one window; skipping")
+            continue
+        if stop <= onset_idx:
+            log.warning(f"seizure {k}: the excerpt ends before the onset; raise "
+                        "duration_s or lower pre_s")
             continue
 
         seg = quantised[start:stop]
