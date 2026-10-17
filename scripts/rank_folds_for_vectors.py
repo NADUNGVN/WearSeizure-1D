@@ -81,14 +81,32 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--top", type=int, default=12)
     ap.add_argument("--manifest", type=Path, default=None,
-                    help="the CHB-MIT manifest CSV, to show seizures per fold")
+                    help="the CHB-MIT manifest CSV; by default "
+                         "<artifacts>/manifest/chbmit_manifest.csv")
     ap.add_argument("--folds", type=Path, default=None,
-                    help="the splits JSON, to show which recording each fold holds out")
+                    help="the splits JSON; by default "
+                         "<artifacts>/splits/patient_specific_loso_edf.json")
+    ap.add_argument("--split", default="patient_specific_loso_edf",
+                    help="which splits file to look for under <artifacts>/splits")
     args = ap.parse_args()
 
+    # Both live under the artifacts directory by construction -- the configs
+    # interpolate `${profile.artifacts_dir}` for each. Deriving them beats
+    # asking, because a wrong guess degrades silently into a table of "?".
+    folds_path = args.folds or (
+        args.artifacts_dir / "splits" / f"{args.split}.json")
+    manifest_path = args.manifest or (
+        args.artifacts_dir / "manifest" / "chbmit_manifest.csv")
+
     rows = load_rows(args.artifacts_dir, args.bits, args.seed)
-    counts = seizure_counts(args.manifest)
-    tests = test_edf_of(args.folds)
+    counts = seizure_counts(manifest_path)
+    tests = test_edf_of(folds_path)
+    for label, path, got in (("splits", folds_path, tests),
+                             ("manifest", manifest_path, counts)):
+        if not got:
+            print(f"note: no {label} at {path}, so that column reads '?'. "
+                  f"Pass --{'folds' if label == 'splits' else 'manifest'} "
+                  "if it lives elsewhere.")
 
     for r in rows:
         edfs = tests.get(r["fold_id"], [])
