@@ -111,7 +111,16 @@ def main() -> int:
     for r in rows:
         edfs = tests.get(r["fold_id"], [])
         r["_edfs"] = edfs
-        r["_n_sz"] = sum(counts.get(e, 0) for e in edfs) if counts else None
+        # Count seizures in the recording the EXPORTER will actually use, not
+        # across the whole test partition. A fold here holds out two EDFs and
+        # export_onset_vectors.py takes the first with a seizure, so a partition
+        # total of three can mean one recording with one seizure and another
+        # with two -- and the vectors would then show one. Ranking on the total
+        # would rank on seizures nobody is going to see.
+        r["_edf_used"] = next((e for e in edfs if counts.get(e, 0)), None) if counts else None
+        r["_n_sz"] = counts.get(r["_edf_used"], 0) if r["_edf_used"] else (
+            None if not counts else 0)
+        r["_n_sz_partition"] = sum(counts.get(e, 0) for e in edfs) if counts else None
 
     # Caught everything first; then quietest; then the recording with the most
     # seizures, because a clean sweep of three is worth more than of one.
@@ -131,13 +140,22 @@ def main() -> int:
     head = f"  {'fold':<22}{'sens':>7}{'FAR/h':>9}"
     if has_n:
         head += f"{'seizures':>10}"
-    head += "   held-out recording"
+    head += "   recording the vectors come from"
     print(head)
     for r in rows[:args.top]:
         line = f"  {r['fold_id']:<22}{r['sensitivity']:>7.3f}{r['far_per_hour']:>9.4f}"
         if has_n:
             line += f"{(r['_n_sz'] if r['_n_sz'] is not None else '-'):>10}"
-        line += f"   {', '.join(r['_edfs']) if r['_edfs'] else '?'}"
+        used = r["_edf_used"] or (r["_edfs"][0] if r["_edfs"] else "?")
+        line += f"   {used}"
+        # Say when the fold holds more than it will show, so the seizure count
+        # cannot be read as a property of the fold.
+        rest = [e for e in r["_edfs"] if e != used]
+        if rest and r["_n_sz_partition"] and r["_n_sz_partition"] != r["_n_sz"]:
+            line += (f"   (+{r['_n_sz_partition'] - r['_n_sz']} more in "
+                     f"{', '.join(rest)}, not exported)")
+        elif rest:
+            line += f"   (fold also holds {', '.join(rest)})"
         print(line)
 
     if not perfect:
