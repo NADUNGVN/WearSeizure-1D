@@ -10,6 +10,8 @@ The point of the excerpt is the transition. A design can score an interictal
 hour correctly and still fail at the only moment it exists for, and a per-layer
 dump of one window cannot show that.
 
+**The model detects this seizure**: the alarm raises +9.0 s after onset, of which 2.0 s is the `run_length = 3` requirement rather than the detector hesitating. 0 false alarm(s) inside the excerpt.
+
 ## Files
 
 | file | what it is |

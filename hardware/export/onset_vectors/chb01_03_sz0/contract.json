@@ -1,6 +1,15 @@
 {
   "recording": "chb01_03",
   "seizure_index": 0,
+  "detection": {
+    "detected": true,
+    "alarm_start_sec": 3005.0,
+    "delay_s": 9.0,
+    "first_threshold_crossing_rel_onset_s": 7.0,
+    "run_length_cost_s": 2.0,
+    "false_alarms_in_excerpt": 0,
+    "false_alarm_starts_sec": []
+  },
   "onset_sec": 2996.0,
   "offset_sec": 3036.0,
   "excerpt": {
