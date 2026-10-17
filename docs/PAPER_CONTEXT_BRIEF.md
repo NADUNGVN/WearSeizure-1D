@@ -108,10 +108,32 @@ accelerators for this task are hardwired to one model. See
 **Event sensitivity 0.9495, FAR 0.2500/h**, FP32, 66 folds × 3 seeds, 185.0 h,
 77 seizures.
 
-> **Caveat that must be respected.** A second computation over the same folds at
-> **seed 0 only** gives 0.9848. The 3.5-point gap between one seed and the
-> three-seed mean is not yet explained. **Use 0.9495. Do not use 0.9848
+> **Caveat that must be respected.** The same folds at **seed 0 only** give
+> 0.9848, and that figure has circulated. **Use 0.9495. Do not use 0.9848
 > anywhere**, and do not present a range spanning the two.
+>
+> **The gap is seed variance, measured and no longer open.** All three seeds
+> cover the same 66 folds and none collapsed; what differs is how many folds
+> score zero, and with roughly one seizure per held-out recording a fold scores
+> 0 or 1, so the mean is a fold count:
+>
+> | seed | event sens | FAR/h | folds scoring zero |
+> |---|---:|---:|---:|
+> | 0 | 0.9848 | 0.2458 | 1 / 66 |
+> | 1 | 0.9242 | 0.2462 | 5 / 66 |
+> | 2 | 0.9394 | 0.2580 | 4 / 66 |
+> | **mean** | **0.9495** | **0.2500** | |
+>
+> 0.9848 is exactly 65/66. Seed 0 is the luckiest of three by three to four
+> folds, which is why reporting it would be reporting a draw rather than a
+> result. Reproduce with `scripts/diagnose_headline_gap.py`.
+
+**Where the variance lives, which is worth a sentence in the paper.** Three
+patients — chb04, chb07 and chb17 — swing 0.333 between seeds, each flipping one
+seizure of three. chb15 instead sits at 0.929 in *every* seed: it loses one of
+its fourteen seizures consistently, so it is a hard patient rather than an
+unlucky draw. Seed-to-seed instability is concentrated in patients with few
+events, where one event is a third of the score.
 
 ### 4.2 Quantisation (DFP8) — measured on the real integer datapath
 
@@ -329,8 +351,10 @@ Measured, quotable:
 
 ## 7. Claims that must NOT appear in the draft
 
-* **98.48 %** as a headline sensitivity. It is one seed and the discrepancy with
-  the three-seed 94.95 % is unexplained.
+* **98.48 %** as a headline sensitivity. It is seed 0 of three — exactly 65 of
+  66 folds — and the other two seeds give 0.9242 and 0.9394. The three-seed
+  0.9495 is the number. The gap is **measured seed variance**, not a mystery, so
+  the draft must neither quote 98.48 nor describe the difference as unexplained.
 * **"One channel is equivalent to 18 channels."** **Measured false** over three
   seeds: −3.41 pp of event sensitivity, CI [−5.83, −0.93], excluding zero. At
   one seed the interval spanned zero and this claim looked available; that was
@@ -389,8 +413,9 @@ constraint.
 Open items on the **software** side that are *not* blocking and must simply not
 be claimed: the zero-shot / patient-independent branch has never been run,
 worst-patient and detection-delay figures are not verified in the current run
-set, and the 94.95 % / 98.48 % discrepancy in §4.1 is unexplained. The 24-case
-full-cohort run is coded and pushed but has not been confirmed started.
+set. The 24-case full-cohort run is coded and pushed but has not been confirmed
+started. The 94.95 % / 98.48 % discrepancy that used to sit here is **resolved**
+-- see §4.1; it was seed variance.
 
 The **hardware** side is a different kind of open: it is not waiting on a run, it
 is waiting on a design that does not exist. In submission order the gating items

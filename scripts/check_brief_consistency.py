@@ -68,6 +68,23 @@ def main() -> int:
     for stale in ("10.53", "19.7 points of segment", "8.5 points of AUROC"):
         require(stale not in paper, f"a one-seed figure reappeared: {stale}")
 
+    # The headline gap was open for months and is now measured. A document that
+    # still calls it unexplained invites the drafting agent to hedge a number
+    # that no longer needs hedging -- the same drift that section 7 suffered
+    # over the channel ablation.
+    headline = section(paper, "### 4.1")
+    # Match the assertion, not the word. An instruction *not* to call the gap
+    # unexplained contains "unexplained", and a guard that cannot tell the two
+    # apart fails on correct prose -- which this one did on its first run.
+    for stale in ("is unexplained", "not yet explained", "is not explained"):
+        require(stale not in paper,
+                f"a brief still says the headline gap {stale!r}; it is seed variance")
+    require("seed variance" in headline,
+            "section 4.1 no longer names the gap as seed variance")
+    for piece in ("0.9242", "0.9394", "65/66"):
+        require(piece in headline,
+                f"section 4.1 lost the per-seed evidence {piece}")
+
     # Hardware is in scope and unbuilt; section 7 has to say so, because a
     # drafting agent given a design section will otherwise report results for it.
     require(
