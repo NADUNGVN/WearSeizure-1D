@@ -205,11 +205,15 @@ def main() -> int:
     if args.vectors:
         targets = [args.vectors]
     else:
-        root = args.model_dir / "onset_vectors"
-        targets = sorted(p.parent for p in root.glob("*/contract.json"))
+        # Every excerpt directory, not only the default-named one. Variants are
+        # written beside it as `onset_vectors_60s`, `onset_vectors_release` and
+        # so on, and a check that silently skipped them would report PASS while
+        # leaving most of the handover untested.
+        targets = sorted(p.parent for p in
+                         args.model_dir.glob("onset_vectors*/*/contract.json"))
         if not targets:
-            print(f"no excerpt directories under {root}. Pull them from the server, "
-                  "or run\nscripts/export_onset_vectors.py there to make them.")
+            print(f"no excerpt directories under {args.model_dir}. Pull them from the "
+                  "server, or run\nscripts/export_onset_vectors.py there to make them.")
             return 1
 
     worst = 0
