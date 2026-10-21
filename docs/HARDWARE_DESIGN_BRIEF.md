@@ -222,6 +222,14 @@ measured. Sizing at 16 bits on this evidence would be sizing at the edge of a
 distribution whose tail is unknown. (An earlier figure of 19,023 came from a
 calibration batch of a few hundred windows and is superseded by both.)
 
+**The peak lands inside a seizure.** Replaying `chb15_40`'s three excerpts
+separately gives 23,332, 25,602 and 31,813 — the recording's maximum occurs
+during the third seizure, not in the fifty-eight interictal minutes around it.
+That is the expected direction, ictal activity being higher amplitude, and it
+is the reason the thin margin matters: the accumulator is closest to wrapping
+at exactly the moment the device exists to work. A wrap here does not degrade
+an idle detector, it corrupts the detection.
+
 The arithmetic ceiling is separate and also low: the widest layer accumulates
 64 channels × 5 taps × 127 × 127 = 5.2 × 10⁶, which is 23 bits, and that assumes
 every product simultaneously at full scale. **24 bits clears both** — the ceiling
