@@ -31,6 +31,11 @@ mlruns/
 # ignoring one, so every long run left another file in `git status` and one
 # `git add -A` away from the history.
 *.log
+# nohup output from the phase runs, and the scratch directories Hydra and
+# tempfile leave behind. Same reason as the logs: they accumulate once per long
+# run and only ever show up as noise in `git status`.
+*.out
+tmp*/
 
 # Hydra
 .hydra/
