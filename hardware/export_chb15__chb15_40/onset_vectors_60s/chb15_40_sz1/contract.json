@@ -13,12 +13,12 @@
   "onset_sec": 2378.0,
   "offset_sec": 2497.0,
   "excerpt": {
-    "start_sample": 607488,
-    "stop_sample": 622848,
+    "start_sample": 603648,
+    "stop_sample": 619008,
     "duration_s": 60.0,
     "samples": 15360,
-    "seconds_before_onset": 5.0,
-    "seconds_after_offset": -64.0
+    "seconds_before_onset": 20.0,
+    "seconds_after_offset": -79.0
   },
   "stream": {
     "format": "int8, two's complement, one hex byte per line",
@@ -32,8 +32,8 @@
     "window_samples": 1024,
     "stride_samples": 256,
     "count": 57,
-    "first_window_idx": 2373,
-    "ictal_count": 55
+    "first_window_idx": 2358,
+    "ictal_count": 40
   },
   "scoring": {
     "logit_exponent": 4,
@@ -54,7 +54,7 @@
     "threshold_on_margin_int": 7,
     "threshold_off_margin_int": -73,
     "hysteresis_survives_integer_thresholds": true,
-    "ema_warm_start_probability": 0.0537873998999377,
+    "ema_warm_start_probability": 0.13667293713388962,
     "decision_score_column": "ema_probability",
     "ema_note": "the EMA smooths PROBABILITIES, not margins. Smoothing the margin instead is not the same filter -- the logistic is non-linear -- and will not reproduce these alarms.",
     "warm_start_note": "the recursion ran from the start of the recording. A testbench that begins the excerpt with the EMA at zero will not match the ema_probability column."

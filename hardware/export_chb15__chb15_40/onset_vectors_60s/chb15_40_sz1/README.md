@@ -1,8 +1,8 @@
 # Onset test vectors -- chb15_40, seizure 1
 
 60.0 s of continuous signal straddling a real seizure onset:
-**5 s before** it, and stopping **64 s before the seizure ends** -- it covers the onset, not the offset.
-57 windows, 55 of them ictal. The onset is at
+**20 s before** it, and stopping **79 s before the seizure ends** -- it covers the onset, not the offset.
+57 windows, 40 of them ictal. The onset is at
 **2378.0 s** into the recording and the offset at
 **2497.0 s**.
 
@@ -43,7 +43,7 @@ reconstruct the probability in hardware.
 
 **EMA warm start.** `ema_probability` is the recursion run from the start of
 the whole recording, not from this excerpt. Seed the testbench with
-`ema_warm_start_probability = 0.05378740` or the
+`ema_warm_start_probability = 0.13667294` or the
 column will not match.
 
 **EMA operand.** The filter smooths **probabilities**, not margins. The
