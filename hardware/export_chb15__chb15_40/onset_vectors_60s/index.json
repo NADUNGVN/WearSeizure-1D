@@ -1,0 +1,89 @@
+[
+  {
+    "dir": "chb15_40_sz0",
+    "onset_sec": 834.0,
+    "offset_sec": 894.0,
+    "detection": {
+      "detected": true,
+      "alarm_start_sec": 858.0,
+      "delay_s": 24.0,
+      "first_threshold_crossing_rel_onset_s": 22.0,
+      "run_length_cost_s": 2.0,
+      "false_alarms_in_excerpt": 0,
+      "false_alarm_starts_sec": []
+    },
+    "excerpt": {
+      "start_sample": 212224,
+      "stop_sample": 227584,
+      "duration_s": 60.0,
+      "samples": 15360,
+      "seconds_before_onset": 5.0,
+      "seconds_after_offset": -5.0
+    },
+    "windows": {
+      "window_samples": 1024,
+      "stride_samples": 256,
+      "count": 57,
+      "first_window_idx": 829,
+      "ictal_count": 55
+    }
+  },
+  {
+    "dir": "chb15_40_sz1",
+    "onset_sec": 2378.0,
+    "offset_sec": 2497.0,
+    "detection": {
+      "detected": true,
+      "alarm_start_sec": 2403.0,
+      "delay_s": 25.0,
+      "first_threshold_crossing_rel_onset_s": 23.0,
+      "run_length_cost_s": 2.0,
+      "false_alarms_in_excerpt": 0,
+      "false_alarm_starts_sec": []
+    },
+    "excerpt": {
+      "start_sample": 607488,
+      "stop_sample": 622848,
+      "duration_s": 60.0,
+      "samples": 15360,
+      "seconds_before_onset": 5.0,
+      "seconds_after_offset": -64.0
+    },
+    "windows": {
+      "window_samples": 1024,
+      "stride_samples": 256,
+      "count": 57,
+      "first_window_idx": 2373,
+      "ictal_count": 55
+    }
+  },
+  {
+    "dir": "chb15_40_sz2",
+    "onset_sec": 3362.0,
+    "offset_sec": 3425.0,
+    "detection": {
+      "detected": true,
+      "alarm_start_sec": 3392.0,
+      "delay_s": 30.0,
+      "first_threshold_crossing_rel_onset_s": 28.0,
+      "run_length_cost_s": 2.0,
+      "false_alarms_in_excerpt": 0,
+      "false_alarm_starts_sec": []
+    },
+    "excerpt": {
+      "start_sample": 859392,
+      "stop_sample": 874752,
+      "duration_s": 60.0,
+      "samples": 15360,
+      "seconds_before_onset": 5.0,
+      "seconds_after_offset": -8.0
+    },
+    "windows": {
+      "window_samples": 1024,
+      "stride_samples": 256,
+      "count": 57,
+      "first_window_idx": 3357,
+      "ictal_count": 55
+    }
+  }
+]
