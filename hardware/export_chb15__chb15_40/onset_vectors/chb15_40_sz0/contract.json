@@ -1,0 +1,85 @@
+{
+  "recording": "chb15_40",
+  "seizure_index": 0,
+  "detection": {
+    "detected": true,
+    "alarm_start_sec": 858.0,
+    "delay_s": 24.0,
+    "first_threshold_crossing_rel_onset_s": 22.0,
+    "run_length_cost_s": 2.0,
+    "false_alarms_in_excerpt": 0,
+    "false_alarm_starts_sec": []
+  },
+  "onset_sec": 834.0,
+  "offset_sec": 894.0,
+  "excerpt": {
+    "start_sample": 210944,
+    "stop_sample": 244224,
+    "duration_s": 130.0,
+    "samples": 33280,
+    "seconds_before_onset": 10.0,
+    "seconds_after_offset": 60.0
+  },
+  "stream": {
+    "format": "int8, two's complement, one hex byte per line",
+    "input_exponent": 3,
+    "real_value": "x = q / 2**input_exponent",
+    "sampling_rate_hz": 256,
+    "pre_filtered": "causal 1-30 Hz band-pass and affine normalisation run on the PS; this stream is their output",
+    "clipped_samples_whole_recording": 280
+  },
+  "windows": {
+    "window_samples": 1024,
+    "stride_samples": 256,
+    "count": 127,
+    "first_window_idx": 824,
+    "ictal_count": 63
+  },
+  "scoring": {
+    "logit_exponent": 4,
+    "margin": "logit1 - logit0, as integers; no softmax in hardware",
+    "probability": "1 / (1 + exp(-margin / 2**logit_exponent))",
+    "probability_step_at_margin_0": 0.015619915723015576
+  },
+  "postprocess": {
+    "alarm_timestamp": "window_end",
+    "ema_alpha": 0.125,
+    "event_merge_gap_s": 2.0,
+    "method": "hysteresis_runlength",
+    "run_length": 3,
+    "threshold": 0.5,
+    "threshold_off": 0.01,
+    "threshold_on": 0.6,
+    "window_s": 4.0,
+    "threshold_on_margin_int": 7,
+    "threshold_off_margin_int": -73,
+    "hysteresis_survives_integer_thresholds": true,
+    "ema_warm_start_probability": 0.018020280930543572,
+    "decision_score_column": "ema_probability",
+    "ema_note": "the EMA smooths PROBABILITIES, not margins. Smoothing the margin instead is not the same filter -- the logistic is non-linear -- and will not reproduce these alarms.",
+    "warm_start_note": "the recursion ran from the start of the recording. A testbench that begins the excerpt with the EMA at zero will not match the ema_probability column."
+  },
+  "alarms_whole_recording": [
+    {
+      "start_sec": 858.0,
+      "end_sec": 1061.0
+    },
+    {
+      "start_sec": 2403.0,
+      "end_sec": 2723.0
+    },
+    {
+      "start_sec": 3392.0,
+      "end_sec": 3600.0
+    }
+  ],
+  "provenance": {
+    "fold_id": "chb15__chb15_40",
+    "seed": 0,
+    "run_tag": "L8",
+    "model": "wearseizure1d_k5only",
+    "split": "patient_specific_loso_edf",
+    "checkpoint": "/home/ubuntu/Manh/WearSeizure-1D-artifacts/wearseizure1d_k5only/patient_specific_loso_edf/w4s_stride1s__L8/seed0/chb15__chb15_40.pt",
+    "calibrated_on": "validation partition of this fold"
+  }
+}

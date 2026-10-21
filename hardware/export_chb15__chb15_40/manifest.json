@@ -1,0 +1,550 @@
+{
+  "model_name": "WearSeizure-1D (k5_only)",
+  "precision": "DFP8",
+  "_quantization_status": "CALIBRATED: per-layer exponents measured on the trained checkpoint (chb15__chb15_40), activations calibrated on that fold's validation windows. Not placeholders.",
+  "generated_by": "WearSeizure-1D/scripts/export_dfp_hardware.py",
+  "provenance": {
+    "fold_id": "chb15__chb15_40",
+    "seed": 0,
+    "run_tag": "L8",
+    "model": "wearseizure1d_k5only",
+    "split": "patient_specific_loso_edf",
+    "checkpoint": "/home/ubuntu/Manh/WearSeizure-1D-artifacts/wearseizure1d_k5only/patient_specific_loso_edf/w4s_stride1s__L8/seed0/chb15__chb15_40.pt",
+    "calibrated_on": "validation partition of this fold"
+  },
+  "sampling_rate_hz": 256,
+  "window_samples": 1024,
+  "num_classes": 2,
+  "total_weights": 11128,
+  "input_exponent": 3,
+  "hardware_instruction_count": 13,
+  "notes": [
+    "A tensor stored with exponent p represents the real value q / 2**p.",
+    "output_shift = p_in + p_weight - p_out, applied with round-to-nearest ties-away-from-zero, matching Fixed_Point_Quantizer.v.",
+    "Biases are scaled to the ACCUMULATOR fixed point (p_in + p_weight), because PE.v loads the bias as the accumulator's initial value.",
+    "`relu` is part of the network, not of the reference RTL, which has no activation unit yet."
+  ],
+  "memory_config": {
+    "num_banks": 16,
+    "dwidth": 8,
+    "bank_depth": 1024
+  },
+  "layers": [
+    {
+      "layer_id": 1,
+      "name": "stem.0",
+      "type": "conv1d",
+      "in_channels": 1,
+      "out_channels": 8,
+      "in_length": 1024,
+      "out_length": 512,
+      "kernel_size": 7,
+      "stride": 2,
+      "dilation": 1,
+      "padding": 3,
+      "relu": true,
+      "p_in": 3,
+      "p_weight": 7,
+      "p_out": 4,
+      "output_shift": 6,
+      "src_fm_sel": 0,
+      "dst_fm_sel": 1,
+      "calibration": {
+        "weight": {
+          "peak": 0.8867507041138387,
+          "clipped_frac": 0.0,
+          "sqnr_db": 41.43631062517955,
+          "exponent_no_clip": 7
+        },
+        "activation": {
+          "peak": 11.027352336817362,
+          "clipped_frac": 1.1444091796875e-05,
+          "sqnr_db": 29.421013971425253,
+          "exponent_no_clip": 3
+        },
+        "per_channel_gain_db": 5.317340819072132,
+        "input": {
+          "p_in": 3
+        }
+      }
+    },
+    {
+      "layer_id": 2,
+      "name": "b1.dw",
+      "type": "depthwise",
+      "in_channels": 8,
+      "out_channels": 8,
+      "in_length": 512,
+      "out_length": 256,
+      "kernel_size": 5,
+      "stride": 2,
+      "dilation": 1,
+      "padding": 2,
+      "relu": false,
+      "p_in": 4,
+      "p_weight": 7,
+      "p_out": 5,
+      "output_shift": 6,
+      "src_fm_sel": 1,
+      "dst_fm_sel": 0,
+      "calibration": {
+        "weight": {
+          "peak": 0.5097801685333252,
+          "clipped_frac": 0.0,
+          "sqnr_db": 43.210508520130205,
+          "exponent_no_clip": 7
+        },
+        "activation": {
+          "peak": 8.167108297940368,
+          "clipped_frac": 7.534027099609375e-05,
+          "sqnr_db": 24.921637883680233,
+          "exponent_no_clip": 3
+        },
+        "per_channel_gain_db": 4.428889266654649
+      }
+    },
+    {
+      "layer_id": 3,
+      "name": "b1.pw",
+      "type": "pointwise",
+      "in_channels": 8,
+      "out_channels": 16,
+      "in_length": 256,
+      "out_length": 256,
+      "kernel_size": 1,
+      "stride": 1,
+      "dilation": 1,
+      "padding": 0,
+      "relu": true,
+      "p_in": 5,
+      "p_weight": 5,
+      "p_out": 4,
+      "output_shift": 6,
+      "src_fm_sel": 0,
+      "dst_fm_sel": 1,
+      "calibration": {
+        "weight": {
+          "peak": 3.0160085013698708,
+          "clipped_frac": 0.0,
+          "sqnr_db": 40.47848631754864,
+          "exponent_no_clip": 5
+        },
+        "activation": {
+          "peak": 16.55961927743247,
+          "clipped_frac": 4.673004150390625e-05,
+          "sqnr_db": 25.92040319922244,
+          "exponent_no_clip": 2
+        },
+        "per_channel_gain_db": 4.396979561049927
+      }
+    },
+    {
+      "layer_id": 4,
+      "name": "b2.dw",
+      "type": "depthwise",
+      "in_channels": 16,
+      "out_channels": 16,
+      "in_length": 256,
+      "out_length": 128,
+      "kernel_size": 5,
+      "stride": 2,
+      "dilation": 1,
+      "padding": 2,
+      "relu": true,
+      "p_in": 4,
+      "p_weight": 5,
+      "p_out": 4,
+      "output_shift": 5,
+      "src_fm_sel": 1,
+      "dst_fm_sel": 0,
+      "calibration": {
+        "weight": {
+          "peak": 2.447924277710441,
+          "clipped_frac": 0.0,
+          "sqnr_db": 40.928732920502895,
+          "exponent_no_clip": 5
+        },
+        "activation": {
+          "peak": 16.08435975068485,
+          "clipped_frac": 4.673004150390625e-05,
+          "sqnr_db": 26.767305397150302,
+          "exponent_no_clip": 2
+        },
+        "per_channel_gain_db": 4.671855974226374
+      }
+    },
+    {
+      "layer_id": 5,
+      "name": "b2.pw",
+      "type": "pointwise",
+      "in_channels": 16,
+      "out_channels": 24,
+      "in_length": 128,
+      "out_length": 128,
+      "kernel_size": 1,
+      "stride": 1,
+      "dilation": 1,
+      "padding": 0,
+      "relu": true,
+      "p_in": 4,
+      "p_weight": 6,
+      "p_out": 4,
+      "output_shift": 6,
+      "src_fm_sel": 0,
+      "dst_fm_sel": 1,
+      "calibration": {
+        "weight": {
+          "peak": 1.5911634937656416,
+          "clipped_frac": 0.0,
+          "sqnr_db": 39.544890779538235,
+          "exponent_no_clip": 6
+        },
+        "activation": {
+          "peak": 17.17033304977854,
+          "clipped_frac": 4.5140584309895836e-05,
+          "sqnr_db": 26.836651572554523,
+          "exponent_no_clip": 2
+        },
+        "per_channel_gain_db": 3.467456505091425
+      }
+    },
+    {
+      "layer_id": 6,
+      "name": "b3.dw",
+      "type": "depthwise",
+      "in_channels": 24,
+      "out_channels": 24,
+      "in_length": 128,
+      "out_length": 64,
+      "kernel_size": 5,
+      "stride": 2,
+      "dilation": 2,
+      "padding": 4,
+      "relu": true,
+      "p_in": 4,
+      "p_weight": 6,
+      "p_out": 4,
+      "output_shift": 6,
+      "src_fm_sel": 1,
+      "dst_fm_sel": 0,
+      "calibration": {
+        "weight": {
+          "peak": 1.7595375878949913,
+          "clipped_frac": 0.0,
+          "sqnr_db": 44.89483104372583,
+          "exponent_no_clip": 6
+        },
+        "activation": {
+          "peak": 15.418010683534694,
+          "clipped_frac": 5.9763590494791664e-05,
+          "sqnr_db": 27.050452029348214,
+          "exponent_no_clip": 3
+        },
+        "per_channel_gain_db": 1.2579749856190479
+      }
+    },
+    {
+      "layer_id": 7,
+      "name": "b3.pw",
+      "type": "pointwise",
+      "in_channels": 24,
+      "out_channels": 32,
+      "in_length": 64,
+      "out_length": 64,
+      "kernel_size": 1,
+      "stride": 1,
+      "dilation": 1,
+      "padding": 0,
+      "relu": true,
+      "p_in": 4,
+      "p_weight": 7,
+      "p_out": 4,
+      "output_shift": 7,
+      "src_fm_sel": 0,
+      "dst_fm_sel": 1,
+      "calibration": {
+        "weight": {
+          "peak": 1.025676194373098,
+          "clipped_frac": 0.0013020833333333333,
+          "sqnr_db": 42.59299357086633,
+          "exponent_no_clip": 6
+        },
+        "activation": {
+          "peak": 10.593308675053217,
+          "clipped_frac": 1.239776611328125e-05,
+          "sqnr_db": 30.482118223080498,
+          "exponent_no_clip": 3
+        },
+        "per_channel_gain_db": 0.5840977582217151
+      }
+    },
+    {
+      "layer_id": 8,
+      "name": "b4.dw",
+      "type": "depthwise",
+      "in_channels": 32,
+      "out_channels": 32,
+      "in_length": 64,
+      "out_length": 32,
+      "kernel_size": 5,
+      "stride": 2,
+      "dilation": 4,
+      "padding": 8,
+      "relu": true,
+      "p_in": 4,
+      "p_weight": 5,
+      "p_out": 4,
+      "output_shift": 5,
+      "src_fm_sel": 1,
+      "dst_fm_sel": 0,
+      "calibration": {
+        "weight": {
+          "peak": 2.740114348803812,
+          "clipped_frac": 0.0,
+          "sqnr_db": 41.73489791147261,
+          "exponent_no_clip": 5
+        },
+        "activation": {
+          "peak": 19.074852853300882,
+          "clipped_frac": 1.1444091796875e-05,
+          "sqnr_db": 28.92966284109255,
+          "exponent_no_clip": 2
+        },
+        "per_channel_gain_db": 3.5191394987118887
+      }
+    },
+    {
+      "layer_id": 9,
+      "name": "b4.pw",
+      "type": "pointwise",
+      "in_channels": 32,
+      "out_channels": 48,
+      "in_length": 32,
+      "out_length": 32,
+      "kernel_size": 1,
+      "stride": 1,
+      "dilation": 1,
+      "padding": 0,
+      "relu": true,
+      "p_in": 4,
+      "p_weight": 7,
+      "p_out": 4,
+      "output_shift": 7,
+      "src_fm_sel": 0,
+      "dst_fm_sel": 1,
+      "calibration": {
+        "weight": {
+          "peak": 0.9904978336295729,
+          "clipped_frac": 0.0,
+          "sqnr_db": 42.508384577908956,
+          "exponent_no_clip": 7
+        },
+        "activation": {
+          "peak": 11.75326393874959,
+          "clipped_frac": 3.814697265625e-06,
+          "sqnr_db": 32.04307839623945,
+          "exponent_no_clip": 3
+        },
+        "per_channel_gain_db": 0.1291502559428375
+      }
+    },
+    {
+      "layer_id": 10,
+      "name": "context.0.dw",
+      "type": "depthwise",
+      "in_channels": 48,
+      "out_channels": 48,
+      "in_length": 32,
+      "out_length": 32,
+      "kernel_size": 5,
+      "stride": 1,
+      "dilation": 8,
+      "padding": 16,
+      "relu": false,
+      "p_in": 4,
+      "p_weight": 7,
+      "p_out": 6,
+      "output_shift": 5,
+      "src_fm_sel": 1,
+      "dst_fm_sel": 0,
+      "calibration": {
+        "weight": {
+          "peak": 0.5859480500221252,
+          "clipped_frac": 0.0,
+          "sqnr_db": 41.93732978957093,
+          "exponent_no_clip": 7
+        },
+        "activation": {
+          "peak": 3.6490501910392026,
+          "clipped_frac": 0.00014368693033854166,
+          "sqnr_db": 31.677347718950656,
+          "exponent_no_clip": 5
+        },
+        "per_channel_gain_db": 3.8364934633011876
+      }
+    },
+    {
+      "layer_id": 11,
+      "name": "context.0.pw",
+      "type": "pointwise",
+      "in_channels": 48,
+      "out_channels": 64,
+      "in_length": 32,
+      "out_length": 32,
+      "kernel_size": 1,
+      "stride": 1,
+      "dilation": 1,
+      "padding": 0,
+      "relu": true,
+      "p_in": 6,
+      "p_weight": 6,
+      "p_out": 5,
+      "output_shift": 7,
+      "src_fm_sel": 0,
+      "dst_fm_sel": 1,
+      "calibration": {
+        "weight": {
+          "peak": 1.8803670072503187,
+          "clipped_frac": 0.0,
+          "sqnr_db": 39.539803066773096,
+          "exponent_no_clip": 6
+        },
+        "activation": {
+          "peak": 7.4217962164980165,
+          "clipped_frac": 3.528594970703125e-05,
+          "sqnr_db": 35.59211592748071,
+          "exponent_no_clip": 4
+        },
+        "per_channel_gain_db": 1.5792044801857144
+      }
+    },
+    {
+      "layer_id": 12,
+      "name": "context.1.dw",
+      "type": "depthwise",
+      "in_channels": 64,
+      "out_channels": 64,
+      "in_length": 32,
+      "out_length": 32,
+      "kernel_size": 5,
+      "stride": 1,
+      "dilation": 16,
+      "padding": 32,
+      "relu": false,
+      "p_in": 5,
+      "p_weight": 7,
+      "p_out": 6,
+      "output_shift": 6,
+      "src_fm_sel": 1,
+      "dst_fm_sel": 0,
+      "calibration": {
+        "weight": {
+          "peak": 0.6567318439483643,
+          "clipped_frac": 0.0,
+          "sqnr_db": 41.441805254027095,
+          "exponent_no_clip": 7
+        },
+        "activation": {
+          "peak": 2.8151624956769434,
+          "clipped_frac": 3.814697265625e-06,
+          "sqnr_db": 34.153169429108495,
+          "exponent_no_clip": 5
+        },
+        "per_channel_gain_db": 5.467783659951262
+      }
+    },
+    {
+      "layer_id": 13,
+      "name": "context.1.pw",
+      "type": "pointwise",
+      "in_channels": 64,
+      "out_channels": 64,
+      "in_length": 32,
+      "out_length": 32,
+      "kernel_size": 1,
+      "stride": 1,
+      "dilation": 1,
+      "padding": 0,
+      "relu": true,
+      "p_in": 6,
+      "p_weight": 5,
+      "p_out": 4,
+      "output_shift": 7,
+      "src_fm_sel": 0,
+      "dst_fm_sel": 1,
+      "calibration": {
+        "weight": {
+          "peak": 2.5714821830335,
+          "clipped_frac": 0.0,
+          "sqnr_db": 34.90523344609205,
+          "exponent_no_clip": 5
+        },
+        "activation": {
+          "peak": 8.293633635580221,
+          "clipped_frac": 1.9073486328125e-06,
+          "sqnr_db": 36.31665945925292,
+          "exponent_no_clip": 3
+        },
+        "per_channel_gain_db": 6.828926202178715
+      }
+    }
+  ],
+  "software_layers": [
+    {
+      "layer_id": 14,
+      "name": "gap",
+      "type": "gap",
+      "in_channels": 64,
+      "out_channels": 64,
+      "in_length": 32,
+      "out_length": 1,
+      "kernel_size": 1,
+      "stride": 1,
+      "dilation": 1,
+      "padding": 0,
+      "relu": false,
+      "p_in": 4,
+      "p_weight": 0,
+      "p_out": 4,
+      "output_shift": 5,
+      "src_fm_sel": 1,
+      "dst_fm_sel": 0,
+      "calibration": {}
+    },
+    {
+      "layer_id": 15,
+      "name": "fc",
+      "type": "linear",
+      "in_channels": 64,
+      "out_channels": 2,
+      "in_length": 1,
+      "out_length": 1,
+      "kernel_size": 1,
+      "stride": 1,
+      "dilation": 1,
+      "padding": 0,
+      "relu": false,
+      "p_in": 4,
+      "p_weight": 8,
+      "p_out": 4,
+      "output_shift": 8,
+      "src_fm_sel": 0,
+      "dst_fm_sel": 1,
+      "calibration": {
+        "weight": {
+          "peak": 0.3813026249408722,
+          "clipped_frac": 0.0,
+          "sqnr_db": 47.35738229772858,
+          "exponent_no_clip": 8
+        },
+        "activation": {
+          "peak": 5.0425065220285745,
+          "clipped_frac": 0.0,
+          "sqnr_db": 40.087911644110584,
+          "exponent_no_clip": 4
+        },
+        "per_channel_gain_db": 0.0
+      }
+    }
+  ]
+}
