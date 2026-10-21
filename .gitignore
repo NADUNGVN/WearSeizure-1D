@@ -27,6 +27,10 @@ multirun/
 results/
 wandb/
 mlruns/
+# Run logs. The section header has said "logs" since the start without ever
+# ignoring one, so every long run left another file in `git status` and one
+# `git add -A` away from the history.
+*.log
 
 # Hydra
 .hydra/
