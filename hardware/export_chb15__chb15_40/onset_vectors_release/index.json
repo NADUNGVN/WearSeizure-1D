@@ -1,0 +1,31 @@
+[
+  {
+    "dir": "chb15_40_sz0",
+    "onset_sec": 2378.0,
+    "offset_sec": 2497.0,
+    "detection": {
+      "detected": true,
+      "alarm_start_sec": 2403.0,
+      "delay_s": 25.0,
+      "first_threshold_crossing_rel_onset_s": 23.0,
+      "run_length_cost_s": 2.0,
+      "false_alarms_in_excerpt": 0,
+      "false_alarm_starts_sec": []
+    },
+    "excerpt": {
+      "start_sample": 603648,
+      "stop_sample": 700928,
+      "duration_s": 380.0,
+      "samples": 97280,
+      "seconds_before_onset": 20.0,
+      "seconds_after_offset": 241.0
+    },
+    "windows": {
+      "window_samples": 1024,
+      "stride_samples": 256,
+      "count": 377,
+      "first_window_idx": 2358,
+      "ictal_count": 122
+    }
+  }
+]
