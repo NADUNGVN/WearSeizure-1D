@@ -203,6 +203,14 @@ def main(cfg: DictConfig) -> None:
     post_s = float(ex.get("post_s", 60.0))
     # Exact length in seconds; overrides post_s when set.
     duration_s = float(ex.get("duration_s", 0.0) or 0.0)
+    # The whole held-out recording as one stream. The go/no-go asks for
+    # bit-exact equality on >= 10,000 windows and an excerpt carries 57 to 186,
+    # so reaching it by excerpts means managing a hundred directories. One
+    # recording is 3,597 windows and three clear the bar.
+    whole = bool(ex.get("whole_recording", False))
+    # At that length `stream_input.csv` is ~50 MB of traceability nobody reads,
+    # against a 2.8 MB hex file the testbench does.
+    want_csv = bool(ex.get("stream_csv", not whole))
     per_window_files = bool(ex.get("per_window_files", False))
     which_seizure = ex.get("seizure", None)   # None = every seizure in the EDF
 
@@ -358,6 +366,11 @@ def main(cfg: DictConfig) -> None:
     # excerpt with a different seizure under its name.
     chosen = (list(enumerate(events)) if which_seizure is None
               else [(int(which_seizure), events[int(which_seizure)])])
+    if whole:
+        # The stream is the same file whichever seizure anchors it, so writing
+        # it once per seizure would be three identical copies under three
+        # names. The first seizure anchors the relative timestamps.
+        chosen = chosen[:1]
     ensure_dir(out_dir)
     index: list[dict] = []
     digits, mask = bits // 4, (1 << bits) - 1
@@ -370,7 +383,9 @@ def main(cfg: DictConfig) -> None:
         # off-grid produces windows no software run ever scored.
         want_start = onset_idx - int(round(pre_s * fs))
         start = max(0, (want_start // stride_len) * stride_len)
-        if duration_s:
+        if whole:
+            start, stop = 0, n
+        elif duration_s:
             # A fixed length, because `post_s` measures from the seizure's end
             # and seizures differ by an order of magnitude: the same pre/post
             # pair gives a 60 s excerpt on one and 400 s on another. When the
@@ -397,12 +412,13 @@ def main(cfg: DictConfig) -> None:
         write_lf(sub / "stream_input.hex",
                  "".join(f"{int(v) & mask:0{digits}X}\n" for v in seg))
 
-        rows = ["sample_idx,t_sec,t_rel_onset_s,x_normalised,x_int8"]
-        for j, (q, x) in enumerate(zip(seg, seg_f)):
-            t = (start + j) / fs
-            rows.append(f"{start + j},{t:.6f},{t - event.onset_sec:+.6f},"
-                        f"{x:.8f},{int(q)}")
-        write_lf(sub / "stream_input.csv", "\n".join(rows) + "\n")
+        if want_csv:
+            rows = ["sample_idx,t_sec,t_rel_onset_s,x_normalised,x_int8"]
+            for j, (q, x) in enumerate(zip(seg, seg_f)):
+                t = (start + j) / fs
+                rows.append(f"{start + j},{t:.6f},{t - event.onset_sec:+.6f},"
+                            f"{x:.8f},{int(q)}")
+            write_lf(sub / "stream_input.csv", "\n".join(rows) + "\n")
 
         # Windows fully inside the excerpt, kept in the recording's own
         # indexing so a row here can be found again in the full-run results.
@@ -412,7 +428,16 @@ def main(cfg: DictConfig) -> None:
             log.warning(f"seizure {k}: no complete window inside the excerpt")
             continue
 
-        warm = float(smoothed[sel[0] - 1]) if sel[0] > 0 else 0.0
+        # The warm start is defined so that a testbench running
+        # `ema = a*p + (1-a)*ema` from it reproduces the column exactly. For an
+        # excerpt starting mid-recording that is the previous window's value.
+        # For one starting AT the recording's first window there is no previous
+        # value: `ema_smooth` seeds with the score itself, and seeding a
+        # testbench with 0.0 instead makes the first row read 0.125*p. Feeding
+        # back p0 reproduces the seeding, since a*p0 + (1-a)*p0 == p0 --
+        # whereas 0.0 silently produces a different filter for the one excerpt
+        # the 10,000-window gate needs.
+        warm = float(smoothed[sel[0] - 1]) if sel[0] > 0 else float(probs[sel[0]])
         hdr = ("window_idx,stream_offset_samples,start_sec,end_sec,"
                "end_rel_onset_s,label,logit0_int,logit1_int,margin_int,"
                "probability,ema_probability,decision_score,above_on,above_off")
