@@ -168,3 +168,19 @@ distill:
   # Which seed's teacher to use. null means the student's own seed, which keeps
   # teacher and student paired rather than distilling every seed from one.
   teacher_seed: null
+
+# Lever L9: onset-proximity sampling. Measured on the handover vectors, every
+# window the detector gets wrong on chb15_40 is a false negative in the first
+# eighteen seconds after onset and there is not one false positive -- it reacts
+# late rather than misclassifying. About fifteen seconds of the twenty-four is
+# the model, the rest being the 4 s window floor and run_length. These windows
+# are a small minority of the ictal class, so under plain class balancing being
+# slow costs the model almost nothing. Raising their sampling probability makes
+# it cost something.
+#
+# within_s=0 or factor=1 leaves the sampler's weights arithmetically unchanged,
+# which is what keeps every earlier run reproducible. Turn it on explicitly:
+#   train.onset_weight.within_s=10 train.onset_weight.factor=3 train.run_tag=L9
+onset_weight:
+  within_s: 0.0
+  factor: 1.0

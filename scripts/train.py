@@ -315,6 +315,8 @@ def _run_one_seed(cfg, seed, records, manifest_df, folds, threshold_grid, force_
             batch_size=cfg.train.batch_size,
             device=cfg.profile.device,
             class_balanced_sampling=cfg.train.class_balanced_sampling,
+            onset_within_s=float(cfg.train.get("onset_weight", {}).get("within_s", 0.0)),
+            onset_factor=float(cfg.train.get("onset_weight", {}).get("factor", 1.0)),
             early_stopping_patience=cfg.train.early_stopping_patience,
             num_workers=cfg.profile.get("num_workers", 0),
             far_cap_per_hour=cfg.postprocess.get("far_cap_per_hour"),

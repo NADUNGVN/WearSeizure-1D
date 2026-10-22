@@ -226,6 +226,12 @@ def run_fold(
     teacher_logits_fn=None,
     distill_alpha: float = 0.0,
     distill_temperature: float = 2.0,
+    # Lever L9: raise the sampling probability of windows in the first
+    # `onset_within_s` seconds of a seizure by `onset_factor`. Off by default,
+    # and off means arithmetically unchanged weights, not merely equivalent
+    # ones -- every result recorded before this existed must stay reproducible.
+    onset_within_s: float = 0.0,
+    onset_factor: float = 1.0,
 ) -> FoldResult:
     if teacher_logits is not None and teacher_logits_fn is not None:
         raise ValueError("pass teacher_logits (lever L3) or teacher_logits_fn (lever L8), not both")
@@ -241,7 +247,11 @@ def run_fold(
     dl_kwargs = _dataloader_kwargs(device, num_workers)
 
     if class_balanced_sampling:
-        train_loader = DataLoader(train_ds, batch_size=batch_size, sampler=make_class_balanced_sampler(train_ds), **dl_kwargs)
+        train_loader = DataLoader(
+            train_ds, batch_size=batch_size,
+            sampler=make_class_balanced_sampler(
+                train_ds, onset_within_s=onset_within_s, onset_factor=onset_factor),
+            **dl_kwargs)
     else:
         train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, **dl_kwargs)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, **dl_kwargs)
