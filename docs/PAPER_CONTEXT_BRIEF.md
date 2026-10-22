@@ -244,6 +244,29 @@ threshold-free, is not blind: 0.8870 -> 0.9237 -> 0.9586.
 | L5 wider corpus | pre-training hours 553 → 2085 (×3.7) | **negative**: no gain; the one-position variant lost 4.34 pp, CI [−8.61, −0.86] |
 | L3 multi-channel teacher | teacher reads 18–26 channels, student reads 1 | **negative** |
 | L8 same-channel teacher | teacher reads what the student reads | +1.31 pp, CI [−2.52, +6.03], **not significant** |
+| L9 onset-proximity sampling | 3× sampling weight on windows in the first 10 s of a seizure | **negative, and rejected**: −6.06 pp of event sensitivity, CI [−13.73, −1.30], and **no latency gain at all** (+0.43 s, CI [−0.77, +1.96]) |
+
+**L9 is worth a paragraph of its own, because it failed on its own terms.** The
+motivation was measured, not assumed: on the handover excerpts every window the
+detector gets wrong is a false negative in the first eighteen seconds after
+onset, and there is not one false positive. It reacts late rather than
+misclassifying. Raising the sampling weight of exactly those windows was the
+obvious remedy and it bought nothing — delay did not fall, and six points of
+event sensitivity went with it, over 66 folds at one seed.
+
+The reading that survives is that those early windows are **not
+under-weighted, they are under-determined**: three quarters of a window
+straddling the onset is pre-ictal signal, so there is little in them to learn
+from and insisting the model fire on them teaches a fuzzier boundary rather
+than a faster one. The ~15 s of model hesitation in the delay budget looks like
+a property of what one EEG channel can show in the first seconds of a seizure,
+not a property of the training recipe. **That is a defensible sentence for the
+paper and it is backed by a measurement**, which is more than the usual
+"latency is left as future work".
+
+One seed, so the sensitivity interval is wide; it excludes zero, and the
+decision rule here is the worst case the interval allows, which is −1.30 pp.
+Nothing was adopted — the shipped weights are still L8.
 
 The mechanism ties L3, L5 and L8 together and is worth a short subsection:
 **distillation helps when the teacher's advantage is capacity, and hurts when it

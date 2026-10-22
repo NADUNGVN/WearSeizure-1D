@@ -149,6 +149,29 @@ def main() -> int:
     d, lo, hi, _ = r_delay
     faster = hi < 0.0           # the whole interval is an improvement
     slower = lo > 0.0
+
+    # Sensitivity is checked BEFORE the delay verdict, and on its own interval.
+    # The first version of this block decided everything from the delay row and
+    # only mentioned sensitivity as a caveat on an otherwise-good result, so an
+    # arm that lost six points of sensitivity with an interval excluding zero
+    # was announced as "the data does not distinguish the arms" -- the data
+    # distinguished them perfectly, just not on the metric being looked at.
+    sens_worse = r_sens is not None and r_sens[2] < 0.0   # upper bound below zero
+    far_worse = r_far is not None and r_far[1] > 0.0      # lower bound above zero
+    if sens_worse or far_worse:
+        print("REJECT. The arm is measurably worse where it matters, whatever the "
+              "delay does.")
+        if sens_worse:
+            print(f"  Event sensitivity falls {abs(r_sens[0]):.2f} pp, interval "
+                  f"[{r_sens[1]:+.2f}, {r_sens[2]:+.2f}] pp, which excludes zero.")
+            print("  That is missed seizures. No latency gain buys them back.")
+        if far_worse:
+            print(f"  FAR rises {r_far[0]:+.3f}/h, interval "
+                  f"[{r_far[1]:+.3f}, {r_far[2]:+.3f}]/h, which excludes zero.")
+        print(f"  Delay meanwhile is {d:+.2f} s, interval [{lo:+.2f}, {hi:+.2f}] s"
+              + (" -- it did not even get faster." if not faster else "."))
+        return 0
+
     harms = []
     if r_sens and r_sens[1] < -1.0:
         harms.append(f"sensitivity could be {abs(r_sens[1]):.2f} pp worse")
