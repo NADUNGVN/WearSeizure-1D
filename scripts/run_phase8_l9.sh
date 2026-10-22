@@ -21,8 +21,19 @@
 # this arm reuses both rather than rebuilding them.
 set -uo pipefail
 
-: "${WEARSEIZURE_ARTIFACTS_DIR:?set it, or put it in .env at the repo root}"
-: "${CHBMIT_RAW_DIR:?set it, or put it in .env at the repo root}"
+# Read .env the way the Python entry points do. Without this the check below
+# rejects a machine that is correctly configured -- the file exists, bash just
+# never looked at it, and the error message said to use the file it ignored.
+ENV_FILE="$(git rev-parse --show-toplevel 2>/dev/null || echo .)/.env"
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
+fi
+
+: "${WEARSEIZURE_ARTIFACTS_DIR:?not set, and no .env at the repo root defines it}"
+: "${CHBMIT_RAW_DIR:?not set, and no .env at the repo root defines it}"
 
 # The open-file limit killed the first L4 attempt during cohort init. Same
 # recipe here, same risk.
