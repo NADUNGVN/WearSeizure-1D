@@ -352,12 +352,17 @@ def main(cfg: DictConfig) -> None:
 
     # ------------------------------------------------------------ excerpts
     events = sorted(meta.seizure_events, key=lambda e: e.onset_sec)
-    chosen = events if which_seizure is None else [events[int(which_seizure)]]
+    # Carry each seizure's index in the RECORDING, not its position in the
+    # selection. `+export.seizure=1` used to enumerate a one-element list, so
+    # seizure 1 was written to `_sz0` -- silently overwriting seizure 0's
+    # excerpt with a different seizure under its name.
+    chosen = (list(enumerate(events)) if which_seizure is None
+              else [(int(which_seizure), events[int(which_seizure)])])
     ensure_dir(out_dir)
     index: list[dict] = []
     digits, mask = bits // 4, (1 << bits) - 1
 
-    for k, event in enumerate(chosen):
+    for k, event in chosen:
         onset_idx = int(round(event.onset_sec * fs))
         offset_idx = int(round(event.offset_sec * fs))
         # Snap the excerpt to the window grid, so window boundaries inside the
