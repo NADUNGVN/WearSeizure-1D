@@ -1,6 +1,35 @@
 [
   {
     "dir": "chb15_40_sz0",
+    "onset_sec": 834.0,
+    "offset_sec": 894.0,
+    "detection": {
+      "detected": true,
+      "alarm_start_sec": 858.0,
+      "delay_s": 24.0,
+      "first_threshold_crossing_rel_onset_s": 22.0,
+      "run_length_cost_s": 2.0,
+      "false_alarms_in_excerpt": 0,
+      "false_alarm_starts_sec": []
+    },
+    "excerpt": {
+      "start_sample": 208384,
+      "stop_sample": 305664,
+      "duration_s": 380.0,
+      "samples": 97280,
+      "seconds_before_onset": 20.0,
+      "seconds_after_offset": 300.0
+    },
+    "windows": {
+      "window_samples": 1024,
+      "stride_samples": 256,
+      "count": 377,
+      "first_window_idx": 814,
+      "ictal_count": 63
+    }
+  },
+  {
+    "dir": "chb15_40_sz1",
     "onset_sec": 2378.0,
     "offset_sec": 2497.0,
     "detection": {
@@ -26,6 +55,35 @@
       "count": 377,
       "first_window_idx": 2358,
       "ictal_count": 122
+    }
+  },
+  {
+    "dir": "chb15_40_sz2",
+    "onset_sec": 3362.0,
+    "offset_sec": 3425.0,
+    "detection": {
+      "detected": true,
+      "alarm_start_sec": 3392.0,
+      "delay_s": 30.0,
+      "first_threshold_crossing_rel_onset_s": 28.0,
+      "run_length_cost_s": 2.0,
+      "false_alarms_in_excerpt": 0,
+      "false_alarm_starts_sec": []
+    },
+    "excerpt": {
+      "start_sample": 855552,
+      "stop_sample": 921600,
+      "duration_s": 258.0,
+      "samples": 66048,
+      "seconds_before_onset": 20.0,
+      "seconds_after_offset": 175.0
+    },
+    "windows": {
+      "window_samples": 1024,
+      "stride_samples": 256,
+      "count": 255,
+      "first_window_idx": 3342,
+      "ictal_count": 66
     }
   }
 ]

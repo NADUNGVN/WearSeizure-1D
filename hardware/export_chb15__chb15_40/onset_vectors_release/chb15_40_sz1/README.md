@@ -1,8 +1,8 @@
 # Onset test vectors -- chb15_40, seizure 1
 
-260.0 s of continuous signal straddling a real seizure onset:
-**20 s before** it, and **121 s after the seizure ends**.
-257 windows, 122 of them ictal. The onset is at
+380.0 s of continuous signal straddling a real seizure onset:
+**20 s before** it, and **241 s after the seizure ends**.
+377 windows, 122 of them ictal. The onset is at
 **2378.0 s** into the recording and the offset at
 **2497.0 s**.
 
@@ -16,7 +16,7 @@ dump of one window cannot show that.
 
 | file | what it is |
 |---|---|
-| `stream_input.hex` | 66560 samples, int8 two's complement, one hex byte per line. This is the AXI-Stream payload. |
+| `stream_input.hex` | 97280 samples, int8 two's complement, one hex byte per line. This is the AXI-Stream payload. |
 | `stream_input.csv` | the same samples with time, time relative to onset, and the float value they were quantised from. |
 | `windows.csv` | one row per window: expected logits, margin, probability, and whether the postprocessor is above each threshold. |
 | `contract.json` | every constant above in machine-readable form. |

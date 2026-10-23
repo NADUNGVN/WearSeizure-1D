@@ -14,11 +14,11 @@
   "offset_sec": 2497.0,
   "excerpt": {
     "start_sample": 603648,
-    "stop_sample": 670208,
-    "duration_s": 260.0,
-    "samples": 66560,
+    "stop_sample": 700928,
+    "duration_s": 380.0,
+    "samples": 97280,
     "seconds_before_onset": 20.0,
-    "seconds_after_offset": 121.0
+    "seconds_after_offset": 241.0
   },
   "stream": {
     "format": "int8, two's complement, one hex byte per line",
@@ -31,7 +31,7 @@
   "windows": {
     "window_samples": 1024,
     "stride_samples": 256,
-    "count": 257,
+    "count": 377,
     "first_window_idx": 2358,
     "ictal_count": 122
   },
