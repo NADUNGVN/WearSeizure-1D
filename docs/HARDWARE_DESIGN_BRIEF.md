@@ -364,7 +364,7 @@ These are not aspirations. The paper does not go out without them.
 | **H1** | Bit-exact RTL ↔ golden model | **0 mismatches / 10,000 windows** |
 | **H2** | Weights fully on-chip | **0 DRAM accesses for weights** |
 | **H3** | Inference latency | **≤ 2 ms** |
-| **H4** | Resources | **< 10 %** of the device — *threshold defined for XC7Z020; must be restated for KV260* |
+| **H4** | Resources | **< 10 %** of the device. Restated for KV260 and no longer binding: on XCK26 the storage is **3.2 % of BRAM** and P_PE = 16 is **1.3 % of DSP**. See below — area is not a constraint on this board. |
 | **H5** | Power | **measured**, static and dynamic separated |
 | **H6** | Efficiency | **pJ/MAC**, and against the same model on the board's own ARM core |
 | **H7** | Comparison points | **≥ 2**: (a) ARM on the same board, (b) ≥1 published accelerator |
@@ -540,6 +540,38 @@ In this repository, under `hardware/`:
   30 s interictal, the 40 s seizure from 2996 s, 60 s of post-ictal — 127 windows,
   43 ictal. It contains both transitions, onset and offset.
 
+### The KV260 budget, and what it changes
+
+From the K26 datasheet (DS987), the XCK26's programmable logic holds:
+
+| | |
+|---|---:|
+| CLB LUTs | 117,120 |
+| CLB flip-flops | 234,240 |
+| DSP slices (27×18 + 48-bit accumulate) | 1,248 |
+| Block RAM | 144 × 36 Kb = **648 KiB** |
+| UltraRAM | 64 × 288 Kb |
+
+Against that, everything this network keeps on chip — 11,128 B of weights,
+1,800 B of folded biases, and an 8.00 KiB ping-pong over a 6.00 KiB requirement
+— is **20.62 KiB, or 3.2 % of the BRAM**. A sixteen-wide PE array is **1.3 % of
+the DSP slices**.
+
+**So area is not a constraint on this board, and the design should stop being
+drawn as though it were.** Three consequences follow directly:
+
+* **Take the 24-bit accumulator.** §4 argues for it from the measured peak;
+  here it costs nothing anyone can measure.
+* **Do not widen `P_PE` for its own sake.** At a 0.12 % duty cycle more
+  parallelism buys idle time, not throughput. Choose the width that minimises
+  *energy per inference*, which is the number §8 can actually measure.
+* **The contribution cannot be "it fits".** On a part this size that claim is
+  empty. It has to be programmability (§9) or measured energy (§8).
+
+The XC7Z020 figures elsewhere in the repository (220 DSP, 630 KB BRAM) describe
+a part this project is not targeting. Where a percentage of them survives in an
+older document, it is wrong by construction, not merely stale.
+
 ### How much test material exists, and what it does not yet prove
 
 **21,614 distinct windows** across three folds and three recordings --
@@ -601,8 +633,9 @@ loads its own patient's. Fine for bring-up; not a cohort accuracy figure.
    recording (`chb15_40`), which is 3 % under a 16-bit signed accumulator with
    64 folds unmeasured; 23 the arithmetic ceiling. 24 bits is free area in every
    PE — take it rather than sizing at the edge of an unmeasured distribution.
-6. **KV260 resource budget.** Every LUT/DSP/BRAM figure in this repository is for
-   XC7Z020. H4's "< 10 %" needs restating in KV260 terms before it means anything.
+6. ~~**KV260 resource budget.**~~ **Answered** — see §5. XCK26 gives 117,120 LUT,
+   234,240 FF, 1,248 DSP and 144×36 Kb BRAM (648 KiB). The design needs 3.2 % of
+   the BRAM and about 1 % of the DSP. Fitting is not a design question here.
 7. **Where do GAP and FC run?** The reference design puts them on the host ARM,
    which is why it compiles 13 instructions rather than 15. GAP is a sum and a
    shift; FC is 64×2. Both are nearly free in hardware — decide deliberately.
