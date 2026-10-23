@@ -540,6 +540,24 @@ In this repository, under `hardware/`:
   30 s interictal, the 40 s seizure from 2996 s, 60 s of post-ictal — 127 windows,
   43 ictal. It contains both transitions, onset and offset.
 
+### How much test material exists, and what it does not yet prove
+
+**21,614 distinct windows** across three folds and three recordings --
+`chb01_03`, `chb15_40` and `chb04_28` -- each streamed end to end, each with
+its own weights, all reproducing their logits exactly against
+`hardware/golden_model.py`. The go/no-go asks for 10,000, so the material is
+there twice over, on three patients rather than one.
+
+**That is not the gate passed.** The gate is equality between the reference and
+**RTL simulation**, and there is no RTL. What 21,614 windows establish is that
+the stream, the weights and the expected outputs are mutually consistent -- so
+when a testbench disagrees, the disagreement is the RTL's. The gate closes the
+day a simulation reproduces these files, not today.
+
+Still missing from the same gate, and not obtainable from EEG: the five edge
+cases the interface contract names -- **saturation, max/min, reset, packet gap
+and backpressure**. Those need deliberately constructed vectors.
+
 ### Checking an excerpt without the dataset
 
 ```

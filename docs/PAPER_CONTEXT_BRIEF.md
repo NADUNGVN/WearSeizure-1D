@@ -336,6 +336,14 @@ state it plainly if a reviewer raises it.
 split matters more here than anywhere else in this brief, because the hardware is
 the part of the paper most likely to be drafted ahead of its evidence.
 
+**Verification material, measured:** 21,614 distinct windows over three folds
+and three recordings reproduce their logits exactly against the golden model,
+against a go/no-go of 10,000. The paper may say the reference vectors exist at
+that scale. It may **not** say the bit-exactness gate is passed: that gate is
+equality against RTL simulation, and the RTL does not exist. Five edge cases
+named in the interface contract -- saturation, max/min, reset, packet gap,
+backpressure -- have no vectors at all.
+
 **Not built, and therefore unclaimable:** our own RTL (the repository contains no
 `.v`, `.sv` or `.vhd` of ours), any synthesis result, any timing closure, any
 measured power number, any resource utilisation for the KV260. Every LUT/DSP/BRAM
