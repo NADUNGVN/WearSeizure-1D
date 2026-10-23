@@ -205,12 +205,15 @@ def main() -> int:
     if args.vectors:
         targets = [args.vectors]
     else:
-        # Every excerpt directory, not only the default-named one. Variants are
-        # written beside it as `onset_vectors_60s`, `onset_vectors_release` and
-        # so on, and a check that silently skipped them would report PASS while
-        # leaving most of the handover untested.
+        # Any directory holding excerpts, found by the contract rather than by
+        # the name. Matching `onset_vectors*` was the first fix and was still
+        # too narrow: `whole_recording/` sat in the repository unverified while
+        # the scan reported nine green excerpts. A name pattern can only find
+        # the names someone thought of, so this looks for the file that makes a
+        # directory an excerpt. `test_vectors/` and `weights/` keep their files
+        # flat, so neither matches.
         targets = sorted(p.parent for p in
-                         args.model_dir.glob("onset_vectors*/*/contract.json"))
+                         args.model_dir.glob("*/*/contract.json"))
         if not targets:
             print(f"no excerpt directories under {args.model_dir}. Pull them from the "
                   "server, or run\nscripts/export_onset_vectors.py there to make them.")
