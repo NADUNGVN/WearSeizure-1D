@@ -1,0 +1,31 @@
+[
+  {
+    "dir": "chb04_28_sz0",
+    "onset_sec": 1679.0,
+    "offset_sec": 1781.0,
+    "detection": {
+      "detected": true,
+      "alarm_start_sec": 1696.0,
+      "delay_s": 17.0,
+      "first_threshold_crossing_rel_onset_s": 15.0,
+      "run_length_cost_s": 2.0,
+      "false_alarms_in_excerpt": 0,
+      "false_alarm_starts_sec": []
+    },
+    "excerpt": {
+      "start_sample": 0,
+      "stop_sample": 3692288,
+      "duration_s": 14423.0,
+      "samples": 3692288,
+      "seconds_before_onset": 1679.0,
+      "seconds_after_offset": 12642.0
+    },
+    "windows": {
+      "window_samples": 1024,
+      "stride_samples": 256,
+      "count": 14420,
+      "first_window_idx": 0,
+      "ictal_count": 224
+    }
+  }
+]
