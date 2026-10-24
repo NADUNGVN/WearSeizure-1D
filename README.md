@@ -7,6 +7,8 @@ CHB-MIT, 13 single-channel-eligible cases, 77 seizures. Evaluated on **185.0 hou
 continuous held-out recording across 66 folds and 3 seeds, with thresholds frozen on validation
 and every split taken **by recording** before any filtering, normalisation or windowing.
 
+New here, human or agent? Start at **[`docs/AGENT_ONBOARDING.md`](docs/AGENT_ONBOARDING.md)** — which document is authoritative for what, which are stale, and the standards this project holds itself to.
+
 Setup and reproduction: **[`docs/RUNNING.md`](docs/RUNNING.md)**.
 Frozen model and hardware footprint: **[`docs/MODEL_CARD_k5only.md`](docs/MODEL_CARD_k5only.md)**.
 
