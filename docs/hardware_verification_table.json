@@ -1,0 +1,134 @@
+{
+  "results": [
+    {
+      "recording": "chb01_03",
+      "fold_id": "chb01__chb01_03",
+      "run_tag": "L8",
+      "seed": 0,
+      "hours": 1.0,
+      "windows": 3597,
+      "reference_bit_exact": true,
+      "verify_log": "vectors : D:\\Research\\WearSeizure-1D\\hardware\\export\\whole_recording\\chb01_03_sz0\nmodel   : D:\\Research\\WearSeizure-1D\\hardware\\export  (fold chb01__chb01_03, seed 0, tag 'L8')\nstream  : 921600 samples, 3600.0 s\nwindows : 3597 checked, 43 ictal in the full set\npeak accumulator over the replay: 23608 (15 bits of magnitude)\n\nPASS: 3597 windows reproduce their logits exactly, and the probability,\n  EMA and threshold columns all follow from them. The stream, the weights and\n  the expected outputs are mutually consistent, so a testbench that fails\n  against these files has an RTL problem rather than a data problem.\n",
+      "seizures": [
+        [
+          2996.0,
+          3036.0
+        ]
+      ],
+      "thresholds": [
+        0.3,
+        0.01
+      ],
+      "alarms": [
+        [
+          3005.0,
+          3412.0
+        ]
+      ],
+      "alarms_match_frozen_contract": true,
+      "n_seizures": 1,
+      "n_detected": 1,
+      "delays_s": [
+        9.0
+      ],
+      "n_false_alarms": 0,
+      "board": "not yet measured"
+    },
+    {
+      "recording": "chb04_28",
+      "fold_id": "chb04__chb04_28",
+      "run_tag": "L8",
+      "seed": 0,
+      "hours": 4.006388888888889,
+      "windows": 14420,
+      "reference_bit_exact": true,
+      "verify_log": "vectors : D:\\Research\\WearSeizure-1D\\hardware\\export_chb04__chb04_28\\whole_recording\\chb04_28_sz0\nmodel   : D:\\Research\\WearSeizure-1D\\hardware\\export_chb04__chb04_28  (fold chb04__chb04_28, seed 0, tag 'L8')\nstream  : 3692288 samples, 14423.0 s\nwindows : 14420 checked, 224 ictal in the full set\npeak accumulator over the replay: 65613 (17 bits of magnitude)\n\nPASS: 14420 windows reproduce their logits exactly, and the probability,\n  EMA and threshold columns all follow from them. The stream, the weights and\n  the expected outputs are mutually consistent, so a testbench that fails\n  against these files has an RTL problem rather than a data problem.\n",
+      "seizures": [
+        [
+          1679.0,
+          1781.0
+        ],
+        [
+          3782.0,
+          3898.0
+        ]
+      ],
+      "thresholds": [
+        0.35,
+        0.01
+      ],
+      "alarms": [
+        [
+          1696.0,
+          1734.0
+        ],
+        [
+          3807.0,
+          3849.0
+        ]
+      ],
+      "alarms_match_frozen_contract": true,
+      "n_seizures": 2,
+      "n_detected": 2,
+      "delays_s": [
+        17.0,
+        25.0
+      ],
+      "n_false_alarms": 0,
+      "board": "not yet measured"
+    },
+    {
+      "recording": "chb15_40",
+      "fold_id": "chb15__chb15_40",
+      "run_tag": "L8",
+      "seed": 0,
+      "hours": 1.0,
+      "windows": 3597,
+      "reference_bit_exact": true,
+      "verify_log": "vectors : D:\\Research\\WearSeizure-1D\\hardware\\export_chb15__chb15_40\\whole_recording\\chb15_40_sz0\nmodel   : D:\\Research\\WearSeizure-1D\\hardware\\export_chb15__chb15_40  (fold chb15__chb15_40, seed 0, tag 'L8')\nstream  : 921600 samples, 3600.0 s\nwindows : 3597 checked, 251 ictal in the full set\npeak accumulator over the replay: 31813 (15 bits of magnitude)\n\nPASS: 3597 windows reproduce their logits exactly, and the probability,\n  EMA and threshold columns all follow from them. The stream, the weights and\n  the expected outputs are mutually consistent, so a testbench that fails\n  against these files has an RTL problem rather than a data problem.\n",
+      "seizures": [
+        [
+          834.0,
+          894.0
+        ],
+        [
+          2378.0,
+          2497.0
+        ],
+        [
+          3362.0,
+          3425.0
+        ]
+      ],
+      "thresholds": [
+        0.6,
+        0.01
+      ],
+      "alarms": [
+        [
+          858.0,
+          1061.0
+        ],
+        [
+          2403.0,
+          2723.0
+        ],
+        [
+          3392.0,
+          3600.0
+        ]
+      ],
+      "alarms_match_frozen_contract": true,
+      "n_seizures": 3,
+      "n_detected": 3,
+      "delays_s": [
+        24.0,
+        25.0,
+        30.0
+      ],
+      "n_false_alarms": 0,
+      "board": "not yet measured"
+    }
+  ],
+  "passed": true
+}
