@@ -7,5 +7,5 @@ Read the docstring of that script for what this table may and may not be used to
 |---|---|--:|--:|:-:|:-:|--:|--:|---|--:|---|
 | chb01_03 | chb01__chb01_03 (L8, seed 0) | 1.00 | 3,597 | yes | yes | 1 | 1 | 9 | 0 | not yet measured |
 | chb04_28 | chb04__chb04_28 (L8, seed 0) | 4.01 | 14,420 | yes | yes | 2 | 2 | 17, 25 | 0 | not yet measured |
-| chb15_40 | chb15__chb15_40 (L8, seed 0) | 1.00 | 3,597 | yes | yes | 3 | 3 | 24, 25, 30 | 0 | not yet measured |
-| **Total** | | **6.01** | **21,614** | yes | yes | **6** | **6** | mean 21.7 | **0** | 0/3 recordings run on the board |
+| chb15_40 | chb15__chb15_40 (L8, seed 0) | 1.00 | 3,597 | yes | yes | 3 | 3 | 24, 25, 30 | 0 | 3,597/3,597 bit-exact; 3/3 detected (delay 24, 25, 30 s), 0 false alarms |
+| **Total** | | **6.01** | **21,614** | yes | yes | **6** | **6** | mean 21.7 | **0** | 1/3 recordings run on the board |

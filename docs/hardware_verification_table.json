@@ -8,7 +8,7 @@
       "hours": 1.0,
       "windows": 3597,
       "reference_bit_exact": true,
-      "verify_log": "vectors : D:\\Research\\WearSeizure-1D\\hardware\\export\\whole_recording\\chb01_03_sz0\nmodel   : D:\\Research\\WearSeizure-1D\\hardware\\export  (fold chb01__chb01_03, seed 0, tag 'L8')\nstream  : 921600 samples, 3600.0 s\nwindows : 3597 checked, 43 ictal in the full set\npeak accumulator over the replay: 23608 (15 bits of magnitude)\n\nPASS: 3597 windows reproduce their logits exactly, and the probability,\n  EMA and threshold columns all follow from them. The stream, the weights and\n  the expected outputs are mutually consistent, so a testbench that fails\n  against these files has an RTL problem rather than a data problem.\n",
+      "verify_log": "vectors : /home/ubuntu/Manh/WearSeizure-1D/hardware/export/whole_recording/chb01_03_sz0\nmodel   : /home/ubuntu/Manh/WearSeizure-1D/hardware/export  (fold chb01__chb01_03, seed 0, tag 'L8')\nstream  : 921600 samples, 3600.0 s\nwindows : 3597 checked, 43 ictal in the full set\npeak accumulator over the replay: 23608 (15 bits of magnitude)\n\nPASS: 3597 windows reproduce their logits exactly, and the probability,\n  EMA and threshold columns all follow from them. The stream, the weights and\n  the expected outputs are mutually consistent, so a testbench that fails\n  against these files has an RTL problem rather than a data problem.\n",
       "seizures": [
         [
           2996.0,
@@ -42,7 +42,7 @@
       "hours": 4.006388888888889,
       "windows": 14420,
       "reference_bit_exact": true,
-      "verify_log": "vectors : D:\\Research\\WearSeizure-1D\\hardware\\export_chb04__chb04_28\\whole_recording\\chb04_28_sz0\nmodel   : D:\\Research\\WearSeizure-1D\\hardware\\export_chb04__chb04_28  (fold chb04__chb04_28, seed 0, tag 'L8')\nstream  : 3692288 samples, 14423.0 s\nwindows : 14420 checked, 224 ictal in the full set\npeak accumulator over the replay: 65613 (17 bits of magnitude)\n\nPASS: 14420 windows reproduce their logits exactly, and the probability,\n  EMA and threshold columns all follow from them. The stream, the weights and\n  the expected outputs are mutually consistent, so a testbench that fails\n  against these files has an RTL problem rather than a data problem.\n",
+      "verify_log": "vectors : /home/ubuntu/Manh/WearSeizure-1D/hardware/export_chb04__chb04_28/whole_recording/chb04_28_sz0\nmodel   : /home/ubuntu/Manh/WearSeizure-1D/hardware/export_chb04__chb04_28  (fold chb04__chb04_28, seed 0, tag 'L8')\nstream  : 3692288 samples, 14423.0 s\nwindows : 14420 checked, 224 ictal in the full set\npeak accumulator over the replay: 65613 (17 bits of magnitude)\n\nPASS: 14420 windows reproduce their logits exactly, and the probability,\n  EMA and threshold columns all follow from them. The stream, the weights and\n  the expected outputs are mutually consistent, so a testbench that fails\n  against these files has an RTL problem rather than a data problem.\n",
       "seizures": [
         [
           1679.0,
@@ -85,7 +85,7 @@
       "hours": 1.0,
       "windows": 3597,
       "reference_bit_exact": true,
-      "verify_log": "vectors : D:\\Research\\WearSeizure-1D\\hardware\\export_chb15__chb15_40\\whole_recording\\chb15_40_sz0\nmodel   : D:\\Research\\WearSeizure-1D\\hardware\\export_chb15__chb15_40  (fold chb15__chb15_40, seed 0, tag 'L8')\nstream  : 921600 samples, 3600.0 s\nwindows : 3597 checked, 251 ictal in the full set\npeak accumulator over the replay: 31813 (15 bits of magnitude)\n\nPASS: 3597 windows reproduce their logits exactly, and the probability,\n  EMA and threshold columns all follow from them. The stream, the weights and\n  the expected outputs are mutually consistent, so a testbench that fails\n  against these files has an RTL problem rather than a data problem.\n",
+      "verify_log": "vectors : /home/ubuntu/Manh/WearSeizure-1D/hardware/export_chb15__chb15_40/whole_recording/chb15_40_sz0\nmodel   : /home/ubuntu/Manh/WearSeizure-1D/hardware/export_chb15__chb15_40  (fold chb15__chb15_40, seed 0, tag 'L8')\nstream  : 921600 samples, 3600.0 s\nwindows : 3597 checked, 251 ictal in the full set\npeak accumulator over the replay: 31813 (15 bits of magnitude)\n\nPASS: 3597 windows reproduce their logits exactly, and the probability,\n  EMA and threshold columns all follow from them. The stream, the weights and\n  the expected outputs are mutually consistent, so a testbench that fails\n  against these files has an RTL problem rather than a data problem.\n",
       "seizures": [
         [
           834.0,
@@ -127,7 +127,67 @@
         30.0
       ],
       "n_false_alarms": 0,
-      "board": "not yet measured"
+      "board": "3,597/3,597 bit-exact; 3/3 detected (delay 24, 25, 30 s), 0 false alarms",
+      "board_run": {
+        "file": "board_run_chb15_40_20261102_014724.json",
+        "sha256": "54bb1c32cab5e2eb88aae1b338691d7df5c94e03eaf4c5901718cdd47d7fe0f9",
+        "host": "KV260-02",
+        "started": "2026-11-02T01:47:26+0000",
+        "finished": "2026-11-02T01:48:49+0000",
+        "board_assets_sha256": {
+          "board_smoke_core": "f5024aca76a3a86113fb6467a9ab5a957d674b94b9154239032ab63991108305",
+          "manifest.json": "8f493ac7a5fe8e3b082dc990c80fe41a549a6b7cd5ef0706da1be1f633499b23",
+          "instructions.hex": "fd839966443665e4b419cc35af22e769424bb774c8332684b9a2dc70d7976020",
+          "weights/01_stem_0_bias.txt": "1871662969428269c935680bc51525f7e90687571c4ebe16ddb0e52c8185515f",
+          "weights/01_stem_0_weights.txt": "315e98e4232043e467bd815e4c7dadefbb78e5dc6557297ed3bbcc5df5097759",
+          "weights/02_b1_dw_bias.txt": "475f1b81038cf309e71d951567d683b33b782414b0412be183f48a1c671bf5b8",
+          "weights/02_b1_dw_weights.txt": "31ddd6ca2d3275dfec486e482cadc564240d7bf827dead12f199bcab9ed61b99",
+          "weights/03_b1_pw_bias.txt": "02f4730bed4f5bffeb3c670d62b063a2646e01db56cd8f5b92c1b3a3a08949b4",
+          "weights/03_b1_pw_weights.txt": "8f7224e50dc16d890df1f70748ff436b9c6c3fd54c05f0d43f05b063cf6847fb",
+          "weights/04_b2_dw_bias.txt": "1ebe8946752482927e8e2059b48a52885f08c9eb81edd7f55c861a362ed09f15",
+          "weights/04_b2_dw_weights.txt": "679d17cbed0e17be4c464115f4223e3fd7803d52d8a75d198fe8757a1fca8315",
+          "weights/05_b2_pw_bias.txt": "58518a39542852b2e4bf7effcb86e7c22723baf604f0e16114eae93e5d7dea77",
+          "weights/05_b2_pw_weights.txt": "e4236ed2efff583f5e85ec34462bc5d3bc645d210df92ff8c3b23e1a425e2441",
+          "weights/06_b3_dw_bias.txt": "ca84dfedd57393e1da2a3581f93d99b7ae3d5aa4d5636ac25b0e8251d79890bf",
+          "weights/06_b3_dw_weights.txt": "07b3c4ca2f88c3756b9a79d068dda0245a8e2bfe23cd24e2abb8074097e3ab6e",
+          "weights/07_b3_pw_bias.txt": "e7c3e0dab7c17466d2e756d0361946f9d414a1b11b18aa1f0b17db68f0f87327",
+          "weights/07_b3_pw_weights.txt": "66a735e6e3445082cdf4a9777ae095635223534e72110d2e4b506977123b50a4",
+          "weights/08_b4_dw_bias.txt": "4d598c40883dc303e1b24c209eb8e78daa5c33347eb054ef0aebda64407cc017",
+          "weights/08_b4_dw_weights.txt": "2dfa375f82f737dd6859d445473ddf15c9a27553af5d1f635568259e1e80e2bd",
+          "weights/09_b4_pw_bias.txt": "04e45215384ebd550465ffff1a41e3db2bfd127ac59724d2da4da002e7ab4b9e",
+          "weights/09_b4_pw_weights.txt": "102792e14379922684265e38e75730e689ecb7f1be90a2bddef6d9af686aa7d7",
+          "weights/10_context_0_dw_bias.txt": "3133e54867d22ed223d87bbe0ce4a426a789adc7785feff7c230f2d0cf726643",
+          "weights/10_context_0_dw_weights.txt": "423a77fdcbe0f4e0e44d63003fa386e40b9b3e802d5efac6ca11e72d506b8baf",
+          "weights/11_context_0_pw_bias.txt": "d198d2cd9691254d24061ceb8d0c82ed1d440c0c555a5815b3047dd29a5df056",
+          "weights/11_context_0_pw_weights.txt": "3d4a50cbb16d278f4f215cb133eabe60a5c09b10839cbb51f571c138e39d662c",
+          "weights/12_context_1_dw_bias.txt": "d6de11fe58a507be05713acc8f1da41c5782a5c461be9d58589c4d01f8ed225c",
+          "weights/12_context_1_dw_weights.txt": "63bca90a287b2a340909ad9b5e2b4377f425e469f4a8bc400b3b040c73860e07",
+          "weights/13_context_1_pw_bias.txt": "2525863952b4f440059a21ccecbd90bf0125818a6ba9812fc6384a9a6002f606",
+          "weights/13_context_1_pw_weights.txt": "6e2a6705d03904e293191ebdd6dd70fa2a94029171b241db17344e4b141f819b",
+          "weights/15_fc_bias.txt": "ceb232fde00ae85631d5295b424301e9815236568fe881c7d9d9f3c4bdd5f3b6",
+          "weights/15_fc_weights.txt": "05824c0084d246d3ca8f9e0aeca56a8700736f2513d1ccd5cef88f99801ef6d9",
+          "weights/packed_biases.hex": "018f0866cbc2affb897a1fc74ceedde041ec629c41bfd3c53e0314bee59b162e",
+          "weights/packed_weights.hex": "67205bfe5a5261c27ce3ae711ec4182163ed612e1ac91468a0aa8c26985ecd8f"
+        }
+      },
+      "board_windows_run": 3597,
+      "board_feature_mismatches": [],
+      "board_n_feature_mismatches": 0,
+      "board_alarms": [
+        [
+          858.0,
+          1061.0
+        ],
+        [
+          2403.0,
+          2723.0
+        ],
+        [
+          3392.0,
+          3600.0
+        ]
+      ],
+      "board_alarms_match_reference": true
     }
   ],
   "passed": true
