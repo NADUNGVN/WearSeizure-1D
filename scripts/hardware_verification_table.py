@@ -104,6 +104,10 @@ def board_column(entry: dict, board_path: Path, model_dir: Path, vectors: Path) 
     for name, digest in run.get("vectors_sha256", {}).items():
         if _sha256(vectors / name) != digest:
             raise SystemExit(f"{board_path}: {name} changed since the board ran it")
+    entry["board_run"] = {
+        "file": board_path.name, "sha256": _sha256(board_path),
+        **{k: run.get(k) for k in ("host", "started", "finished", "board_assets_sha256")},
+    }
 
     with (vectors / "windows.csv").open(encoding="utf-8") as f:
         rows = {int(r["window_idx"]): r for r in csv.DictReader(f)}
@@ -332,7 +336,9 @@ def main() -> int:
     print()
     print(table)
     ok = all(r["reference_bit_exact"] and r["alarms_match_frozen_contract"] for r in results)
-    ok = ok and all(r.get("board_n_feature_mismatches", 0) == 0 for r in results)
+    # A board run passes only if it is complete, bit-exact AND raises the reference alarms.
+    ok = ok and all(r.get("board_n_feature_mismatches") == 0 and r.get("board_alarms_match_reference")
+                    for r in results if "board_run" in r)
 
     args.json.write_text(json.dumps({"results": results, "passed": ok}, indent=2), encoding="utf-8")
     header = (
