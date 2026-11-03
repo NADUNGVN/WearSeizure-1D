@@ -51,8 +51,11 @@ def main() -> int:
     args = ap.parse_args()
 
     root = str(args.model_dir) if args.model_dir else "hardware"
-    paths = sorted(glob.glob(os.path.join(root, "**", "onset_vectors*", "*",
-                                          "contract.json"), recursive=True))
+    # Found by the contract, not by a directory name. A name pattern can only
+    # find the names someone thought of, and `whole_recording/` has already sat
+    # unscanned once while a scan reported green.
+    paths = sorted(glob.glob(os.path.join(root, "**", "*", "contract.json"),
+                             recursive=True))
     if not paths:
         print(f"no excerpts under {root}")
         return 1
@@ -105,6 +108,43 @@ def main() -> int:
               f"{100 * (a + f) / len(rows):>8.1f}%")
 
     n = tp + fn + fp + tn
+
+    # Whole recordings only. Accuracy on a short excerpt is a statement about
+    # how the excerpt was cut, so mixing the two would average a property of
+    # the model with a property of the scissors.
+    whole = [q for q in paths if "whole_recording" in q]
+    if whole:
+        wtp = wfn = wfp = wtn = 0
+        print(f"\n{'=' * 78}")
+        print("ACCURACY, AND WHAT IT IS WORTH (whole recordings only)")
+        print(f"{'=' * 78}")
+        print(f"  {'recording':<16}{'windows':>9}{'ictal':>7}{'model':>9}"
+              f"{'never-fires':>13}")
+        for q in whole:
+            c = json.loads(Path(q).read_text(encoding="utf-8"))
+            rows = list(csv.DictReader(
+                open(os.path.join(os.path.dirname(q), "windows.csv"), encoding="utf-8")))
+            a = sum(1 for r in rows if r["label"] == "1" and int(r["margin_int"]) > 0)
+            b = sum(1 for r in rows if r["label"] == "1" and int(r["margin_int"]) <= 0)
+            e = sum(1 for r in rows if r["label"] == "0" and int(r["margin_int"]) > 0)
+            g = sum(1 for r in rows if r["label"] == "0" and int(r["margin_int"]) <= 0)
+            wtp, wfn, wfp, wtn = wtp + a, wfn + b, wfp + e, wtn + g
+            ict = a + b
+            print(f"  {c['recording']:<16}{len(rows):>9}{ict:>7}"
+                  f"{100 * (a + g) / len(rows):>8.2f}%"
+                  f"{100 * (len(rows) - ict) / len(rows):>12.2f}%")
+        wn = wtp + wfn + wfp + wtn
+        acc = 100 * (wtp + wtn) / wn
+        base = 100 * (wtn + wfp) / wn
+        print(f"  {'POOLED':<16}{wn:>9}{wtp + wfn:>7}{acc:>8.2f}%{base:>12.2f}%")
+        print(f"\n  Never report the model's {acc:.2f} % without the {base:.2f} % "
+              "beside it.")
+        print(f"  A device that never fires scores {base:.2f} % on this data. "
+              f"Everything the\n  detector does is worth {acc - base:+.2f} points "
+              "here, because the windows it\n  exists to find are a few percent of "
+              "the recording. Event sensitivity\n  separates those same two devices "
+              "by 94.89 points.")
+
     print(f"\n{'=' * 78}")
     print("MAY BE CLAIMED FOR THIS DEMONSTRATION")
     print(f"{'=' * 78}")
