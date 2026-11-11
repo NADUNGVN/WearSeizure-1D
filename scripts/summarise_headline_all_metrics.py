@@ -42,8 +42,18 @@ def one_seed(folds: list[dict]) -> dict:
     w = [e["exposure_hours"] for e in ev]
     seg = [f["test_segment_metrics"] for f in folds]
 
-    def wmean(key: str) -> float:
-        return sum(s[key] * wi for s, wi in zip(seg, w)) / sum(w)
+    # Runs older than commit 681fddd did not store plain accuracy; it follows
+    # exactly from what they did store: acc = sens*prev + spec*(1 - prev).
+    for s in seg:
+        if "accuracy" not in s:
+            p, se, sp = s["prevalence"], s["sensitivity"], s["specificity"]
+            s["accuracy"] = sp if p == 0 else se * p + sp * (1 - p)
+
+    def wmean(key: str, weight=lambda s, wi: wi) -> float:
+        pairs = [(s[key], weight(s, wi)) for s, wi in zip(seg, w)
+                 if key in s and s[key] == s[key]]  # skip NaN (seizure-free folds)
+        tot = sum(x for _, x in pairs)
+        return sum(v * x for v, x in pairs) / tot if tot else float("nan")
 
     return {
         "folds": len(folds),
@@ -53,7 +63,10 @@ def one_seed(folds: list[dict]) -> dict:
         "far": sum(e["n_false_alarms"] for e in ev) / hours,
         "delay": st.mean(delays) if delays else float("nan"),
         "worst_pt": min(m / n for m, n in per_pt.values() if n),
-        **{k: wmean(k) for k in ("accuracy", "sensitivity", "specificity", "prevalence", "auroc", "auprc", "f1")},
+        # window sensitivity is weighted by ictal windows, specificity by interictal ones
+        "sensitivity": wmean("sensitivity", lambda s, wi: wi * s["prevalence"]),
+        "specificity": wmean("specificity", lambda s, wi: wi * (1 - s["prevalence"])),
+        **{k: wmean(k) for k in ("accuracy", "prevalence", "auroc", "auprc", "f1")},
     }
 
 
